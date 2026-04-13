@@ -587,15 +587,268 @@ end
 
 -- 1. KILLAURA
 moduleSettings["KillAura"] = {
-    faceTarget = true,
-    range = 12,
-    fovRadius = 180,
-    swingSpeed = 10, -- swings per second
+    enabled = false,
+    range = 14,
+    fov = 180,
+    swingSpeed = 18, -- CPS
+    multiTarget = true,
+    multiTargetLimit = 3,
+    targetMode = "Players", -- "Players", "Mobs", "Both"
+    priority = "Closest", -- "Closest", "LowestHP", "Mouse"
+    silent = true,
+    faceTarget = false, -- Visual rotation only if silent = false
     requireSword = false,
+    attackThroughWalls = false,
+    ignoreTeammates = true,
+    -- Legacy compatibility fields for existing GUI/settings usage:
+    fovRadius = 180,
     attackPlayers = true,
-    attackNPCs = true
+    attackNPCs = false
 }
 local killAuraLastSwing = 0
+local killAuraLastBlock = 0
+
+local function isAliveTargetModel(model)
+    if not model then return false end
+    local hum = getHumanoid(model)
+    return hum and hum.Health > 0
+end
+
+local function isSwordTool(tool)
+    if not tool or not tool:IsA("Tool") then
+        return false
+    end
+    local loweredName = tool.Name:lower()
+    if loweredName:find("sword") or loweredName:find("blade") or loweredName:find("katana") or loweredName:find("dao") then
+        return true
+    end
+    local itemType = tool:GetAttribute("itemType")
+    if type(itemType) == "string" and itemType:lower():find("sword") then
+        return true
+    end
+    return false
+end
+
+local function getHeldSwordOrEquip()
+    local char = getCharacter(lplr)
+    local hum = getHumanoid(char)
+    if not char or not hum then return nil end
+
+    local held = char:FindFirstChildOfClass("Tool")
+    if isSwordTool(held) then
+        return held
+    end
+
+    local backpack = lplr:FindFirstChildOfClass("Backpack")
+    if not backpack then return held end
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if isSwordTool(tool) then
+            pcall(function()
+                hum:EquipTool(tool)
+            end)
+            return tool
+        end
+    end
+    return held
+end
+
+local function hasLineOfSight(originPosition, targetPosition, myCharacter, targetCharacter)
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {myCharacter, targetCharacter}
+    rayParams.IgnoreWater = true
+    local result = Workspace:Raycast(originPosition, targetPosition - originPosition, rayParams)
+    return result == nil
+end
+
+local function isInsideCircularFov(myHRP, targetHRP, maxFovDegrees)
+    if maxFovDegrees >= 360 then
+        return true
+    end
+    local toTarget = (targetHRP.Position - myHRP.Position)
+    if toTarget.Magnitude <= 0 then
+        return true
+    end
+    local look = myHRP.CFrame.LookVector
+    local dot = math.clamp(look:Dot(toTarget.Unit), -1, 1)
+    local angle = math.deg(math.acos(dot))
+    return angle <= (maxFovDegrees * 0.5)
+end
+
+local function getMouseDistanceToWorldPoint(worldPos)
+    local screenPos, onScreen = camera:WorldToViewportPoint(worldPos)
+    if not onScreen then
+        return math.huge
+    end
+    return (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(mouse.X, mouse.Y)).Magnitude
+end
+
+local function buildKillAuraTargetList(settings, myCharacter, myHRP)
+    local maxRange = tonumber(settings.range) or 14
+    local mode = settings.targetMode
+    local attackPlayers = settings.attackPlayers
+    local attackNPCs = settings.attackNPCs
+    if mode == "Players" then
+        attackPlayers, attackNPCs = true, false
+    elseif mode == "Mobs" then
+        attackPlayers, attackNPCs = false, true
+    elseif mode == "Both" then
+        attackPlayers, attackNPCs = true, true
+    end
+
+    local candidates = {}
+
+    if attackPlayers then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= lplr then
+                if (not settings.ignoreTeammates) or player.Team ~= lplr.Team then
+                    local targetChar = getCharacter(player)
+                    local targetHum = getHumanoid(targetChar)
+                    local targetHRP = getHRP(targetChar)
+                    if targetHum and targetHRP and targetHum.Health > 0 then
+                        local distance = (targetHRP.Position - myHRP.Position).Magnitude
+                        if distance <= maxRange and isInsideCircularFov(myHRP, targetHRP, settings.fov or settings.fovRadius or 180) then
+                            if settings.attackThroughWalls or hasLineOfSight(myHRP.Position, targetHRP.Position, myCharacter, targetChar) then
+                                table.insert(candidates, {
+                                    character = targetChar,
+                                    hrp = targetHRP,
+                                    humanoid = targetHum,
+                                    distance = distance,
+                                    health = targetHum.Health,
+                                    mouseDistance = getMouseDistanceToWorldPoint(targetHRP.Position)
+                                })
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if attackNPCs then
+        for _, model in ipairs(Workspace:GetDescendants()) do
+            if model:IsA("Model") and model ~= myCharacter then
+                local targetHum = model:FindFirstChildOfClass("Humanoid")
+                local targetHRP = model:FindFirstChild("HumanoidRootPart")
+                if targetHum and targetHRP and targetHum.Health > 0 then
+                    local isPlayerChar = false
+                    for _, plr in ipairs(Players:GetPlayers()) do
+                        if plr.Character == model then
+                            isPlayerChar = true
+                            break
+                        end
+                    end
+                    if not isPlayerChar then
+                        local distance = (targetHRP.Position - myHRP.Position).Magnitude
+                        if distance <= maxRange and isInsideCircularFov(myHRP, targetHRP, settings.fov or settings.fovRadius or 180) then
+                            if settings.attackThroughWalls or hasLineOfSight(myHRP.Position, targetHRP.Position, myCharacter, model) then
+                                table.insert(candidates, {
+                                    character = model,
+                                    hrp = targetHRP,
+                                    humanoid = targetHum,
+                                    distance = distance,
+                                    health = targetHum.Health,
+                                    mouseDistance = getMouseDistanceToWorldPoint(targetHRP.Position)
+                                })
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(candidates, function(a, b)
+        local priority = settings.priority or "Closest"
+        if priority == "LowestHP" then
+            if a.health == b.health then
+                return a.distance < b.distance
+            end
+            return a.health < b.health
+        elseif priority == "Mouse" then
+            if a.mouseDistance == b.mouseDistance then
+                return a.distance < b.distance
+            end
+            return a.mouseDistance < b.mouseDistance
+        else -- "Closest"
+            if a.distance == b.distance then
+                return a.health < b.health
+            end
+            return a.distance < b.distance
+        end
+    end)
+
+    return candidates
+end
+
+local function getKillAuraCooldownInterval(tool, requestedCps)
+    local cps = math.max(tonumber(requestedCps) or 18, 0.5)
+    local minInterval = 1 / cps
+
+    if tool then
+        local attackSpeedAttr = tool:GetAttribute("attackSpeed")
+        if type(attackSpeedAttr) == "number" and attackSpeedAttr > 0 then
+            minInterval = math.max(minInterval, 1 / attackSpeedAttr)
+        end
+        local cooldownAttr = tool:GetAttribute("cooldown")
+        if type(cooldownAttr) == "number" and cooldownAttr > 0 then
+            minInterval = math.max(minInterval, cooldownAttr)
+        end
+    end
+
+    local controller = getCombatController()
+    if controller and type(controller) == "table" then
+        local internalCooldown = rawget(controller, "swingCooldown") or rawget(controller, "attackCooldown")
+        if type(internalCooldown) == "number" and internalCooldown > 0 then
+            minInterval = math.max(minInterval, internalCooldown)
+        end
+    end
+
+    return math.max(minInterval, 0.055)
+end
+
+local function performKillAuraAttack(targetCharacter, targetHumanoid, targetPosition)
+    local controller = getCombatController()
+    local attacked = false
+    if controller then
+        local attackFn = controller.attackEntity or controller.AttackEntity
+        if type(attackFn) == "function" then
+            pcall(function()
+                attackFn(controller, targetHumanoid or targetCharacter, targetPosition)
+                attacked = true
+            end)
+        end
+        local swingFn = controller.swingSword or controller.swingSwordAtMouse
+        if type(swingFn) == "function" then
+            pcall(function()
+                swingFn(controller, targetHumanoid or targetCharacter)
+            end)
+        end
+    end
+    if not attacked then
+        attacked = attackTargetWithBedwarsApi(targetCharacter)
+    end
+    return attacked
+end
+
+local function performKillAuraAutoBlock(tool)
+    if not tool then return end
+    local now = tick()
+    if (now - killAuraLastBlock) < 0.1 then
+        return
+    end
+    killAuraLastBlock = now
+    for _, descendant in ipairs(tool:GetDescendants()) do
+        if descendant:IsA("RemoteEvent") then
+            local lowered = descendant.Name:lower()
+            if lowered:find("block") or lowered:find("guard") or lowered:find("defend") then
+                pcall(function()
+                    descendant:FireServer(true)
+                end)
+            end
+        end
+    end
+end
 
 local function toggleKillAura(enabled)
     cleanupModule("KillAura")
@@ -604,41 +857,71 @@ local function toggleKillAura(enabled)
     local connection = RunService.Heartbeat:Connect(function()
         if not moduleStates["KillAura"] then return end
         local settings = moduleSettings["KillAura"]
+        settings.enabled = moduleStates["KillAura"]
+        settings.fovRadius = settings.fov or settings.fovRadius or 180
         local myChar = getCharacter(lplr)
         local myHRP = getHRP(myChar)
-        if not myHRP then return end
+        local myHum = getHumanoid(myChar)
+        if not myHRP or not myHum or myHum.Health <= 0 then return end
 
-        local tool = myChar:FindFirstChildOfClass("Tool")
-        if settings.requireSword then
-            if not tool or not tool.Name:lower():find("sword") then
-                return
-            end
-        elseif not tool then
+        local tool = getHeldSwordOrEquip()
+        if settings.requireSword and not isSwordTool(tool) then
+            return
+        end
+        if not tool then return end
+
+        local now = tick()
+        local cooldown = getKillAuraCooldownInterval(tool, settings.swingSpeed)
+        if (now - killAuraLastSwing) < cooldown then
             return
         end
 
-        local targetChar = getTargetByFilters(settings.range, settings.attackPlayers, settings.attackNPCs)
-        if targetChar then
-            local targetHRP = getHRP(targetChar)
-            if targetHRP then
-                local screenPos, onScreen = camera:WorldToViewportPoint(targetHRP.Position)
-                if not onScreen then return end
-                local mouseDelta = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(mouse.X, mouse.Y)).Magnitude
-                if mouseDelta > settings.fovRadius then return end
-
-                -- Face target
-                if settings.faceTarget then
-                    myHRP.CFrame = CFrame.lookAt(myHRP.Position, Vector3.new(targetHRP.Position.X, myHRP.Position.Y, targetHRP.Position.Z))
-                end
-
-                -- Swing speed control
-                local now = tick()
-                if now - killAuraLastSwing >= 1 / settings.swingSpeed then
-                    killAuraLastSwing = now
-                    attackTargetWithBedwarsApi(targetChar)
-                    pcall(function() tool:Activate() end)
+        local targets = buildKillAuraTargetList(settings, myChar, myHRP)
+        if #targets == 0 then
+            local fallbackTarget = getTargetByFilters(settings.range, settings.attackPlayers, settings.attackNPCs)
+            if fallbackTarget and isAliveTargetModel(fallbackTarget) then
+                local fallbackHRP = getHRP(fallbackTarget)
+                local fallbackHum = getHumanoid(fallbackTarget)
+                if fallbackHRP then
+                    targets = {{
+                        character = fallbackTarget,
+                        humanoid = fallbackHum,
+                        hrp = fallbackHRP,
+                        distance = (fallbackHRP.Position - myHRP.Position).Magnitude,
+                        health = fallbackHum and fallbackHum.Health or 100,
+                        mouseDistance = getMouseDistanceToWorldPoint(fallbackHRP.Position)
+                    }}
                 end
             end
+        end
+        if #targets == 0 then return end
+
+        local hitLimit = 1
+        if settings.multiTarget then
+            hitLimit = math.clamp(math.floor(tonumber(settings.multiTargetLimit) or 3), 1, 4)
+        end
+
+        -- Optional visual rotation (silent mode keeps camera/visuals untouched)
+        if settings.faceTarget and not settings.silent and targets[1] and targets[1].hrp then
+            local targetPos = targets[1].hrp.Position
+            myHRP.CFrame = CFrame.lookAt(myHRP.Position, Vector3.new(targetPos.X, myHRP.Position.Y, targetPos.Z))
+        end
+
+        local didAttack = false
+        for i = 1, math.min(hitLimit, #targets) do
+            local targetData = targets[i]
+            if targetData and targetData.character and targetData.humanoid and targetData.humanoid.Health > 0 and targetData.hrp then
+                local attacked = performKillAuraAttack(targetData.character, targetData.humanoid, targetData.hrp.Position)
+                if attacked then
+                    didAttack = true
+                end
+            end
+        end
+
+        if didAttack then
+            killAuraLastSwing = now
+            pcall(function() tool:Activate() end)
+            performKillAuraAutoBlock(tool)
         end
     end)
     addConnection("KillAura", connection)
