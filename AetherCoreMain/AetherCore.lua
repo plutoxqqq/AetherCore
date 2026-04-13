@@ -102,6 +102,42 @@ local function getBedwarsRemote(remoteName)
     return netRoot:FindFirstChild(remoteName, true)
 end
 
+local function getRemotesByPattern(patterns)
+    local netRoot = getBedwarsNetRoot()
+    if not netRoot then
+        return {}
+    end
+    local matches = {}
+    for _, remote in ipairs(netRoot:GetDescendants()) do
+        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+            local lowered = remote.Name:lower()
+            for _, pattern in ipairs(patterns) do
+                if lowered:find(pattern, 1, true) then
+                    table.insert(matches, remote)
+                    break
+                end
+            end
+        end
+    end
+    return matches
+end
+
+local function fireRemoteFlexible(remote, payloads)
+    for _, payload in ipairs(payloads) do
+        local ok = pcall(function()
+            if remote:IsA("RemoteEvent") then
+                remote:FireServer(payload)
+            else
+                remote:InvokeServer(payload)
+            end
+        end)
+        if ok then
+            return true
+        end
+    end
+    return false
+end
+
 local function fireBedwarsRemote(remoteName, payload)
     local remote = getBedwarsRemote(remoteName)
     if not remote then
@@ -173,6 +209,11 @@ local function isDaoTool(tool)
     end
     local lowered = tool.Name:lower()
     return lowered:find("dao") ~= nil
+end
+
+local function getHeldTool()
+    local char = getCharacter(lplr)
+    return char and char:FindFirstChildOfClass("Tool")
 end
 
 local function useDaoAbility()
@@ -320,7 +361,7 @@ end
 
 local function attackTargetWithBedwarsApi(targetCharacter)
     local char = getCharacter(lplr)
-    local tool = char and char:FindFirstChildOfClass("Tool")
+    local tool = getHeldTool()
     local controller = getCombatController()
     local attacked = false
     local targetHum = getHumanoid(targetCharacter)
@@ -353,6 +394,35 @@ local function attackTargetWithBedwarsApi(targetCharacter)
             },
             weapon = tool
         }) or attacked
+    end
+
+    if not attacked and targetRoot then
+        local genericHitPayloads = {
+            {
+                entityInstance = targetCharacter,
+                target = targetCharacter,
+                position = targetRoot.Position,
+                weapon = tool
+            },
+            {
+                target = targetHum or targetCharacter,
+                validate = {
+                    raycast = {
+                        cameraPosition = camera.CFrame.Position,
+                        cursorDirection = (targetRoot.Position - camera.CFrame.Position).Unit
+                    },
+                    targetPosition = targetRoot.Position,
+                    selfPosition = getHRP(char) and getHRP(char).Position or targetRoot.Position
+                },
+                chargedAttack = {chargeRatio = 1}
+            }
+        }
+        for _, remote in ipairs(getRemotesByPattern({"swordhit", "attackentity", "hitentity", "melee"})) do
+            if fireRemoteFlexible(remote, genericHitPayloads) then
+                attacked = true
+                break
+            end
+        end
     end
 
     if tool and not attacked then
@@ -706,7 +776,22 @@ local function toggleKillAura(enabled)
 
         local heldTool = myChar:FindFirstChildOfClass("Tool")
         if settings.requireWeapon and not isSwordTool(heldTool) then
-            return
+            local backpack = lplr:FindFirstChildOfClass("Backpack")
+            if backpack then
+                for _, item in ipairs(backpack:GetChildren()) do
+                    if isSwordTool(item) then
+                        local hum = getHumanoid(myChar)
+                        if hum then
+                            hum:EquipTool(item)
+                            heldTool = item
+                        end
+                        break
+                    end
+                end
+            end
+            if not isSwordTool(heldTool) then
+                return
+            end
         end
 
         local targetModel = getTargetByFilters(settings.attackRange, settings.attackPlayers, settings.attackNPCs)
@@ -734,11 +819,8 @@ local function toggleKillAura(enabled)
         if now - lastSwingAt >= interval then
             lastSwingAt = now
             attackTargetWithBedwarsApi(targetModel)
-            if heldTool then
-                pcall(function()
-                    heldTool:Activate()
-                end)
-            end
+            if heldTool then pcall(function() heldTool:Activate() end) end
+            performPrimaryClick()
         end
     end))
 end
@@ -829,8 +911,14 @@ local function toggleReach(enabled)
 
         if settings.mode == "Attribute" or settings.mode == "Hybrid" then
             lplr:SetAttribute("Reach", maxReach)
+            lplr:SetAttribute("CombatReach", settings.combatReach)
+            lplr:SetAttribute("MiningReach", settings.miningReach)
+            lplr:SetAttribute("PlacementReach", settings.placementReach)
         else
             lplr:SetAttribute("Reach", nil)
+            lplr:SetAttribute("CombatReach", nil)
+            lplr:SetAttribute("MiningReach", nil)
+            lplr:SetAttribute("PlacementReach", nil)
         end
 
         forEachTool(function(tool)
@@ -1302,7 +1390,26 @@ local function toggleNuker(enabled)
 
         for _, block in ipairs(targetQueue) do
             local remoteName = block.Name:lower() == "bed" and "DamageBlock" or "BreakBlock"
-            local fired = fireBedwarsRemote(remoteName, {blockRef = block, position = block.Position})
+            local fired = fireBedwarsRemote(remoteName, {
+                blockRef = block,
+                block = block,
+                position = block.Position,
+                hitPosition = block.Position,
+                normal = Vector3.new(0, 1, 0)
+            })
+            if not fired then
+                local payloads = {
+                    {blockRef = block, position = block.Position},
+                    {block = block, hitPosition = block.Position},
+                    {instance = block, position = block.Position}
+                }
+                for _, remote in ipairs(getRemotesByPattern({"breakblock", "damageblock", "blockhit", "mineblock"})) do
+                    if fireRemoteFlexible(remote, payloads) then
+                        fired = true
+                        break
+                    end
+                end
+            end
             if fired then
                 lastMineAt = tick()
                 break
@@ -1364,8 +1471,9 @@ local function toggleScaffold(enabled)
         end
 
         local blockPos = Vector3.new(math.floor(placePos.X / 3) * 3, math.floor(placePos.Y / 3) * 3, math.floor(placePos.Z / 3) * 3)
+        local heldName = held and held.Name:lower() or getTeamWoolName()
         local placed = fireBedwarsRemote("PlaceBlock", {
-            blockType = getTeamWoolName(),
+            blockType = heldName,
             position = blockPos
         })
 
@@ -1377,6 +1485,19 @@ local function toggleScaffold(enabled)
                     placeFn(blockController, CFrame.new(blockPos))
                     placed = true
                 end)
+            end
+        end
+        if not placed then
+            local payloads = {
+                {blockType = heldName, position = blockPos},
+                {block = heldName, position = blockPos},
+                {blockType = heldName, cframe = CFrame.new(blockPos)}
+            }
+            for _, remote in ipairs(getRemotesByPattern({"placeblock", "place", "blockplace"})) do
+                if fireRemoteFlexible(remote, payloads) then
+                    placed = true
+                    break
+                end
             end
         end
 
@@ -1459,6 +1580,10 @@ local function toggleAutoClicker(enabled)
         end
         lastClickAt = now
 
+        local target = getTargetByFilters(20, true, false)
+        if target then
+            attackTargetWithBedwarsApi(target)
+        end
         performPrimaryClick()
         if tool then
             pcall(function() tool:Activate() end)
@@ -1637,6 +1762,19 @@ moduleSettings["AntiVoid"] = {
     refreshInterval = 1.5
 }
 
+local function createAntiVoidVisual()
+    local marker = Instance.new("Part")
+    marker.Name = "AntiVoidIndicator"
+    marker.Anchored = true
+    marker.CanCollide = false
+    marker.Size = Vector3.new(10, 0.35, 10)
+    marker.Material = Enum.Material.Neon
+    marker.Color = Color3.fromRGB(255, 70, 70)
+    marker.Transparency = 0.45
+    marker.Parent = Workspace
+    return marker
+end
+
 local function findNearestSafeLand(origin, blacklist)
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Blacklist
@@ -1668,8 +1806,13 @@ end
 
 local function toggleAntiVoid(enabled)
     cleanupModule("AntiVoid")
+    local oldVisual = Workspace:FindFirstChild("AntiVoidIndicator")
+    if oldVisual then
+        oldVisual:Destroy()
+    end
     if not enabled then return end
 
+    local marker = createAntiVoidVisual()
     local safeGroundY
     local lastRefresh = 0
 
@@ -1701,6 +1844,7 @@ local function toggleAntiVoid(enabled)
         if not safeGroundY then return end
 
         local triggerY = safeGroundY - moduleSettings["AntiVoid"].triggerOffset
+        marker.Position = Vector3.new(root.Position.X, triggerY, root.Position.Z)
         if root.Position.Y > triggerY then return end
 
         local targetLand = findNearestSafeLand(root.Position, {char})
