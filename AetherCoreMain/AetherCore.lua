@@ -102,6 +102,42 @@ local function getBedwarsRemote(remoteName)
     return netRoot:FindFirstChild(remoteName, true)
 end
 
+local function getRemotesByPattern(patterns)
+    local netRoot = getBedwarsNetRoot()
+    if not netRoot then
+        return {}
+    end
+    local matches = {}
+    for _, remote in ipairs(netRoot:GetDescendants()) do
+        if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+            local lowered = remote.Name:lower()
+            for _, pattern in ipairs(patterns) do
+                if lowered:find(pattern, 1, true) then
+                    table.insert(matches, remote)
+                    break
+                end
+            end
+        end
+    end
+    return matches
+end
+
+local function fireRemoteFlexible(remote, payloads)
+    for _, payload in ipairs(payloads) do
+        local ok = pcall(function()
+            if remote:IsA("RemoteEvent") then
+                remote:FireServer(payload)
+            else
+                remote:InvokeServer(payload)
+            end
+        end)
+        if ok then
+            return true
+        end
+    end
+    return false
+end
+
 local function fireBedwarsRemote(remoteName, payload)
     local remote = getBedwarsRemote(remoteName)
     if not remote then
@@ -173,6 +209,11 @@ local function isDaoTool(tool)
     end
     local lowered = tool.Name:lower()
     return lowered:find("dao") ~= nil
+end
+
+local function getHeldTool()
+    local char = getCharacter(lplr)
+    return char and char:FindFirstChildOfClass("Tool")
 end
 
 local function useDaoAbility()
@@ -320,7 +361,7 @@ end
 
 local function attackTargetWithBedwarsApi(targetCharacter)
     local char = getCharacter(lplr)
-    local tool = char and char:FindFirstChildOfClass("Tool")
+    local tool = getHeldTool()
     local controller = getCombatController()
     local attacked = false
     local targetHum = getHumanoid(targetCharacter)
@@ -353,6 +394,35 @@ local function attackTargetWithBedwarsApi(targetCharacter)
             },
             weapon = tool
         }) or attacked
+    end
+
+    if not attacked and targetRoot then
+        local genericHitPayloads = {
+            {
+                entityInstance = targetCharacter,
+                target = targetCharacter,
+                position = targetRoot.Position,
+                weapon = tool
+            },
+            {
+                target = targetHum or targetCharacter,
+                validate = {
+                    raycast = {
+                        cameraPosition = camera.CFrame.Position,
+                        cursorDirection = (targetRoot.Position - camera.CFrame.Position).Unit
+                    },
+                    targetPosition = targetRoot.Position,
+                    selfPosition = getHRP(char) and getHRP(char).Position or targetRoot.Position
+                },
+                chargedAttack = {chargeRatio = 1}
+            }
+        }
+        for _, remote in ipairs(getRemotesByPattern({"swordhit", "attackentity", "hitentity", "melee"})) do
+            if fireRemoteFlexible(remote, genericHitPayloads) then
+                attacked = true
+                break
+            end
+        end
     end
 
     if tool and not attacked then
@@ -655,7 +725,6 @@ end
 -- 1. KILLAURA
 moduleSettings["KillAura"] = {
     attackRange = 16,
-    maxFov = 260,
     swingsPerSecond = 10,
     faceTarget = true,
     requireWeapon = true,
@@ -664,6 +733,14 @@ moduleSettings["KillAura"] = {
     lineOfSight = true,
     targetPart = "HumanoidRootPart"
 }
+
+local function isSwordTool(tool)
+    if not tool or not tool:IsA("Tool") then
+        return false
+    end
+    local lowered = tool.Name:lower()
+    return lowered:find("sword") or lowered:find("blade")
+end
 
 local function toggleKillAura(enabled)
     cleanupModule("KillAura")
@@ -698,9 +775,21 @@ local function toggleKillAura(enabled)
         end
 
         local heldTool = myChar:FindFirstChildOfClass("Tool")
-        if settings.requireWeapon then
-            local valid = heldTool and (heldTool.Name:lower():find("sword") or heldTool.Name:lower():find("blade") or heldTool.Name:lower():find("dao"))
-            if not valid then
+        if settings.requireWeapon and not isSwordTool(heldTool) then
+            local backpack = lplr:FindFirstChildOfClass("Backpack")
+            if backpack then
+                for _, item in ipairs(backpack:GetChildren()) do
+                    if isSwordTool(item) then
+                        local hum = getHumanoid(myChar)
+                        if hum then
+                            hum:EquipTool(item)
+                            heldTool = item
+                        end
+                        break
+                    end
+                end
+            end
+            if not isSwordTool(heldTool) then
                 return
             end
         end
@@ -717,16 +806,6 @@ local function toggleKillAura(enabled)
             return
         end
 
-        local screenPos, onScreen = camera:WorldToViewportPoint(desiredPart.Position)
-        if not onScreen then
-            return
-        end
-
-        local cursorDistance = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(mouse.X, mouse.Y)).Magnitude
-        if cursorDistance > settings.maxFov then
-            return
-        end
-
         if not hasLineOfSight(myRoot, desiredPart, {myChar, camera}) then
             return
         end
@@ -740,11 +819,8 @@ local function toggleKillAura(enabled)
         if now - lastSwingAt >= interval then
             lastSwingAt = now
             attackTargetWithBedwarsApi(targetModel)
-            if heldTool then
-                pcall(function()
-                    heldTool:Activate()
-                end)
-            end
+            if heldTool then pcall(function() heldTool:Activate() end) end
+            performPrimaryClick()
         end
     end))
 end
@@ -835,8 +911,14 @@ local function toggleReach(enabled)
 
         if settings.mode == "Attribute" or settings.mode == "Hybrid" then
             lplr:SetAttribute("Reach", maxReach)
+            lplr:SetAttribute("CombatReach", settings.combatReach)
+            lplr:SetAttribute("MiningReach", settings.miningReach)
+            lplr:SetAttribute("PlacementReach", settings.placementReach)
         else
             lplr:SetAttribute("Reach", nil)
+            lplr:SetAttribute("CombatReach", nil)
+            lplr:SetAttribute("MiningReach", nil)
+            lplr:SetAttribute("PlacementReach", nil)
         end
 
         forEachTool(function(tool)
@@ -1024,7 +1106,14 @@ local function toggleFly(enabled)
     addConnection("Fly", flyConnection)
 end
 
--- 5. ESP (works on NPCs too)
+-- 5. ESP
+local function removeEspFromModel(model)
+    local existing = model and model:FindFirstChild("ESP_Highlight")
+    if existing and existing:IsA("Highlight") then
+        existing:Destroy()
+    end
+end
+
 local function toggleESP(enabled)
     cleanupModule("ESP")
     if not enabled then
@@ -1036,44 +1125,66 @@ local function toggleESP(enabled)
         return
     end
 
-    local function addESPtoModel(model)
-        if not model or model:FindFirstChild("ESP_Highlight") then return end
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "ESP_Highlight"
+    local function addOrRepairESP(model, isEnemyPlayer)
+        if not model then return end
+        if isEnemyPlayer == false then
+            removeEspFromModel(model)
+            return
+        end
+
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then
+            removeEspFromModel(model)
+            return
+        end
+
+        local highlight = model:FindFirstChild("ESP_Highlight")
+        if not highlight or not highlight:IsA("Highlight") then
+            removeEspFromModel(model)
+            highlight = Instance.new("Highlight")
+            highlight.Name = "ESP_Highlight"
+            highlight.Parent = model
+        end
+
         highlight.FillColor = Color3.fromRGB(255, 0, 0)
         highlight.FillTransparency = 0.5
         highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
         highlight.OutlineTransparency = 0
         highlight.Adornee = model
-        highlight.Parent = model
+        highlight.Enabled = true
     end
 
-    local function scanAndAddESP()
+    local function refreshESP()
         if not moduleStates["ESP"] then return end
+
         for _, player in ipairs(Players:GetPlayers()) do
             if player ~= lplr and player.Character then
-                addESPtoModel(player.Character)
+                addOrRepairESP(player.Character, player.Team ~= lplr.Team)
             end
         end
-        -- NPCs
+
         for _, model in ipairs(Workspace:GetDescendants()) do
-            if model:IsA("Model") then
+            if model:IsA("Model") and model ~= lplr.Character then
                 local hum = model:FindFirstChildOfClass("Humanoid")
-                if hum and hum.Health > 0 then
+                local hrp = model:FindFirstChild("HumanoidRootPart")
+                if hum and hrp then
                     local isPlayerChar = false
                     for _, plr in ipairs(Players:GetPlayers()) do
-                        if plr.Character == model then isPlayerChar = true break end
+                        if plr.Character == model then
+                            isPlayerChar = true
+                            break
+                        end
                     end
                     if not isPlayerChar then
-                        addESPtoModel(model)
+                        addOrRepairESP(model, true)
                     end
                 end
             end
         end
     end
 
-    scanAndAddESP()
-    addConnection("ESP", RunService.Heartbeat:Connect(scanAndAddESP))
+    refreshESP()
+    addConnection("ESP", RunService.Heartbeat:Connect(refreshESP))
 end
 
 -- 6. TRACERS (works on NPCs too, transparency setting)
@@ -1180,19 +1291,32 @@ local function setupAutoToxic()
         local displayName = (lplr.DisplayName or ""):lower()
         local mentionsMe = text:find(username, 1, true) or (displayName ~= "" and text:find(displayName, 1, true))
 
-        if mentionsMe and settings.enabledFinalKill and (text:find("final kill", 1, true) or text:find("eliminated", 1, true)) then
+        local isFinalKillEvent = mentionsMe and settings.enabledFinalKill
+            and (text:find("final kill", 1, true) or text:find("final eliminated", 1, true))
+            and (text:find("bed", 1, true) or text:find("no bed", 1, true) or text:find("without a bed", 1, true))
+
+        if isFinalKillEvent then
             sayInChat(settings.finalKillMessage)
             lastSentAt = tick()
             return
         end
 
-        if mentionsMe and settings.enabledBedBreak and text:find("bed", 1, true) and (text:find("break", 1, true) or text:find("destroy", 1, true)) then
+        local isMyBedBreakEvent = settings.enabledBedBreak
+            and (text:find(username .. " broke", 1, true) or (displayName ~= "" and text:find(displayName .. " broke", 1, true)))
+            and text:find("bed", 1, true)
+
+        if isMyBedBreakEvent then
             sayInChat(settings.bedBreakMessage)
             lastSentAt = tick()
             return
         end
 
-        if settings.enabledGameWin and (text:find("victory", 1, true) or text:find("you win", 1, true) or text:find("match won", 1, true)) then
+        local isVictory = settings.enabledGameWin
+            and (text:find("victory", 1, true) or text:find("you win", 1, true) or text:find("winner", 1, true))
+            and not text:find("defeat", 1, true)
+            and not text:find("lost", 1, true)
+
+        if isVictory then
             sayInChat(settings.gameWinMessage)
             lastSentAt = tick()
         end
@@ -1204,58 +1328,106 @@ setupAutoToxic()
 moduleSettings["Nuker"] = {
     mineBeds = true,
     mineIron = true,
-    mineGold = true,
-    mineDiamond = true,
-    mineEmerald = true,
-    mineRadius = 12
+    mineRadius = 18,
+    targetProtectedBeds = true
 }
+
+local function scoreBlockForNuker(part, rootPos)
+    local distance = (part.Position - rootPos).Magnitude
+    local name = part.Name:lower()
+    if name == "bed" then
+        return 1000 - distance
+    end
+    if name:find("iron") and name:find("ore") then
+        return 500 - distance
+    end
+    return -math.huge
+end
 
 local function toggleNuker(enabled)
     cleanupModule("Nuker")
     if not enabled then return end
 
-    local remoteNameMap = {
-        bed = "DamageBlock",
-        iron = "BreakBlock",
-        gold = "BreakBlock",
-        diamond = "BreakBlock",
-        emerald = "BreakBlock"
-    }
+    local lastMineAt = 0
 
     addConnection("Nuker", RunService.Heartbeat:Connect(function()
         if not moduleStates["Nuker"] then return end
+        if tick() - lastMineAt < 0.08 then return end
+
         local settings = moduleSettings["Nuker"]
         local myRoot = getHRP(getCharacter(lplr))
         if not myRoot then return end
 
+        local best, bestScore
         for _, obj in ipairs(Workspace:GetDescendants()) do
-            if not obj:IsA("BasePart") then continue end
-            if (myRoot.Position - obj.Position).Magnitude > settings.mineRadius then continue end
-
-            local nameLower = obj.Name:lower()
-            local resourceType
-            if settings.mineBeds and nameLower == "bed" then resourceType = "bed"
-            elseif settings.mineIron and nameLower:find("iron") then resourceType = "iron"
-            elseif settings.mineGold and nameLower:find("gold") then resourceType = "gold"
-            elseif settings.mineDiamond and nameLower:find("diamond") then resourceType = "diamond"
-            elseif settings.mineEmerald and nameLower:find("emerald") then resourceType = "emerald" end
-
-            if resourceType then
-                local fired = fireBedwarsRemote(remoteNameMap[resourceType], {blockRef = obj, position = obj.Position})
-                if not fired then
-                    pcall(function()
-                        obj:Destroy()
-                    end)
+            if obj:IsA("BasePart") then
+                local n = obj.Name:lower()
+                local isBed = settings.mineBeds and n == "bed"
+                local isIron = settings.mineIron and n:find("iron") and n:find("ore")
+                if (isBed or isIron) and (myRoot.Position - obj.Position).Magnitude <= settings.mineRadius then
+                    local score = scoreBlockForNuker(obj, myRoot.Position)
+                    if not bestScore or score > bestScore then
+                        best = obj
+                        bestScore = score
+                    end
                 end
+            end
+        end
+
+        if not best then return end
+
+        local targetQueue = {best}
+        if settings.targetProtectedBeds and best.Name:lower() == "bed" then
+            for _, obj in ipairs(Workspace:GetPartBoundsInRadius(best.Position, 6)) do
+                if obj:IsA("BasePart") and obj.CanCollide and obj.Name:lower() ~= "bed" then
+                    table.insert(targetQueue, obj)
+                end
+            end
+            table.sort(targetQueue, function(a, b)
+                return (a.Position - myRoot.Position).Magnitude < (b.Position - myRoot.Position).Magnitude
+            end)
+        end
+
+        for _, block in ipairs(targetQueue) do
+            local remoteName = block.Name:lower() == "bed" and "DamageBlock" or "BreakBlock"
+            local fired = fireBedwarsRemote(remoteName, {
+                blockRef = block,
+                block = block,
+                position = block.Position,
+                hitPosition = block.Position,
+                normal = Vector3.new(0, 1, 0)
+            })
+            if not fired then
+                local payloads = {
+                    {blockRef = block, position = block.Position},
+                    {block = block, hitPosition = block.Position},
+                    {instance = block, position = block.Position}
+                }
+                for _, remote in ipairs(getRemotesByPattern({"breakblock", "damageblock", "blockhit", "mineblock"})) do
+                    if fireRemoteFlexible(remote, payloads) then
+                        fired = true
+                        break
+                    end
+                end
+            end
+            if fired then
+                lastMineAt = tick()
+                break
             end
         end
     end))
 end
 
--- 9. SCAFFOLD (always place below, tower when jumping)
+-- 9. SCAFFOLD
 moduleSettings["Scaffold"] = {
-    allowTowering = true
+    allowPillaring = true
 }
+
+local function isBlockTool(tool)
+    if not tool or not tool:IsA("Tool") then return false end
+    local lowered = tool.Name:lower()
+    return lowered:find("wool") or lowered:find("clay") or lowered:find("concrete") or lowered:find("plank")
+end
 
 local function getTeamWoolName()
     local team = lplr.Team
@@ -1283,24 +1455,25 @@ local function toggleScaffold(enabled)
         local char = getCharacter(lplr)
         local root = getHRP(char)
         local hum = getHumanoid(char)
-        if not root or not hum then return end
+        local held = char and char:FindFirstChildOfClass("Tool")
+        if not root or not hum or not isBlockTool(held) then return end
 
         local placePos = root.Position - Vector3.new(0, 3.1, 0)
-        if moduleSettings["Scaffold"].allowTowering and hum:GetState() == Enum.HumanoidStateType.Jumping then
+        if moduleSettings["Scaffold"].allowPillaring and hum:GetState() == Enum.HumanoidStateType.Jumping then
             placePos = root.Position - Vector3.new(0, 1.2, 0)
         end
 
         local rayParams = RaycastParams.new()
         rayParams.FilterType = Enum.RaycastFilterType.Blacklist
         rayParams.FilterDescendantsInstances = {char}
-        local occupied = Workspace:Raycast(placePos + Vector3.new(0, 3, 0), Vector3.new(0, -4, 0), rayParams)
-        if occupied then return end
+        if Workspace:Raycast(placePos + Vector3.new(0, 2.2, 0), Vector3.new(0, -3.5, 0), rayParams) then
+            return
+        end
 
         local blockPos = Vector3.new(math.floor(placePos.X / 3) * 3, math.floor(placePos.Y / 3) * 3, math.floor(placePos.Z / 3) * 3)
-        local blockName = getTeamWoolName()
-
+        local heldName = held and held.Name:lower() or getTeamWoolName()
         local placed = fireBedwarsRemote("PlaceBlock", {
-            blockType = blockName,
+            blockType = heldName,
             position = blockPos
         })
 
@@ -1314,6 +1487,19 @@ local function toggleScaffold(enabled)
                 end)
             end
         end
+        if not placed then
+            local payloads = {
+                {blockType = heldName, position = blockPos},
+                {block = heldName, position = blockPos},
+                {blockType = heldName, cframe = CFrame.new(blockPos)}
+            }
+            for _, remote in ipairs(getRemotesByPattern({"placeblock", "place", "blockplace"})) do
+                if fireRemoteFlexible(remote, payloads) then
+                    placed = true
+                    break
+                end
+            end
+        end
 
         if placed then
             lastPlaceAt = tick()
@@ -1321,7 +1507,7 @@ local function toggleScaffold(enabled)
     end))
 end
 
--- 10. AIM ASSIST (ignore teammates, speed setting)
+-- 10. AIM ASSIST
 moduleSettings["AimAssist"] = {
     speed = 0.1,
     range = 30
@@ -1334,19 +1520,17 @@ local function toggleAimAssist(enabled)
     local connection = RunService.RenderStepped:Connect(function(deltaTime)
         if not moduleStates["AimAssist"] then return end
         local settings = moduleSettings["AimAssist"]
-        local nearest = getNearestEnemy(settings.range, true) -- ignore team
+        local nearest = getTargetByFilters(settings.range, true, false)
         if not nearest then return end
-        local head = nearest:FindFirstChild("Head")
-        if not head then return end
 
-        local screenPos, onScreen = camera:WorldToScreenPoint(head.Position)
-        if not onScreen then return end
+        local root = getHRP(nearest)
+        local myRoot = getHRP(getCharacter(lplr))
+        if not root or not myRoot then return end
 
-        local targetPos = Vector2.new(screenPos.X, screenPos.Y)
-        local mousePos = Vector2.new(mouse.X, mouse.Y)
-        local smoothing = math.clamp(settings.speed * deltaTime * 60, 0.01, 1)
-        local delta = (targetPos - mousePos) * smoothing
-        mousemoverel(delta.X, delta.Y)
+        local current = camera.CFrame
+        local targetLook = CFrame.lookAt(current.Position, root.Position)
+        local alpha = math.clamp(settings.speed * deltaTime * 60, 0.02, 0.35)
+        camera.CFrame = current:Lerp(targetLook, alpha)
     end)
     addConnection("AimAssist", connection)
 end
@@ -1354,7 +1538,6 @@ end
 -- 11. AUTO CLICKER
 moduleSettings["AutoClicker"] = {
     cps = 14,
-    requireHold = true,
     weaponOnly = false
 }
 
@@ -1381,20 +1564,13 @@ local function toggleAutoClicker(enabled)
     end))
 
     addConnection("AutoClicker", RunService.RenderStepped:Connect(function()
-        if not moduleStates["AutoClicker"] then return end
+        if not moduleStates["AutoClicker"] or not mouseHeld then return end
 
         local settings = moduleSettings["AutoClicker"]
-        if settings.requireHold and not mouseHeld then
-            return
-        end
-
         local char = getCharacter(lplr)
         local tool = char and char:FindFirstChildOfClass("Tool")
-        if settings.weaponOnly then
-            local valid = tool and (tool.Name:lower():find("sword") or tool.Name:lower():find("blade") or tool.Name:lower():find("dao"))
-            if not valid then
-                return
-            end
+        if settings.weaponOnly and not isSwordTool(tool) then
+            return
         end
 
         local now = tick()
@@ -1404,24 +1580,23 @@ local function toggleAutoClicker(enabled)
         end
         lastClickAt = now
 
-        local target = getTargetByFilters(18, true, false)
+        local target = getTargetByFilters(20, true, false)
         if target then
             attackTargetWithBedwarsApi(target)
         end
-
+        performPrimaryClick()
         if tool then
             pcall(function() tool:Activate() end)
         end
-        performPrimaryClick()
     end))
 end
 
--- 12. VELOCITY (100 = no knockback, 0 = full knockback)
+-- 12. VELOCITY
 moduleSettings["Velocity"] = {
     horizontalPercent = 100,
     verticalPercent = 100,
-    reactionWindow = 0.35,
-    velocitySpikeThreshold = 4
+    reactionWindow = 0.45,
+    velocitySpikeThreshold = 18
 }
 
 local function toggleVelocity(enabled)
@@ -1431,25 +1606,34 @@ local function toggleVelocity(enabled)
     local function bindCharacter(char)
         local hum = char:WaitForChild("Humanoid")
         local root = char:WaitForChild("HumanoidRootPart")
-        local recentlyHitUntil = 0
+        local recentlyDamagedUntil = 0
 
         addConnection("Velocity", hum.HealthChanged:Connect(function(newHealth)
             if newHealth < hum.MaxHealth then
-                recentlyHitUntil = tick() + moduleSettings["Velocity"].reactionWindow
+                recentlyDamagedUntil = tick() + moduleSettings["Velocity"].reactionWindow
             end
         end))
 
         addConnection("Velocity", RunService.Heartbeat:Connect(function()
             if not moduleStates["Velocity"] or not root.Parent then return end
+
             local v = root.AssemblyLinearVelocity
             local settings = moduleSettings["Velocity"]
-            local horizontal = Vector2.new(v.X, v.Z).Magnitude
+            local horizontalMag = Vector2.new(v.X, v.Z).Magnitude
+            local suddenImpulse = horizontalMag >= settings.velocitySpikeThreshold or v.Y > 20
+            local damageWindow = tick() <= recentlyDamagedUntil
 
-            if tick() <= recentlyHitUntil or horizontal >= settings.velocitySpikeThreshold then
-                local hMul = math.clamp(1 - (settings.horizontalPercent / 100), 0, 1)
-                local vMul = math.clamp(1 - (settings.verticalPercent / 100), 0, 1)
-                root.AssemblyLinearVelocity = Vector3.new(v.X * hMul, v.Y * vMul, v.Z * hMul)
+            if not suddenImpulse and not damageWindow then
+                return
             end
+
+            local hMul = math.clamp(1 - (settings.horizontalPercent / 100), 0, 1)
+            local vMul = math.clamp(1 - (settings.verticalPercent / 100), 0, 1)
+            local y = v.Y
+            if y > 0 then
+                y = y * vMul
+            end
+            root.AssemblyLinearVelocity = Vector3.new(v.X * hMul, y, v.Z * hMul)
         end))
     end
 
@@ -1462,9 +1646,14 @@ moduleSettings["LongJump"] = {
     horizontalSpeed = 90,
     verticalBoost = 30,
     boostDuration = 0.65,
-    useDaoBurst = true,
     cooldown = 0.75
 }
+
+local function isHeldDao(tool)
+    if not tool or not tool:IsA("Tool") then return false end
+    local n = tool.Name:lower()
+    return n == "stone_dao" or n == "iron_dao"
+end
 
 local function toggleLongJump(enabled)
     cleanupModule("LongJump")
@@ -1479,14 +1668,14 @@ local function toggleLongJump(enabled)
         local char = getCharacter(lplr)
         local hum = getHumanoid(char)
         local root = getHRP(char)
-        if not hum or not root then return end
+        local held = char and char:FindFirstChildOfClass("Tool")
+        if not hum or not root or not isHeldDao(held) then return end
+
+        useDaoAbility()
 
         local settings = moduleSettings["LongJump"]
-        if settings.useDaoBurst then
-            useDaoAbility()
-        end
-
-        local dir = hum.MoveDirection.Magnitude > 0 and hum.MoveDirection.Unit or Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z).Unit
+        local lookFlat = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        local dir = hum.MoveDirection.Magnitude > 0 and hum.MoveDirection.Unit or (lookFlat.Magnitude > 0 and lookFlat.Unit or Vector3.new(0, 0, -1))
         root.AssemblyLinearVelocity = Vector3.new(dir.X * settings.horizontalSpeed, settings.verticalBoost, dir.Z * settings.horizontalSpeed)
         boostingUntil = tick() + settings.boostDuration
         cooldownUntil = tick() + settings.cooldown
@@ -1497,10 +1686,12 @@ local function toggleLongJump(enabled)
         local char = getCharacter(lplr)
         local hum = getHumanoid(char)
         local root = getHRP(char)
-        if not hum or not root then return end
+        local held = char and char:FindFirstChildOfClass("Tool")
+        if not hum or not root or not isHeldDao(held) then return end
 
         local settings = moduleSettings["LongJump"]
-        local dir = hum.MoveDirection.Magnitude > 0 and hum.MoveDirection.Unit or Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z).Unit
+        local lookFlat = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        local dir = hum.MoveDirection.Magnitude > 0 and hum.MoveDirection.Unit or (lookFlat.Magnitude > 0 and lookFlat.Unit or Vector3.new(0, 0, -1))
         local currentY = root.AssemblyLinearVelocity.Y
         root.AssemblyLinearVelocity = Vector3.new(dir.X * settings.horizontalSpeed, math.max(currentY, settings.verticalBoost * 0.35), dir.Z * settings.horizontalSpeed)
     end))
@@ -1508,7 +1699,7 @@ end
 
 -- 14. NOFALLDAMAGE
 moduleSettings["NoFallDamage"] = {
-    method = "NegateVelocity", -- "Landing", "NegateVelocity", "Teleport", "DaoExploit"
+    method = "BruteForce Mode",
     triggerVelocity = -42,
     releaseHeight = 8,
     chargeSeconds = 0.55
@@ -1521,46 +1712,40 @@ local function toggleNoFallDamage(enabled)
     local function bindCharacter(char)
         local hum = char:WaitForChild("Humanoid")
         local root = char:WaitForChild("HumanoidRootPart")
+        local charging = false
 
         addConnection("NoFallDamage", RunService.Heartbeat:Connect(function()
             if not moduleStates["NoFallDamage"] or not root.Parent then return end
 
             local settings = moduleSettings["NoFallDamage"]
-            local method = settings.method
             local velocityY = root.AssemblyLinearVelocity.Y
-
-            if method == "Landing" then
-                if velocityY <= settings.triggerVelocity then
-                    hum:ChangeState(Enum.HumanoidStateType.Landed)
-                end
-                return
-            end
-
-            if method == "NegateVelocity" then
-                if velocityY <= settings.triggerVelocity then
-                    root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, -2, root.AssemblyLinearVelocity.Z)
-                end
-                return
-            end
-
             local hit = Workspace:Raycast(root.Position, Vector3.new(0, -45, 0))
-            if method == "Teleport" then
-                if hit and velocityY <= settings.triggerVelocity then
-                    root.CFrame = CFrame.new(root.Position.X, hit.Position.Y + 4, root.Position.Z)
-                    root.AssemblyLinearVelocity = Vector3.zero
+
+            if settings.method == "DaoExploit Mode" then
+                local dao = getHeldOrBackpackDaoTool()
+                if not dao then return end
+
+                if velocityY <= settings.triggerVelocity and not charging then
+                    charging = true
+                    if dao.Parent ~= char then
+                        hum:EquipTool(dao)
+                    end
+                    pcall(function() dao:Activate() end)
+                end
+
+                if charging and hit and (root.Position.Y - hit.Position.Y) <= settings.releaseHeight then
+                    charging = false
+                    pcall(function() dao:Activate() end)
+                    performPrimaryClick()
                 end
                 return
             end
 
-            if method == "DaoExploit" then
-                local tool = getHeldOrBackpackDaoTool()
-                if not tool then return end
-                if velocityY <= settings.triggerVelocity and hit and (root.Position.Y - hit.Position.Y) <= settings.releaseHeight then
-                    if tool.Parent ~= char then
-                        hum:EquipTool(tool)
-                    end
-                    pcall(function() tool:Activate() end)
-                    performPrimaryClick()
+            if velocityY <= settings.triggerVelocity then
+                root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X * 0.6, -1, root.AssemblyLinearVelocity.Z * 0.6)
+                hum:ChangeState(Enum.HumanoidStateType.Landed)
+                if hit and (root.Position.Y - hit.Position.Y) <= 5 then
+                    root.CFrame = CFrame.new(root.Position.X, hit.Position.Y + 3.8, root.Position.Z)
                 end
             end
         end))
@@ -1572,8 +1757,7 @@ end
 
 -- 15. ANTIVOID
 moduleSettings["AntiVoid"] = {
-    mode = "Teleport", -- "Teleport", "Bounce"
-    bouncePower = 110,
+    mode = "Smart Recovery",
     triggerOffset = 36,
     refreshInterval = 1.5
 }
@@ -1583,7 +1767,7 @@ local function createAntiVoidVisual()
     marker.Name = "AntiVoidIndicator"
     marker.Anchored = true
     marker.CanCollide = false
-    marker.Size = Vector3.new(10, 0.5, 10)
+    marker.Size = Vector3.new(10, 0.35, 10)
     marker.Material = Enum.Material.Neon
     marker.Color = Color3.fromRGB(255, 70, 70)
     marker.Transparency = 0.45
@@ -1591,35 +1775,61 @@ local function createAntiVoidVisual()
     return marker
 end
 
+local function findNearestSafeLand(origin, blacklist)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Blacklist
+    params.FilterDescendantsInstances = blacklist or {}
+
+    local bestPos
+    local bestDist
+    local offsets = {
+        Vector3.new(0, 0, 0), Vector3.new(12, 0, 0), Vector3.new(-12, 0, 0),
+        Vector3.new(0, 0, 12), Vector3.new(0, 0, -12), Vector3.new(24, 0, 0),
+        Vector3.new(-24, 0, 0), Vector3.new(0, 0, 24), Vector3.new(0, 0, -24)
+    }
+
+    for _, offset in ipairs(offsets) do
+        local castOrigin = origin + offset + Vector3.new(0, 80, 0)
+        local hit = Workspace:Raycast(castOrigin, Vector3.new(0, -220, 0), params)
+        if hit then
+            local candidate = hit.Position + Vector3.new(0, 4, 0)
+            local dist = (candidate - origin).Magnitude
+            if not bestDist or dist < bestDist then
+                bestDist = dist
+                bestPos = candidate
+            end
+        end
+    end
+
+    return bestPos
+end
+
 local function toggleAntiVoid(enabled)
     cleanupModule("AntiVoid")
-
-    local old = Workspace:FindFirstChild("AntiVoidIndicator")
-    if old then old:Destroy() end
+    local oldVisual = Workspace:FindFirstChild("AntiVoidIndicator")
+    if oldVisual then
+        oldVisual:Destroy()
+    end
     if not enabled then return end
 
     local marker = createAntiVoidVisual()
-    local safePosition
     local safeGroundY
     local lastRefresh = 0
 
-    local function refreshSafePosition()
-        local char = getCharacter(lplr)
-        local root = getHRP(char)
-        if not root then return end
+    local function refreshGroundReference(root)
         local hit = Workspace:Raycast(root.Position + Vector3.new(0, 30, 0), Vector3.new(0, -200, 0))
         if hit then
-            safePosition = hit.Position + Vector3.new(0, 4, 0)
             safeGroundY = hit.Position.Y
+            lastRefresh = tick()
         end
-        lastRefresh = tick()
     end
 
-    refreshSafePosition()
-
-    addConnection("AntiVoid", lplr.CharacterAdded:Connect(function()
-        task.wait(0.2)
-        refreshSafePosition()
+    addConnection("AntiVoid", lplr.CharacterAdded:Connect(function(char)
+        local root = getHRP(char)
+        if root then
+            task.wait(0.2)
+            refreshGroundReference(root)
+        end
     end))
 
     addConnection("AntiVoid", RunService.Heartbeat:Connect(function()
@@ -1628,55 +1838,85 @@ local function toggleAntiVoid(enabled)
         local root = getHRP(char)
         if not root then return end
 
-        if (not safeGroundY) or (tick() - lastRefresh > moduleSettings["AntiVoid"].refreshInterval) then
-            refreshSafePosition()
+        if not safeGroundY or (tick() - lastRefresh > moduleSettings["AntiVoid"].refreshInterval) then
+            refreshGroundReference(root)
         end
         if not safeGroundY then return end
 
         local triggerY = safeGroundY - moduleSettings["AntiVoid"].triggerOffset
         marker.Position = Vector3.new(root.Position.X, triggerY, root.Position.Z)
+        if root.Position.Y > triggerY then return end
 
-        if root.Position.Y <= triggerY then
-            if moduleSettings["AntiVoid"].mode == "Bounce" then
-                local v = root.AssemblyLinearVelocity
-                root.AssemblyLinearVelocity = Vector3.new(v.X, moduleSettings["AntiVoid"].bouncePower, v.Z)
-            elseif safePosition then
-                root.CFrame = CFrame.new(safePosition)
-                root.AssemblyLinearVelocity = Vector3.zero
-            end
-            refreshSafePosition()
+        local targetLand = findNearestSafeLand(root.Position, {char})
+        if not targetLand then return end
+
+        if moduleSettings["AntiVoid"].mode == "Smart Recovery" then
+            local mid = Vector3.new(root.Position.X, targetLand.Y, root.Position.Z)
+            root.CFrame = CFrame.new(mid)
+            task.wait()
+            root.CFrame = CFrame.new(targetLand)
+        else
+            root.CFrame = CFrame.new(targetLand)
         end
+        root.AssemblyLinearVelocity = Vector3.zero
+        refreshGroundReference(root)
     end))
 end
 
 -- 16. INFINITE JUMP
+moduleSettings["InfiniteJump"] = {
+    tpDownEnabled = false,
+    tpDownInterval = 2.5,
+    tpDownAirStart = nil
+}
+
 local function toggleInfiniteJump(enabled)
     cleanupModule("InfiniteJump")
     if not enabled then
-        if lplr.Character then
-            local hum = getHumanoid(lplr.Character)
-            if hum then hum.JumpPower = 50 end
-        end
         return
     end
 
-    local function applyJump(char)
-        local hum = getHumanoid(char)
-        if hum then hum.JumpPower = 0 end
-    end
-
-    local connection = UserInputService.JumpRequest:Connect(function()
+    addConnection("InfiniteJump", UserInputService.JumpRequest:Connect(function()
         if moduleStates["InfiniteJump"] and lplr.Character then
             local hum = getHumanoid(lplr.Character)
             if hum then
                 hum:ChangeState(Enum.HumanoidStateType.Jumping)
             end
         end
-    end)
+    end))
 
-    if lplr.Character then applyJump(lplr.Character) end
-    addConnection("InfiniteJump", lplr.CharacterAdded:Connect(applyJump))
-    addConnection("InfiniteJump", connection)
+    addConnection("InfiniteJump", RunService.Heartbeat:Connect(function()
+        if not moduleStates["InfiniteJump"] then return end
+        local settings = moduleSettings["InfiniteJump"]
+        if not settings.tpDownEnabled then
+            settings.tpDownAirStart = nil
+            return
+        end
+
+        local char = getCharacter(lplr)
+        local root = getHRP(char)
+        local hum = getHumanoid(char)
+        if not root or not hum then return end
+
+        local now = tick()
+        local isAirborne = hum.FloorMaterial == Enum.Material.Air or hum:GetState() == Enum.HumanoidStateType.Freefall
+        if isAirborne then
+            settings.tpDownAirStart = settings.tpDownAirStart or now
+            if now - settings.tpDownAirStart >= settings.tpDownInterval then
+                local raycastParams = RaycastParams.new()
+                raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+                raycastParams.FilterDescendantsInstances = {char}
+                local ray = Workspace:Raycast(root.Position, Vector3.new(0, -120, 0), raycastParams)
+                if ray then
+                    root.CFrame = CFrame.new(ray.Position + Vector3.new(0, 2.5, 0))
+                    root.AssemblyLinearVelocity = Vector3.zero
+                end
+                settings.tpDownAirStart = now
+            end
+        else
+            settings.tpDownAirStart = nil
+        end
+    end))
 end
 
 -- ==================== GUI CONSTRUCTION ====================
@@ -2018,7 +2258,6 @@ end
 createModule(columns["Combat"], "KillAura", false, toggleKillAura, {
     {type = "toggle", name = "Face Target", settingName = "faceTarget"},
     {type = "slider", name = "Attack Range", min = 5, max = 25, settingName = "attackRange"},
-    {type = "slider", name = "Max FOV", min = 50, max = 700, settingName = "maxFov"},
     {type = "slider", name = "Swings/Sec", min = 1, max = 20, settingName = "swingsPerSecond"},
     {type = "toggle", name = "Require Weapon", settingName = "requireWeapon"},
     {type = "toggle", name = "Attack Players", settingName = "attackPlayers"},
@@ -2066,14 +2305,12 @@ createModule(columns["Utility"], "AutoToxic", false, nil, {
 createModule(columns["World"], "Nuker", false, toggleNuker, {
     {type = "toggle", name = "Mine Beds", settingName = "mineBeds"},
     {type = "toggle", name = "Mine Iron", settingName = "mineIron"},
-    {type = "toggle", name = "Mine Gold", settingName = "mineGold"},
-    {type = "toggle", name = "Mine Diamond", settingName = "mineDiamond"},
-    {type = "toggle", name = "Mine Emerald", settingName = "mineEmerald"},
+    {type = "toggle", name = "Target Protected Beds", settingName = "targetProtectedBeds"},
     {type = "slider", name = "Radius", min = 5, max = 20, settingName = "mineRadius"}
 })
 
 createModule(columns["World"], "Scaffold", false, toggleScaffold, {
-    {type = "toggle", name = "Allow Towering", settingName = "allowTowering"}
+    {type = "toggle", name = "Allow Pillaring", settingName = "allowPillaring"}
 })
 
 createModule(columns["Legit"], "AimAssist", false, toggleAimAssist, {
@@ -2083,7 +2320,6 @@ createModule(columns["Legit"], "AimAssist", false, toggleAimAssist, {
 
 createModule(columns["Legit"], "AutoClicker", false, toggleAutoClicker, {
     {type = "slider", name = "CPS", min = 1, max = 25, settingName = "cps"},
-    {type = "toggle", name = "Require Hold", settingName = "requireHold"},
     {type = "toggle", name = "Weapon Only", settingName = "weaponOnly"}
 })
 
@@ -2098,25 +2334,26 @@ createModule(columns["Movement"], "LongJump", false, toggleLongJump, {
     {type = "slider", name = "Horizontal Speed", min = 40, max = 220, settingName = "horizontalSpeed"},
     {type = "slider", name = "Vertical Boost", min = 0, max = 90, settingName = "verticalBoost"},
     {type = "slider", name = "Boost Duration", min = 0.1, max = 2, settingName = "boostDuration"},
-    {type = "toggle", name = "Use Dao Burst", settingName = "useDaoBurst"},
     {type = "slider", name = "Cooldown", min = 0.1, max = 3, settingName = "cooldown"}
 })
 
 createModule(columns["Movement"], "NoFallDamage", false, toggleNoFallDamage, {
-    {type = "dropdown", name = "Method", options = {"Landing", "NegateVelocity", "Teleport", "DaoExploit"}, settingName = "method"},
+    {type = "dropdown", name = "Method", options = {"BruteForce Mode", "DaoExploit Mode"}, settingName = "method"},
     {type = "slider", name = "Trigger Velocity", min = -100, max = -20, settingName = "triggerVelocity"},
     {type = "slider", name = "Release Height", min = 3, max = 25, settingName = "releaseHeight"},
     {type = "slider", name = "Charge Seconds", min = 0.2, max = 1.2, settingName = "chargeSeconds"}
 })
 
 createModule(columns["Movement"], "AntiVoid", false, toggleAntiVoid, {
-    {type = "dropdown", name = "Mode", options = {"Teleport", "Bounce"}, settingName = "mode"},
-    {type = "slider", name = "Bounce Power", min = 50, max = 200, settingName = "bouncePower"},
+    {type = "dropdown", name = "Mode", options = {"Smart Recovery", "Instant Recovery"}, settingName = "mode"},
     {type = "slider", name = "Trigger Offset", min = 15, max = 80, settingName = "triggerOffset"},
     {type = "slider", name = "Refresh Interval", min = 0.2, max = 5, settingName = "refreshInterval"}
 })
 
-createModule(columns["Movement"], "InfiniteJump", false, toggleInfiniteJump, {})
+createModule(columns["Movement"], "InfiniteJump", false, toggleInfiniteJump, {
+    {type = "toggle", name = "TP Down", settingName = "tpDownEnabled"},
+    {type = "slider", name = "TP Interval", min = 1, max = 5, settingName = "tpDownInterval"}
+})
 
 local function applyModuleToggle(moduleName, enabled)
     if moduleName == "KillAura" then toggleKillAura(enabled)
