@@ -1284,6 +1284,18 @@ local function toggleNuker(enabled)
                     end
                 end
             end
+            table.sort(targetQueue, function(a, b)
+                return (a.Position - myRoot.Position).Magnitude < (b.Position - myRoot.Position).Magnitude
+            end)
+        end
+
+        for _, block in ipairs(targetQueue) do
+            local remoteName = block.Name:lower() == "bed" and "DamageBlock" or "BreakBlock"
+            local fired = fireBedwarsRemote(remoteName, {blockRef = block, position = block.Position})
+            if fired then
+                lastMineAt = tick()
+                break
+            end
         end
 
         if not best then return end
