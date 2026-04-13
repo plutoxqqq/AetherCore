@@ -1,10 +1,10 @@
--- BedWars Vape GUI - Complete & Functional
--- Press RightShift to toggle GUI
--- Features: KillAura, Reach, Speed, Fly, ESP, Tracers, AutoToxic, Nuker, Scaffold, AimAssist, AutoClicker
--- New: Velocity, LongJump, NoFallDamage, AntiVoid, InfiniteJump
--- Each module has Keybind and expandable Settings
 
--- ==================== SERVICES ====================
+
+
+
+
+
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TextChatService = game:GetService("TextChatService")
@@ -18,15 +18,15 @@ local lplr = Players.LocalPlayer
 local mouse = lplr:GetMouse()
 local camera = Workspace.CurrentCamera
 
--- ==================== STATE ====================
-local moduleStates = {}          -- { [moduleName] = enabled }
-local moduleConnections = {}     -- { [moduleName] = { connection1, connection2, ... } }
-local moduleKeybinds = {}        -- { [moduleName] = keyCode or nil }
-local moduleSettings = {}        -- { [moduleName] = { settingName = value } }
+
+local moduleStates = {}
+local moduleConnections = {}
+local moduleKeybinds = {}
+local moduleSettings = {}
 local guiEnabled = true
 local autoToxicEnabled = false
 
--- ==================== CHAT UTILITY ====================
+
 local function sayInChat(message)
     pcall(function()
         local channel = TextChatService.ChatInputBarConfiguration.TargetTextChannel
@@ -36,7 +36,7 @@ local function sayInChat(message)
     end)
 end
 
--- ==================== BEDWARS CONTROLLER FETCH ====================
+
 local KnitClient, CombatController, BedwarsShopController, BlockPlacementController, ClientHandler
 local resolvedCombatController, resolvedBlockPlacementController
 
@@ -62,7 +62,7 @@ local function fetchControllers()
 end
 fetchControllers()
 
--- ==================== HELPER FUNCTIONS ====================
+
 local function getCharacter(player)
     return player and player.Character
 end
@@ -214,7 +214,7 @@ local function getTargetByFilters(range, attackPlayers, attackNPCs)
     return nearest, nearestDistance
 end
 
--- Get nearest enemy (players + NPCs) excluding teammates
+
 local function getNearestEnemy(range, ignoreTeam)
     local myChar = getCharacter(lplr)
     if not myChar then return nil, nil end
@@ -225,7 +225,7 @@ local function getNearestEnemy(range, ignoreTeam)
     local nearest = nil
     local shortest = range or math.huge
 
-    -- Players
+
     for _, player in ipairs(Players:GetPlayers()) do
         if player == lplr then continue end
         if myTeam and player.Team == myTeam then continue end
@@ -243,7 +243,7 @@ local function getNearestEnemy(range, ignoreTeam)
         end
     end
 
-    -- NPCs (any model with Humanoid, not belonging to a player)
+
     for _, model in ipairs(Workspace:GetDescendants()) do
         if model:IsA("Model") and model ~= myChar then
             local hum = model:FindFirstChildOfClass("Humanoid")
@@ -303,7 +303,7 @@ local function attackTargetWithBedwarsApi(targetCharacter)
     return attacked
 end
 
--- Safe connection management
+
 local function addConnection(moduleName, connection)
     if not moduleConnections[moduleName] then
         moduleConnections[moduleName] = {}
@@ -329,7 +329,7 @@ local function performPrimaryClick()
     end)
 end
 
--- ==================== SETTINGS UI HELPERS ====================
+
 local function createSlider(parent, name, min, max, default, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -10, 0, 44)
@@ -525,7 +525,7 @@ local function createDropdown(parent, name, options, default, callback)
 
     local selected = default
     button.MouseButton1Click:Connect(function()
-        -- Simple cycle through options
+
         local idx = table.find(options, selected) or 1
         idx = idx % #options + 1
         selected = options[idx]
@@ -583,9 +583,9 @@ local function createTextBox(parent, name, default, callback)
     }
 end
 
--- ==================== MODULE IMPLEMENTATIONS ====================
 
--- 1. KILLAURA - Fixed & Super Aggressive (VoidWare style - April 2026)
+
+
 moduleSettings["KillAura"] = {
     range = 14,
     fov = 360,
@@ -599,7 +599,7 @@ moduleSettings["KillAura"] = {
     requireSword = false,
     attackThroughWalls = true,
     ignoreTeammates = true,
-    -- Legacy
+
     fovRadius = 360,
     attackPlayers = true,
     attackNPCs = false
@@ -625,7 +625,6 @@ local function toggleKillAura(enabled)
     cleanupModule("KillAura")
     if not enabled then return end
 
-    print("KillAura ENABLED - testing...")  -- check F9 / executor console
 
     local connection = RunService.Heartbeat:Connect(function()
         if not moduleStates["KillAura"] then return end
@@ -637,17 +636,17 @@ local function toggleKillAura(enabled)
         local sword = getHeldSword()
         if moduleSettings["KillAura"].requireSword and not sword then return end
 
-        -- Simple & fast target finding (uses your existing getNearestEnemy)
+
         local targetChar, dist = getNearestEnemy(moduleSettings["KillAura"].range, moduleSettings["KillAura"].ignoreTeammates)
         if not targetChar or dist > moduleSettings["KillAura"].range then return end
 
         local now = tick()
         if now - killAuraLastSwing < (1 / moduleSettings["KillAura"].swingSpeed) then return end
 
-        -- === FORCE ATTACK ===
+
         local attacked = false
 
-        -- 1. Best method: CombatController
+
         local controller = getCombatController()
         if controller then
             local hum = getHumanoid(targetChar)
@@ -665,7 +664,7 @@ local function toggleKillAura(enabled)
             end)
         end
 
-        -- 2. Fallback: raw sword activate
+
         if sword and not attacked then
             pcall(function()
                 sword:Activate()
@@ -673,21 +672,20 @@ local function toggleKillAura(enabled)
             end)
         end
 
-        -- 3. Old API fallback
+
         if not attacked then
             attacked = attackTargetWithBedwarsApi(targetChar)
         end
 
         if attacked then
             killAuraLastSwing = now
-            print("KillAura: Attacked target at", dist, "studs")  -- you should see this in console
         end
     end)
 
     addConnection("KillAura", connection)
 end
 
--- 2. REACH
+
 moduleSettings["Reach"] = {
     mode = "Both",
     hitRange = 12,
@@ -812,7 +810,7 @@ local function toggleReach(enabled)
     end))
 end
 
--- 3. SPEED (with configurable speed value)
+
 moduleSettings["Speed"] = { speed = 24 }
 
 local function toggleSpeed(enabled)
@@ -847,7 +845,7 @@ local function toggleSpeed(enabled)
     end))
 end
 
--- 4. FLY (horizontal level maintained, with TP down)
+
 moduleSettings["Fly"] = {
     horizontalSpeed = 40,
     verticalSpeed = 40,
@@ -895,7 +893,7 @@ local function toggleFly(enabled)
 
         local moveDir = Vector3.zero
 
-        -- Horizontal (flatten camera vectors)
+
         local camLook = camera.CFrame.LookVector
         local camRight = camera.CFrame.RightVector
         local flatLook = Vector3.new(camLook.X, 0, camLook.Z).Unit
@@ -906,7 +904,7 @@ local function toggleFly(enabled)
         if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDir -= flatRight end
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDir += flatRight end
 
-        -- Vertical
+
         if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
             moveDir += Vector3.new(0, 1, 0)
         elseif UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
@@ -928,7 +926,7 @@ local function toggleFly(enabled)
             bv.Velocity = Vector3.zero
         end
 
-        -- TP Down
+
         if settings.tpDownEnabled then
             local now = tick()
             local char = getCharacter(lplr)
@@ -970,7 +968,7 @@ local function toggleFly(enabled)
     addConnection("Fly", flyConnection)
 end
 
--- 5. ESP (works on NPCs too)
+
 local function toggleESP(enabled)
     cleanupModule("ESP")
     if not enabled then
@@ -1001,7 +999,7 @@ local function toggleESP(enabled)
                 addESPtoModel(player.Character)
             end
         end
-        -- NPCs
+
         for _, model in ipairs(Workspace:GetDescendants()) do
             if model:IsA("Model") then
                 local hum = model:FindFirstChildOfClass("Humanoid")
@@ -1022,7 +1020,7 @@ local function toggleESP(enabled)
     addConnection("ESP", RunService.Heartbeat:Connect(scanAndAddESP))
 end
 
--- 6. TRACERS (works on NPCs too, transparency setting)
+
 moduleSettings["Tracers"] = { transparency = 0.5 }
 
 local function toggleTracers(enabled)
@@ -1094,7 +1092,7 @@ local function toggleTracers(enabled)
     addConnection("Tracers", RunService.Heartbeat:Connect(scanAndAddTracers))
 end
 
--- 7. AUTO TOXIC
+
 moduleSettings["AutoToxic"] = {
     finalKillMessage = "ez final kill ðŸ’€",
     bedBreakMessage = "bed gone lol",
@@ -1142,7 +1140,7 @@ local function setupAutoToxic()
 end
 setupAutoToxic()
 
--- 8. NUKER
+
 moduleSettings["Nuker"] = {
     mineBeds = true,
     mineIron = true,
@@ -1195,7 +1193,7 @@ local function toggleNuker(enabled)
     addConnection("Nuker", connection)
 end
 
--- 9. SCAFFOLD (always place below, tower when jumping)
+
 moduleSettings["Scaffold"] = {
     allowTowering = true
 }
@@ -1225,7 +1223,7 @@ local function toggleScaffold(enabled)
         local hrp = getHRP(myChar)
         if not hrp then return end
 
-        -- Check if we have wool
+
         local hasWool = false
         local woolName = getTeamWoolName()
         for _, tool in ipairs(myChar:GetChildren()) do
@@ -1238,7 +1236,7 @@ local function toggleScaffold(enabled)
 
         local placePos = hrp.Position - Vector3.new(0, 3, 0)
 
-        -- Tower if jumping and setting enabled
+
         if moduleSettings["Scaffold"].allowTowering then
             local hum = getHumanoid(myChar)
             if hum and hum:GetState() == Enum.HumanoidStateType.Jumping then
@@ -1246,7 +1244,7 @@ local function toggleScaffold(enabled)
             end
         end
 
-        -- Check if block already exists at placePos
+
         local region = Region3.new(placePos - Vector3.new(1,1,1), placePos + Vector3.new(1,1,1))
         local parts = Workspace:FindPartsInRegion3(region, nil, 100)
         local blockExists = false
@@ -1292,7 +1290,7 @@ local function toggleScaffold(enabled)
                 end
             end)
         else
-            -- Fallback: try remote
+
             local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
             if remotes then
                 for _, remote in ipairs(remotes:GetDescendants()) do
@@ -1314,7 +1312,7 @@ local function toggleScaffold(enabled)
     addConnection("Scaffold", connection)
 end
 
--- 10. AIM ASSIST (ignore teammates, speed setting)
+
 moduleSettings["AimAssist"] = {
     speed = 0.1,
     range = 30
@@ -1327,7 +1325,7 @@ local function toggleAimAssist(enabled)
     local connection = RunService.RenderStepped:Connect(function(deltaTime)
         if not moduleStates["AimAssist"] then return end
         local settings = moduleSettings["AimAssist"]
-        local nearest = getNearestEnemy(settings.range, true) -- ignore team
+        local nearest = getNearestEnemy(settings.range, true)
         if not nearest then return end
         local head = nearest:FindFirstChild("Head")
         if not head then return end
@@ -1344,7 +1342,7 @@ local function toggleAimAssist(enabled)
     addConnection("AimAssist", connection)
 end
 
--- 11. AUTO CLICKER (works while holding left click, CPS setting)
+
 moduleSettings["AutoClicker"] = { cps = 10 }
 
 local function toggleAutoClicker(enabled)
@@ -1389,10 +1387,10 @@ local function toggleAutoClicker(enabled)
     addConnection("AutoClicker", conn3)
 end
 
--- 12. VELOCITY (Knockback reducer)
+
 moduleSettings["Velocity"] = {
-    horizontalReduction = 100, -- 100 = fully negate horizontal knockback
-    verticalReduction = 100 -- 100 = fully negate vertical knockback
+    horizontalReduction = 100,
+    verticalReduction = 100
 }
 
 local function toggleVelocity(enabled)
@@ -1431,7 +1429,7 @@ local function toggleVelocity(enabled)
     addConnection("Velocity", lplr.CharacterAdded:Connect(applyVelocity))
 end
 
--- 13. LONGJUMP (Yuzi Dao style)
+
 moduleSettings["LongJump"] = { speed = 110, duration = 2 }
 
 local function toggleLongJump(enabled)
@@ -1528,9 +1526,9 @@ local function toggleLongJump(enabled)
     addConnection("LongJump", connection)
 end
 
--- 14. NOFALLDAMAGE
+
 moduleSettings["NoFallDamage"] = {
-    method = "Landing" -- "Landing", "NegateVelocity", "Teleport", "DaoExploit"
+    method = "Landing"
 }
 
 local function toggleNoFallDamage(enabled)
@@ -1615,9 +1613,9 @@ local function toggleNoFallDamage(enabled)
     addConnection("NoFallDamage", lplr.CharacterAdded:Connect(applyNoFall))
 end
 
--- 15. ANTIVOID
+
 moduleSettings["AntiVoid"] = {
-    method = "Normal", -- "Normal", "Bounce"
+    method = "Normal",
     bouncePower = 100
 }
 
@@ -1759,7 +1757,7 @@ local function toggleAntiVoid(enabled)
     addConnection("AntiVoid", connection)
 end
 
--- 16. INFINITE JUMP
+
 local function toggleInfiniteJump(enabled)
     cleanupModule("InfiniteJump")
     if not enabled then
@@ -1789,9 +1787,9 @@ local function toggleInfiniteJump(enabled)
     addConnection("InfiniteJump", connection)
 end
 
--- ==================== GUI CONSTRUCTION ====================
--- (GUI code remains similar but enhanced with settings panel for each module)
--- We'll provide the complete GUI creation with dynamic settings.
+
+
+
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "VapeUtility"
@@ -1937,7 +1935,7 @@ for _, cat in ipairs(categories) do
     createCategory(cat)
 end
 
--- Module creation with Keybind and dynamic Settings
+
 local keybindListening = false
 local currentModuleForKeybind = nil
 local keybindButton = nil
@@ -1977,7 +1975,7 @@ local function createModule(parent, name, defaultEnabled, toggleCallback, settin
     toggleButton.Text = ""
     toggleButton.Parent = header
 
-    -- Keybind display button
+
     local keybindBtn = Instance.new("TextButton")
     keybindBtn.Size = UDim2.new(0, 30, 0, 30)
     keybindBtn.Position = UDim2.new(1, -80, 0.5, -15)
@@ -2018,7 +2016,7 @@ local function createModule(parent, name, defaultEnabled, toggleCallback, settin
         end)
     end)
 
-    -- Settings button
+
     local settingsBtn = Instance.new("TextButton")
     settingsBtn.Size = UDim2.new(0, 30, 0, 30)
     settingsBtn.Position = UDim2.new(1, -40, 0.5, -15)
@@ -2030,7 +2028,7 @@ local function createModule(parent, name, defaultEnabled, toggleCallback, settin
     settingsBtn.Parent = header
     Instance.new("UICorner", settingsBtn).CornerRadius = UDim.new(0, 6)
 
-    -- Settings panel (hidden initially)
+
     local settingsPanel = Instance.new("Frame")
     settingsPanel.Name = "SettingsPanel"
     settingsPanel.Size = UDim2.new(1, 0, 0, 0)
@@ -2046,7 +2044,7 @@ local function createModule(parent, name, defaultEnabled, toggleCallback, settin
     settingsLayout.Padding = UDim.new(0, 4)
     settingsLayout.Parent = settingsPanel
 
-    -- Populate settings based on definition
+
     local settingControls = {}
     if settingsDefinition then
         for _, setting in ipairs(settingsDefinition) do
@@ -2124,7 +2122,7 @@ local function createModule(parent, name, defaultEnabled, toggleCallback, settin
     end
 end
 
--- Define modules with settings
+
 createModule(columns["Combat"], "KillAura", false, toggleKillAura, {
     {type = "toggle", name = "Face Target", settingName = "faceTarget"},
     {type = "slider", name = "FOV Radius", min = 50, max = 600, settingName = "fovRadius"},
@@ -2242,7 +2240,7 @@ uninjectButton.MouseButton1Click:Connect(function()
     screenGui:Destroy()
 end)
 
--- ==================== DRAGGING ====================
+
 local function makeDraggable(frame, dragBar)
     local dragging = false
     local dragStart, startPos
@@ -2279,7 +2277,7 @@ for _, col in pairs(columns) do
     makeDraggable(col, col:FindFirstChildWhichIsA("TextLabel"))
 end
 
--- ==================== KEYBIND HANDLER ====================
+
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if keybindListening then return end
@@ -2305,7 +2303,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
--- ==================== RESPAWN HANDLING ====================
+
 lplr.CharacterAdded:Connect(function(char)
     for name, enabled in pairs(moduleStates) do
         if enabled then
