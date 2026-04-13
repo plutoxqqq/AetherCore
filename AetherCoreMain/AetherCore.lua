@@ -1284,6 +1284,18 @@ local function toggleNuker(enabled)
                     end
                 end
             end
+            table.sort(targetQueue, function(a, b)
+                return (a.Position - myRoot.Position).Magnitude < (b.Position - myRoot.Position).Magnitude
+            end)
+        end
+
+        for _, block in ipairs(targetQueue) do
+            local remoteName = block.Name:lower() == "bed" and "DamageBlock" or "BreakBlock"
+            local fired = fireBedwarsRemote(remoteName, {blockRef = block, position = block.Position})
+            if fired then
+                lastMineAt = tick()
+                break
+            end
         end
 
         if not best then return end
@@ -1637,6 +1649,19 @@ moduleSettings["AntiVoid"] = {
     refreshInterval = 1.5
 }
 
+local function createAntiVoidVisual()
+    local marker = Instance.new("Part")
+    marker.Name = "AntiVoidIndicator"
+    marker.Anchored = true
+    marker.CanCollide = false
+    marker.Size = Vector3.new(10, 0.35, 10)
+    marker.Material = Enum.Material.Neon
+    marker.Color = Color3.fromRGB(255, 70, 70)
+    marker.Transparency = 0.45
+    marker.Parent = Workspace
+    return marker
+end
+
 local function findNearestSafeLand(origin, blacklist)
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Blacklist
@@ -1668,8 +1693,13 @@ end
 
 local function toggleAntiVoid(enabled)
     cleanupModule("AntiVoid")
+    local oldVisual = Workspace:FindFirstChild("AntiVoidIndicator")
+    if oldVisual then
+        oldVisual:Destroy()
+    end
     if not enabled then return end
 
+    local marker = createAntiVoidVisual()
     local safeGroundY
     local lastRefresh = 0
 
@@ -1701,6 +1731,7 @@ local function toggleAntiVoid(enabled)
         if not safeGroundY then return end
 
         local triggerY = safeGroundY - moduleSettings["AntiVoid"].triggerOffset
+        marker.Position = Vector3.new(root.Position.X, triggerY, root.Position.Z)
         if root.Position.Y > triggerY then return end
 
         local targetLand = findNearestSafeLand(root.Position, {char})
