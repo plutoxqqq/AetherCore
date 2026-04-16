@@ -1870,7 +1870,7 @@ local columns = {}
 local columnOrder = 0
 
 local function createCategory(name)
-    local defaultOpen = (name == "Utility")
+    local defaultOpen = false
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, 0, 0, 46)
     btn.BackgroundColor3 = defaultOpen and Color3.fromRGB(32, 32, 32) or Color3.fromRGB(22, 22, 22)
