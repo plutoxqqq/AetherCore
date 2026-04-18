@@ -65,6 +65,9 @@ end
 
 local KnitClient, CombatController, BedwarsShopController, BlockPlacementController, ClientHandler
 local resolvedCombatController, resolvedBlockPlacementController
+local cachedNetManagedFolder
+local cachedDropItemRemote
+local cachedDamageBlockRemote
 
 local function fetchControllers()
     local knitPaths = {
@@ -87,6 +90,40 @@ local function fetchControllers()
     end
 end
 fetchControllers()
+
+local function getNetManagedFolder()
+    if cachedNetManagedFolder and cachedNetManagedFolder.Parent then
+        return cachedNetManagedFolder
+    end
+    local rbxtsInclude = ReplicatedStorage:FindFirstChild("rbxts_include")
+    if not rbxtsInclude then return nil end
+    local nodeModules = rbxtsInclude:FindFirstChild("node_modules")
+    if not nodeModules then return nil end
+    local rbxtsNet = nodeModules:FindFirstChild("@rbxts")
+    rbxtsNet = rbxtsNet and rbxtsNet:FindFirstChild("net")
+    rbxtsNet = rbxtsNet and rbxtsNet:FindFirstChild("out")
+    local netManaged = rbxtsNet and rbxtsNet:FindFirstChild("_NetManaged")
+    cachedNetManagedFolder = netManaged
+    return cachedNetManagedFolder
+end
+
+local function getDropItemRemote()
+    if cachedDropItemRemote and cachedDropItemRemote.Parent then
+        return cachedDropItemRemote
+    end
+    local netManaged = getNetManagedFolder()
+    cachedDropItemRemote = netManaged and netManaged:FindFirstChild("DropItem")
+    return cachedDropItemRemote
+end
+
+local function getDamageBlockRemote()
+    if cachedDamageBlockRemote and cachedDamageBlockRemote.Parent then
+        return cachedDamageBlockRemote
+    end
+    local netManaged = getNetManagedFolder()
+    cachedDamageBlockRemote = netManaged and netManaged:FindFirstChild("DamageBlock")
+    return cachedDamageBlockRemote
+end
 
 
 local function getCharacter(player)
@@ -1214,6 +1251,9 @@ local function toggleVerticalFly(enabled)
         local char = getCharacter(lplr)
         local hrp = getHRP(char)
         local state = moduleSettings["VerticalFly"]
+        if state then
+            state.heightOffset = 0
+        end
         if hrp and state and state.lastVisualPosition then
             local desired = state.lastVisualPosition + Vector3.new(0, 2.5, 0)
             local rescue = findNearestGroundPosition(desired, char, 12, 6, 3)
@@ -1225,6 +1265,9 @@ local function toggleVerticalFly(enabled)
         end
         return
     end
+
+    moduleSettings["VerticalFly"].heightOffset = moduleSettings["VerticalFly"].heightOffset or 0
+    moduleSettings["VerticalFly"].lastHeightTick = moduleSettings["VerticalFly"].lastHeightTick or 0
 
     local function ensureMover()
         local char = getCharacter(lplr)
@@ -1265,10 +1308,16 @@ local function toggleVerticalFly(enabled)
         end
 
         local desiredPlanar = hrp.Position + (planarMove * settings.horizontalSpeed * 0.07)
-        local desiredVertical = hrp.Position.Y + (moveDirection.Y * settings.verticalSpeed * 0.07)
-        local rayOrigin = Vector3.new(desiredPlanar.X, desiredVertical + 40, desiredPlanar.Z)
+        local now = tick()
+        local deltaT = math.clamp(now - (settings.lastHeightTick or now), 1 / 240, 0.2)
+        settings.lastHeightTick = now
+        settings.heightOffset = math.clamp((settings.heightOffset or 0) + (moveDirection.Y * settings.verticalSpeed * deltaT), -15, 200)
+
+        local desiredVertical = hrp.Position.Y + settings.heightOffset
+        local rayOrigin = Vector3.new(desiredPlanar.X, desiredVertical + 60, desiredPlanar.Z)
         local groundHit = raycastToGround(rayOrigin, {char}, 520)
-        local targetHeight = groundHit and (groundHit.Position.Y + settings.hoverHeight) or desiredVertical
+        local baseGroundY = groundHit and groundHit.Position.Y or hrp.Position.Y
+        local targetHeight = baseGroundY + settings.hoverHeight + settings.heightOffset
 
         local obstacleAnchor = findNearestGroundPosition(
             Vector3.new(desiredPlanar.X, targetHeight, desiredPlanar.Z),
@@ -1304,7 +1353,14 @@ moduleSettings["AntiDeath"] = {
 
 local function toggleAntiDeath(enabled)
     cleanupModule("AntiDeath")
-    if not enabled then return end
+    if not enabled then
+        local char = getCharacter(lplr)
+        local hrp = getHRP(char)
+        if hrp then
+            hrp.Anchored = false
+        end
+        return
+    end
 
     local state = {
         phase = "up",
@@ -1326,6 +1382,7 @@ local function toggleAntiDeath(enabled)
             state.phase = "up"
             state.phaseUntil = 0
             state.anchorCFrame = nil
+            hrp.Anchored = false
             return
         end
 
@@ -1342,11 +1399,15 @@ local function toggleAntiDeath(enabled)
 
         if state.phase == "down" then
             local anchor = state.anchorCFrame or hrp.CFrame
+            hrp.Anchored = true
             hrp.CFrame = anchor - Vector3.new(0, settings.voidOffset, 0)
             hrp.AssemblyLinearVelocity = Vector3.zero
         else
+            hrp.Anchored = false
             if state.anchorCFrame then
                 hrp.CFrame = state.anchorCFrame + Vector3.new(0, 2, 0)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
             end
         end
     end))
@@ -1362,6 +1423,7 @@ local function toggleFastBreak(enabled)
     if not enabled then return end
 
     moduleSettings["FastBreak"].lastBreak = 0
+    moduleSettings["FastBreak"].cachedController = getBlockPlacementController()
     addConnection("FastBreak", RunService.Heartbeat:Connect(function()
         if not moduleStates["FastBreak"] then return end
         local settings = moduleSettings["FastBreak"]
@@ -1371,25 +1433,30 @@ local function toggleFastBreak(enabled)
         if not target or not target:IsA("BasePart") then return end
         settings.lastBreak = now
 
-        local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
+        local targetPosition = target.Position
+        local blockController = settings.cachedController or getBlockPlacementController()
+        settings.cachedController = blockController
+        local damageRemote = getDamageBlockRemote()
+
         for _ = 1, settings.attemptsPerPulse do
-            for _, remote in ipairs(remotes:GetDescendants()) do
-                if remote:IsA("RemoteEvent") then
-                    local name = remote.Name:lower()
-                    if (name:find("break") or name:find("damage") or name:find("mine")) and not name:find("bedwarskit") then
-                        pcall(function()
-                            remote:FireServer(target.Position, target)
-                        end)
-                        pcall(function()
-                            remote:FireServer({
-                                block = target,
-                                blockPosition = target.Position,
-                                position = target.Position
-                            })
-                        end)
-                    end
-                end
+            if blockController and type(blockController.breakBlock) == "function" then
+                pcall(function()
+                    blockController:breakBlock(targetPosition)
+                end)
             end
+            if damageRemote then
+                pcall(function()
+                    damageRemote:FireServer({
+                        blockRef = {blockPosition = targetPosition},
+                        hitPosition = targetPosition,
+                        hitNormal = Vector3.new(0, 1, 0)
+                    })
+                end)
+            end
+            pcall(function()
+                VirtualUser:Button1Down(Vector2.new())
+                VirtualUser:Button1Up(Vector2.new())
+            end)
         end
     end))
 end
@@ -1404,6 +1471,7 @@ local function toggleAutoVoidDrop(enabled)
     if not enabled then return end
 
     moduleSettings["AutoVoidDrop"].lastDrop = 0
+    moduleSettings["AutoVoidDrop"].dropRemote = getDropItemRemote()
     addConnection("AutoVoidDrop", RunService.Heartbeat:Connect(function()
         if not moduleStates["AutoVoidDrop"] then return end
         local char = getCharacter(lplr)
@@ -1413,29 +1481,25 @@ local function toggleAutoVoidDrop(enabled)
         local now = tick()
         if now - (settings.lastDrop or 0) < settings.dropInterval then return end
 
-        local nearbyGround = findNearestGroundPosition(hrp.Position, char, 12, 6, 0)
+        local nearbyGround = findNearestGroundPosition(hrp.Position, char, 10, 10, 0)
         if nearbyGround and hrp.Position.Y > nearbyGround.Y - settings.triggerOffset then
             return
         end
-        if hrp.AssemblyLinearVelocity.Y > -2 then
+        if hrp.AssemblyLinearVelocity.Y > -8 then
             return
         end
 
-        local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
+        local dropRemote = settings.dropRemote or getDropItemRemote()
+        settings.dropRemote = dropRemote
+        if not dropRemote then return end
+
         for _, resourceName in ipairs({"diamond", "iron", "emerald"}) do
-            for _, remote in ipairs(remotes:GetDescendants()) do
-                if remote:IsA("RemoteEvent") and remote.Name:lower():find("drop") then
-                    pcall(function()
-                        remote:FireServer(resourceName)
-                    end)
-                    pcall(function()
-                        remote:FireServer({
-                            item = resourceName,
-                            amount = 999
-                        })
-                    end)
-                end
-            end
+            pcall(function()
+                dropRemote:FireServer({item = resourceName, amount = 999})
+            end)
+            pcall(function()
+                dropRemote:FireServer(resourceName)
+            end)
         end
         settings.lastDrop = now
     end))
@@ -2174,6 +2238,7 @@ local function toggleAntiVoid(enabled)
     local pullVelocity = nil
     local rescueTarget = nil
     local voidTriggerY = nil
+    local lastRescueUpdate = 0
 
     local function refreshVoidReference()
         local myChar = getCharacter(lplr)
@@ -2184,6 +2249,24 @@ local function toggleAntiVoid(enabled)
         local groundPos = findNearestGroundPosition(hrp.Position, myChar, 12, 6, 0)
         local referenceY = groundPos and groundPos.Y or hrp.Position.Y
         voidTriggerY = referenceY - 38
+    end
+
+    local function findRescueTarget(origin, character)
+        local best = nil
+        local bestScore = math.huge
+        for radius = 12, 96, 12 do
+            local candidate = findNearestGroundPosition(origin, character, radius, 6, 3)
+            if candidate then
+                local planarDistance = (Vector3.new(origin.X, 0, origin.Z) - Vector3.new(candidate.X, 0, candidate.Z)).Magnitude
+                local heightPenalty = math.max(0, origin.Y - candidate.Y)
+                local score = planarDistance + (heightPenalty * 0.25)
+                if score < bestScore then
+                    bestScore = score
+                    best = candidate
+                end
+            end
+        end
+        return best
     end
 
     refreshVoidReference()
@@ -2210,8 +2293,9 @@ local function toggleAntiVoid(enabled)
         if hrp.Position.Y <= voidTriggerY then
             local method = moduleSettings["AntiVoid"].method
             if method == "Normal" then
-                if not rescueTarget then
-                    rescueTarget = findNearestGroundPosition(hrp.Position, myChar, 18, 6, 3)
+                if not rescueTarget or tick() - lastRescueUpdate > 0.4 then
+                    rescueTarget = findRescueTarget(hrp.Position, myChar)
+                    lastRescueUpdate = tick()
                 end
                 if rescueTarget then
                     hrp.CFrame = CFrame.new(rescueTarget + Vector3.new(0, 2, 0))
@@ -2232,7 +2316,7 @@ local function toggleAntiVoid(enabled)
             local goal = Vector3.new(rescueTarget.X, hrp.Position.Y, rescueTarget.Z)
             local planarDelta = goal - Vector3.new(hrp.Position.X, hrp.Position.Y, hrp.Position.Z)
             local upwardAssist = hrp.Position.Y < rescueTarget.Y + 3 and 10 or 0
-            local planarVelocity = planarDelta.Magnitude > 0.5 and planarDelta.Unit * 28 or Vector3.zero
+            local planarVelocity = planarDelta.Magnitude > 0.5 and planarDelta.Unit * 22 or Vector3.zero
             pullVelocity.Velocity = Vector3.new(planarVelocity.X, upwardAssist, planarVelocity.Z)
             local closeToGround = hrp.Position.Y <= rescueTarget.Y + 5
             local closeToTarget = planarDelta.Magnitude < 3.5
