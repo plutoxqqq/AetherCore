@@ -65,6 +65,9 @@ end
 
 local KnitClient, CombatController, BedwarsShopController, BlockPlacementController, ClientHandler
 local resolvedCombatController, resolvedBlockPlacementController
+local cachedNetManagedFolder
+local cachedDropItemRemote
+local cachedDamageBlockRemote
 
 local function fetchControllers()
     local knitPaths = {
@@ -88,6 +91,40 @@ local function fetchControllers()
 end
 fetchControllers()
 
+local function getNetManagedFolder()
+    if cachedNetManagedFolder and cachedNetManagedFolder.Parent then
+        return cachedNetManagedFolder
+    end
+    local rbxtsInclude = ReplicatedStorage:FindFirstChild("rbxts_include")
+    if not rbxtsInclude then return nil end
+    local nodeModules = rbxtsInclude:FindFirstChild("node_modules")
+    if not nodeModules then return nil end
+    local rbxtsNet = nodeModules:FindFirstChild("@rbxts")
+    rbxtsNet = rbxtsNet and rbxtsNet:FindFirstChild("net")
+    rbxtsNet = rbxtsNet and rbxtsNet:FindFirstChild("out")
+    local netManaged = rbxtsNet and rbxtsNet:FindFirstChild("_NetManaged")
+    cachedNetManagedFolder = netManaged
+    return cachedNetManagedFolder
+end
+
+local function getDropItemRemote()
+    if cachedDropItemRemote and cachedDropItemRemote.Parent then
+        return cachedDropItemRemote
+    end
+    local netManaged = getNetManagedFolder()
+    cachedDropItemRemote = netManaged and netManaged:FindFirstChild("DropItem")
+    return cachedDropItemRemote
+end
+
+local function getDamageBlockRemote()
+    if cachedDamageBlockRemote and cachedDamageBlockRemote.Parent then
+        return cachedDamageBlockRemote
+    end
+    local netManaged = getNetManagedFolder()
+    cachedDamageBlockRemote = netManaged and netManaged:FindFirstChild("DamageBlock")
+    return cachedDamageBlockRemote
+end
+
 
 local function getCharacter(player)
     return player and player.Character
@@ -99,6 +136,38 @@ end
 
 local function getHRP(char)
     return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function raycastToGround(origin, ignoreList, castDistance)
+    local params = RaycastParams.new()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = ignoreList or {}
+    return Workspace:Raycast(origin, Vector3.new(0, -(castDistance or 400), 0), params)
+end
+
+local function findNearestGroundPosition(origin, character, sampleRadius, sampleStep, verticalOffset)
+    local bestPosition = nil
+    local closestPlanar = math.huge
+    local radius = sampleRadius or 14
+    local step = sampleStep or 7
+    local originPlanar = Vector3.new(origin.X, 0, origin.Z)
+
+    for x = -radius, radius, step do
+        for z = -radius, radius, step do
+            local sampleOrigin = origin + Vector3.new(x, 35, z)
+            local hit = raycastToGround(sampleOrigin, {character}, 420)
+            if hit then
+                local planar = Vector3.new(hit.Position.X, 0, hit.Position.Z)
+                local planarDistance = (planar - originPlanar).Magnitude
+                if planarDistance < closestPlanar then
+                    closestPlanar = planarDistance
+                    bestPosition = hit.Position + Vector3.new(0, verticalOffset or 3, 0)
+                end
+            end
+        end
+    end
+
+    return bestPosition
 end
 
 local function getCombatController()
@@ -1169,6 +1238,273 @@ local function toggleFly(enabled)
     addConnection("Fly", flyConnection)
 end
 
+moduleSettings["VerticalFly"] = {
+    horizontalSpeed = 28,
+    verticalSpeed = 20,
+    hoverHeight = 3.2,
+    obstacleScanRadius = 10
+}
+
+local function toggleVerticalFly(enabled)
+    cleanupModule("VerticalFly")
+    if not enabled then
+        local char = getCharacter(lplr)
+        local hrp = getHRP(char)
+        local state = moduleSettings["VerticalFly"]
+        if state then
+            state.heightOffset = 0
+        end
+        if hrp and state and state.lastVisualPosition then
+            local desired = state.lastVisualPosition + Vector3.new(0, 2.5, 0)
+            local rescue = findNearestGroundPosition(desired, char, 12, 6, 3)
+            hrp.CFrame = CFrame.new(rescue or desired)
+        end
+        if hrp then
+            local mover = hrp:FindFirstChild("VerticalFlyVelocity")
+            if mover then mover:Destroy() end
+        end
+        return
+    end
+
+    moduleSettings["VerticalFly"].heightOffset = moduleSettings["VerticalFly"].heightOffset or 0
+    moduleSettings["VerticalFly"].lastHeightTick = moduleSettings["VerticalFly"].lastHeightTick or 0
+
+    local function ensureMover()
+        local char = getCharacter(lplr)
+        local hrp = getHRP(char)
+        if not hrp then return nil end
+        local mover = hrp:FindFirstChild("VerticalFlyVelocity") or Instance.new("BodyVelocity")
+        mover.Name = "VerticalFlyVelocity"
+        mover.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        mover.Velocity = Vector3.zero
+        mover.Parent = hrp
+        return mover, hrp, char
+    end
+
+    addConnection("VerticalFly", RunService.Heartbeat:Connect(function()
+        if not moduleStates["VerticalFly"] then return end
+        local mover, hrp, char = ensureMover()
+        if not mover or not hrp then return end
+        local settings = moduleSettings["VerticalFly"]
+
+        local cameraLook = camera.CFrame.LookVector
+        local cameraRight = camera.CFrame.RightVector
+        local flatLook = Vector3.new(cameraLook.X, 0, cameraLook.Z)
+        local flatRight = Vector3.new(cameraRight.X, 0, cameraRight.Z)
+        flatLook = flatLook.Magnitude > 0 and flatLook.Unit or Vector3.new(0, 0, -1)
+        flatRight = flatRight.Magnitude > 0 and flatRight.Unit or Vector3.new(1, 0, 0)
+
+        local moveDirection = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDirection += flatLook end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDirection -= flatLook end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDirection -= flatRight end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDirection += flatRight end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDirection += Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then moveDirection -= Vector3.new(0, 1, 0) end
+
+        local planarMove = Vector3.new(moveDirection.X, 0, moveDirection.Z)
+        if planarMove.Magnitude > 1 then
+            planarMove = planarMove.Unit
+        end
+
+        local desiredPlanar = hrp.Position + (planarMove * settings.horizontalSpeed * 0.07)
+        local now = tick()
+        local deltaT = math.clamp(now - (settings.lastHeightTick or now), 1 / 240, 0.2)
+        settings.lastHeightTick = now
+        settings.heightOffset = math.clamp((settings.heightOffset or 0) + (moveDirection.Y * settings.verticalSpeed * deltaT), -15, 200)
+
+        local desiredVertical = hrp.Position.Y + settings.heightOffset
+        local rayOrigin = Vector3.new(desiredPlanar.X, desiredVertical + 60, desiredPlanar.Z)
+        local groundHit = raycastToGround(rayOrigin, {char}, 520)
+        local baseGroundY = groundHit and groundHit.Position.Y or hrp.Position.Y
+        local targetHeight = baseGroundY + settings.hoverHeight + settings.heightOffset
+
+        local obstacleAnchor = findNearestGroundPosition(
+            Vector3.new(desiredPlanar.X, targetHeight, desiredPlanar.Z),
+            char,
+            settings.obstacleScanRadius,
+            5,
+            settings.hoverHeight
+        )
+        if obstacleAnchor and obstacleAnchor.Y > targetHeight then
+            targetHeight = obstacleAnchor.Y
+        end
+
+        local desiredPosition = Vector3.new(desiredPlanar.X, targetHeight, desiredPlanar.Z)
+        settings.lastVisualPosition = desiredPosition
+
+        local delta = desiredPosition - hrp.Position
+        local smoothVelocity = delta * 11
+        smoothVelocity = Vector3.new(
+            math.clamp(smoothVelocity.X, -settings.horizontalSpeed, settings.horizontalSpeed),
+            math.clamp(smoothVelocity.Y, -settings.verticalSpeed, settings.verticalSpeed),
+            math.clamp(smoothVelocity.Z, -settings.horizontalSpeed, settings.horizontalSpeed)
+        )
+        mover.Velocity = smoothVelocity
+    end))
+end
+
+moduleSettings["AntiDeath"] = {
+    healthThreshold = 25,
+    belowDuration = 2,
+    slowMode = 1.5,
+    voidOffset = 130
+}
+
+local function toggleAntiDeath(enabled)
+    cleanupModule("AntiDeath")
+    if not enabled then
+        local char = getCharacter(lplr)
+        local hrp = getHRP(char)
+        if hrp then
+            hrp.Anchored = false
+        end
+        return
+    end
+
+    local state = {
+        phase = "up",
+        phaseUntil = 0,
+        anchorCFrame = nil
+    }
+
+    addConnection("AntiDeath", RunService.Heartbeat:Connect(function()
+        if not moduleStates["AntiDeath"] then return end
+        local char = getCharacter(lplr)
+        local hum = getHumanoid(char)
+        local hrp = getHRP(char)
+        if not hum or not hrp or hum.Health <= 0 then return end
+        local settings = moduleSettings["AntiDeath"]
+        local now = tick()
+        local lowHealth = hum.Health <= settings.healthThreshold
+
+        if not lowHealth then
+            state.phase = "up"
+            state.phaseUntil = 0
+            state.anchorCFrame = nil
+            hrp.Anchored = false
+            return
+        end
+
+        if state.phaseUntil <= now then
+            if state.phase == "up" then
+                state.phase = "down"
+                state.phaseUntil = now + settings.belowDuration
+                state.anchorCFrame = hrp.CFrame
+            else
+                state.phase = "up"
+                state.phaseUntil = now + settings.slowMode
+            end
+        end
+
+        if state.phase == "down" then
+            local anchor = state.anchorCFrame or hrp.CFrame
+            hrp.Anchored = true
+            hrp.CFrame = anchor - Vector3.new(0, settings.voidOffset, 0)
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        else
+            hrp.Anchored = false
+            if state.anchorCFrame then
+                hrp.CFrame = state.anchorCFrame + Vector3.new(0, 2, 0)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            end
+        end
+    end))
+end
+
+moduleSettings["FastBreak"] = {
+    cooldown = 0.03,
+    attemptsPerPulse = 2
+}
+
+local function toggleFastBreak(enabled)
+    cleanupModule("FastBreak")
+    if not enabled then return end
+
+    moduleSettings["FastBreak"].lastBreak = 0
+    moduleSettings["FastBreak"].cachedController = getBlockPlacementController()
+    addConnection("FastBreak", RunService.Heartbeat:Connect(function()
+        if not moduleStates["FastBreak"] then return end
+        local settings = moduleSettings["FastBreak"]
+        local now = tick()
+        if now - (settings.lastBreak or 0) < settings.cooldown then return end
+        local target = mouse and mouse.Target
+        if not target or not target:IsA("BasePart") then return end
+        settings.lastBreak = now
+
+        local targetPosition = target.Position
+        local blockController = settings.cachedController or getBlockPlacementController()
+        settings.cachedController = blockController
+        local damageRemote = getDamageBlockRemote()
+
+        for _ = 1, settings.attemptsPerPulse do
+            if blockController and type(blockController.breakBlock) == "function" then
+                pcall(function()
+                    blockController:breakBlock(targetPosition)
+                end)
+            end
+            if damageRemote then
+                pcall(function()
+                    damageRemote:FireServer({
+                        blockRef = {blockPosition = targetPosition},
+                        hitPosition = targetPosition,
+                        hitNormal = Vector3.new(0, 1, 0)
+                    })
+                end)
+            end
+            pcall(function()
+                VirtualUser:Button1Down(Vector2.new())
+                VirtualUser:Button1Up(Vector2.new())
+            end)
+        end
+    end))
+end
+
+moduleSettings["AutoVoidDrop"] = {
+    triggerOffset = 18,
+    dropInterval = 0.45
+}
+
+local function toggleAutoVoidDrop(enabled)
+    cleanupModule("AutoVoidDrop")
+    if not enabled then return end
+
+    moduleSettings["AutoVoidDrop"].lastDrop = 0
+    moduleSettings["AutoVoidDrop"].dropRemote = getDropItemRemote()
+    addConnection("AutoVoidDrop", RunService.Heartbeat:Connect(function()
+        if not moduleStates["AutoVoidDrop"] then return end
+        local char = getCharacter(lplr)
+        local hrp = getHRP(char)
+        if not hrp then return end
+        local settings = moduleSettings["AutoVoidDrop"]
+        local now = tick()
+        if now - (settings.lastDrop or 0) < settings.dropInterval then return end
+
+        local nearbyGround = findNearestGroundPosition(hrp.Position, char, 10, 10, 0)
+        if nearbyGround and hrp.Position.Y > nearbyGround.Y - settings.triggerOffset then
+            return
+        end
+        if hrp.AssemblyLinearVelocity.Y > -8 then
+            return
+        end
+
+        local dropRemote = settings.dropRemote or getDropItemRemote()
+        settings.dropRemote = dropRemote
+        if not dropRemote then return end
+
+        for _, resourceName in ipairs({"diamond", "iron", "emerald"}) do
+            pcall(function()
+                dropRemote:FireServer({item = resourceName, amount = 999})
+            end)
+            pcall(function()
+                dropRemote:FireServer(resourceName)
+            end)
+        end
+        settings.lastDrop = now
+    end))
+end
+
 
 local function toggleESP(enabled)
     cleanupModule("ESP")
@@ -1902,34 +2238,7 @@ local function toggleAntiVoid(enabled)
     local pullVelocity = nil
     local rescueTarget = nil
     local voidTriggerY = nil
-
-    local function getNearestGroundPosition(origin, character)
-        local raycastParams = RaycastParams.new()
-        raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
-        raycastParams.FilterDescendantsInstances = {character}
-
-        local offsets = {
-            Vector3.new(0, 0, 0),
-            Vector3.new(6, 0, 0), Vector3.new(-6, 0, 0),
-            Vector3.new(0, 0, 6), Vector3.new(0, 0, -6),
-            Vector3.new(12, 0, 0), Vector3.new(-12, 0, 0),
-            Vector3.new(0, 0, 12), Vector3.new(0, 0, -12)
-        }
-        local best
-        local bestDist = math.huge
-        for _, offset in ipairs(offsets) do
-            local start = origin + offset + Vector3.new(0, 20, 0)
-            local hit = Workspace:Raycast(start, Vector3.new(0, -300, 0), raycastParams)
-            if hit then
-                local dist = (Vector3.new(origin.X, 0, origin.Z) - Vector3.new(hit.Position.X, 0, hit.Position.Z)).Magnitude
-                if dist < bestDist then
-                    bestDist = dist
-                    best = hit.Position
-                end
-            end
-        end
-        return best
-    end
+    local lastRescueUpdate = 0
 
     local function refreshVoidReference()
         local myChar = getCharacter(lplr)
@@ -1937,9 +2246,27 @@ local function toggleAntiVoid(enabled)
         if not myChar or not hrp then
             return
         end
-        local groundPos = getNearestGroundPosition(hrp.Position, myChar)
+        local groundPos = findNearestGroundPosition(hrp.Position, myChar, 12, 6, 0)
         local referenceY = groundPos and groundPos.Y or hrp.Position.Y
         voidTriggerY = referenceY - 38
+    end
+
+    local function findRescueTarget(origin, character)
+        local best = nil
+        local bestScore = math.huge
+        for radius = 12, 96, 12 do
+            local candidate = findNearestGroundPosition(origin, character, radius, 6, 3)
+            if candidate then
+                local planarDistance = (Vector3.new(origin.X, 0, origin.Z) - Vector3.new(candidate.X, 0, candidate.Z)).Magnitude
+                local heightPenalty = math.max(0, origin.Y - candidate.Y)
+                local score = planarDistance + (heightPenalty * 0.25)
+                if score < bestScore then
+                    bestScore = score
+                    best = candidate
+                end
+            end
+        end
+        return best
     end
 
     refreshVoidReference()
@@ -1966,17 +2293,18 @@ local function toggleAntiVoid(enabled)
         if hrp.Position.Y <= voidTriggerY then
             local method = moduleSettings["AntiVoid"].method
             if method == "Normal" then
-                if not rescueTarget then
-                    rescueTarget = getNearestGroundPosition(hrp.Position, myChar)
+                if not rescueTarget or tick() - lastRescueUpdate > 0.4 then
+                    rescueTarget = findRescueTarget(hrp.Position, myChar)
+                    lastRescueUpdate = tick()
                 end
                 if rescueTarget then
-                    hrp.CFrame = CFrame.new(hrp.Position.X, rescueTarget.Y + 3, hrp.Position.Z)
+                    hrp.CFrame = CFrame.new(rescueTarget + Vector3.new(0, 2, 0))
                     if pullVelocity then
                         pullVelocity:Destroy()
                     end
                     pullVelocity = Instance.new("BodyVelocity")
                     pullVelocity.Name = "AntiVoidPull"
-                    pullVelocity.MaxForce = Vector3.new(2e5, 0, 2e5)
+                    pullVelocity.MaxForce = Vector3.new(2e5, 9e4, 2e5)
                     pullVelocity.Parent = hrp
                 end
             elseif method == "Bounce" then
@@ -1987,8 +2315,10 @@ local function toggleAntiVoid(enabled)
         if pullVelocity and rescueTarget then
             local goal = Vector3.new(rescueTarget.X, hrp.Position.Y, rescueTarget.Z)
             local planarDelta = goal - Vector3.new(hrp.Position.X, hrp.Position.Y, hrp.Position.Z)
-            pullVelocity.Velocity = planarDelta.Magnitude > 0.5 and planarDelta.Unit * 38 or Vector3.zero
-            local closeToGround = hrp.Position.Y <= rescueTarget.Y + 4
+            local upwardAssist = hrp.Position.Y < rescueTarget.Y + 3 and 10 or 0
+            local planarVelocity = planarDelta.Magnitude > 0.5 and planarDelta.Unit * 22 or Vector3.zero
+            pullVelocity.Velocity = Vector3.new(planarVelocity.X, upwardAssist, planarVelocity.Z)
+            local closeToGround = hrp.Position.Y <= rescueTarget.Y + 5
             local closeToTarget = planarDelta.Magnitude < 3.5
             if closeToGround and closeToTarget then
                 pullVelocity:Destroy()
@@ -2090,15 +2420,19 @@ local moduleHandlers = {
     Velocity = toggleVelocity,
     Speed = toggleSpeed,
     Fly = toggleFly,
+    VerticalFly = toggleVerticalFly,
     LongJump = toggleLongJump,
     Scaffold = toggleScaffold,
     ESP = toggleESP,
     Tracers = toggleTracers,
     AutoToxic = function(enabled) autoToxicEnabled = enabled end,
+    AntiDeath = toggleAntiDeath,
     NoFallDamage = toggleNoFallDamage,
     AntiVoid = toggleAntiVoid,
     InfiniteJump = toggleInfiniteJump,
-    Nuker = toggleNuker
+    Nuker = toggleNuker,
+    FastBreak = toggleFastBreak,
+    AutoVoidDrop = toggleAutoVoidDrop
 }
 
 local function addCorner(target, radius)
@@ -2280,6 +2614,18 @@ local function validateModuleSettings()
     clampSetting("Reach", "hitRange", moduleSettings.Reach.hitRange, 6, 20, 12)
     clampSetting("Reach", "mineRange", moduleSettings.Reach.mineRange, 6, 20, 12)
     clampSetting("Reach", "placeRange", moduleSettings.Reach.placeRange, 6, 20, 12)
+    clampSetting("VerticalFly", "horizontalSpeed", moduleSettings.VerticalFly.horizontalSpeed, 8, 60, 28)
+    clampSetting("VerticalFly", "verticalSpeed", moduleSettings.VerticalFly.verticalSpeed, 6, 55, 20)
+    clampSetting("VerticalFly", "hoverHeight", moduleSettings.VerticalFly.hoverHeight, 1, 8, 3.2)
+    clampSetting("VerticalFly", "obstacleScanRadius", moduleSettings.VerticalFly.obstacleScanRadius, 4, 18, 10)
+    clampSetting("AntiDeath", "healthThreshold", moduleSettings.AntiDeath.healthThreshold, 1, 95, 25)
+    clampSetting("AntiDeath", "belowDuration", moduleSettings.AntiDeath.belowDuration, 0.5, 4, 2)
+    clampSetting("AntiDeath", "slowMode", moduleSettings.AntiDeath.slowMode, 0.2, 5, 1.5)
+    clampSetting("AntiDeath", "voidOffset", moduleSettings.AntiDeath.voidOffset, 60, 250, 130)
+    clampSetting("FastBreak", "cooldown", moduleSettings.FastBreak.cooldown, 0, 0.3, 0.03)
+    clampSetting("FastBreak", "attemptsPerPulse", moduleSettings.FastBreak.attemptsPerPulse, 1, 6, 2)
+    clampSetting("AutoVoidDrop", "triggerOffset", moduleSettings.AutoVoidDrop.triggerOffset, 4, 60, 18)
+    clampSetting("AutoVoidDrop", "dropInterval", moduleSettings.AutoVoidDrop.dropInterval, 0.1, 2, 0.45)
 end
 
 saveClientSettings = function()
@@ -2846,6 +3192,12 @@ createRegisteredModule("Blatant", "Fly", false, toggleFly, {
     {type = "slider", name = "TP Interval", min = 1, max = 5, settingName = "tpDownInterval"},
     {type = "slider", name = "TP Return Delay", min = 0.05, max = 1, settingName = "tpDownReturnDelay"}
 })
+createRegisteredModule("Blatant", "VerticalFly", false, toggleVerticalFly, {
+    {type = "slider", name = "Horizontal Speed", min = 8, max = 60, settingName = "horizontalSpeed"},
+    {type = "slider", name = "Vertical Speed", min = 6, max = 55, settingName = "verticalSpeed"},
+    {type = "slider", name = "Hover Height", min = 1, max = 8, settingName = "hoverHeight"},
+    {type = "slider", name = "Obstacle Radius", min = 4, max = 18, settingName = "obstacleScanRadius"}
+})
 createRegisteredModule("Blatant", "LongJump", false, toggleLongJump, {
     {type = "slider", name = "Speed", min = 50, max = 200, settingName = "speed"},
     {type = "slider", name = "Duration", min = 0.5, max = 3, settingName = "duration"}
@@ -2868,11 +3220,25 @@ createRegisteredModule("Utility", "AutoToxic", false, nil, {
 createRegisteredModule("Utility", "NoFallDamage", false, toggleNoFallDamage, {
     {type = "dropdown", name = "Method", options = {"Landing", "NegateVelocity", "Teleport", "DaoExploit"}, settingName = "method"}
 })
+createRegisteredModule("Utility", "AntiDeath", false, toggleAntiDeath, {
+    {type = "slider", name = "HP Threshold", min = 1, max = 95, settingName = "healthThreshold"},
+    {type = "slider", name = "Down Duration", min = 0.5, max = 4, settingName = "belowDuration"},
+    {type = "slider", name = "Slow Mode", min = 0.2, max = 5, settingName = "slowMode"},
+    {type = "slider", name = "Void Offset", min = 60, max = 250, settingName = "voidOffset"}
+})
 createRegisteredModule("Utility", "AntiVoid", false, toggleAntiVoid, {
     {type = "dropdown", name = "Method", options = {"Normal", "Bounce"}, settingName = "method"},
     {type = "slider", name = "Bounce Power", min = 50, max = 200, settingName = "bouncePower"}
 })
 createRegisteredModule("Utility", "InfiniteJump", false, toggleInfiniteJump, {})
+createRegisteredModule("Utility", "AutoVoidDrop", false, toggleAutoVoidDrop, {
+    {type = "slider", name = "Void Trigger Offset", min = 4, max = 60, settingName = "triggerOffset"},
+    {type = "slider", name = "Drop Interval", min = 0.1, max = 2, settingName = "dropInterval"}
+})
+createRegisteredModule("World", "FastBreak", false, toggleFastBreak, {
+    {type = "slider", name = "Break Cooldown", min = 0, max = 0.3, settingName = "cooldown"},
+    {type = "slider", name = "Attempts/Pulse", min = 1, max = 6, settingName = "attemptsPerPulse"}
+})
 createRegisteredModule("World", "Nuker", false, toggleNuker, {
     {type = "toggle", name = "Mine Beds", settingName = "mineBeds"},
     {type = "toggle", name = "Mine Iron", settingName = "mineIron"},
