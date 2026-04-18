@@ -8,6 +8,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Debris = game:GetService("Debris")
+local VirtualUser = game:GetService("VirtualUser")
 
 local lplr = Players.LocalPlayer
 local mouse = lplr:GetMouse()
@@ -316,12 +317,16 @@ local function cleanupModule(moduleName)
 end
 
 local function performPrimaryClick()
+    local clicked = false
     pcall(function()
+        local mouseLocation = UserInputService:GetMouseLocation()
         VirtualUser:CaptureController()
-        VirtualUser:Button1Down(Vector2.new(mouse.X, mouse.Y), camera.CFrame)
+        VirtualUser:Button1Down(mouseLocation, camera.CFrame)
         task.wait()
-        VirtualUser:Button1Up(Vector2.new(mouse.X, mouse.Y), camera.CFrame)
+        VirtualUser:Button1Up(mouseLocation, camera.CFrame)
+        clicked = true
     end)
+    return clicked
 end
 
 
@@ -673,6 +678,7 @@ local function toggleKillAura(enabled)
         end
 
         if attacked then
+            performPrimaryClick()
             killAuraLastSwing = now
         end
     end)
@@ -891,8 +897,10 @@ local function toggleFly(enabled)
 
         local camLook = camera.CFrame.LookVector
         local camRight = camera.CFrame.RightVector
-        local flatLook = Vector3.new(camLook.X, 0, camLook.Z).Unit
-        local flatRight = Vector3.new(camRight.X, 0, camRight.Z).Unit
+        local flatLookVec = Vector3.new(camLook.X, 0, camLook.Z)
+        local flatRightVec = Vector3.new(camRight.X, 0, camRight.Z)
+        local flatLook = flatLookVec.Magnitude > 0 and flatLookVec.Unit or Vector3.new(0, 0, -1)
+        local flatRight = flatRightVec.Magnitude > 0 and flatRightVec.Unit or Vector3.new(1, 0, 0)
 
         if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir += flatLook end
         if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDir -= flatLook end
@@ -1089,7 +1097,7 @@ end
 
 
 moduleSettings["AutoToxic"] = {
-    finalKillMessage = "ez final kill ðŸ’€",
+    finalKillMessage = "ez final kill",
     bedBreakMessage = "bed gone lol",
     gameWinMessage = "gg ez",
     enabledFinalKill = true,
@@ -1272,6 +1280,7 @@ local function toggleScaffold(enabled)
                 end
             end
             if didPlace then
+                performPrimaryClick()
                 return
             end
         end
@@ -1282,6 +1291,7 @@ local function toggleScaffold(enabled)
                 local blockItem = shopController.GetItem and shopController:GetItem(woolName)
                 if blockItem and shopController.PlaceBlock then
                     shopController:PlaceBlock(blockItem, CFrame.new(placePos))
+                    performPrimaryClick()
                 end
             end)
         else
@@ -1295,9 +1305,11 @@ local function toggleScaffold(enabled)
                                 position = placePos,
                                 blockType = woolName
                             })
+                            performPrimaryClick()
                         end)
                         pcall(function()
                             remote:FireServer(placePos, woolName)
+                            performPrimaryClick()
                         end)
                     end
                 end
@@ -1364,6 +1376,7 @@ local function toggleAutoClicker(enabled)
             local delay = 1 / math.max(moduleSettings["AutoClicker"].cps, 1)
             if now - lastClick >= delay then
                 lastClick = now
+                performPrimaryClick()
                 local nearest = getTargetByFilters(18, true, true)
                 if nearest then
                     attackTargetWithBedwarsApi(nearest)
@@ -1412,10 +1425,16 @@ local function toggleVelocity(enabled)
             local horizontalReduction = math.clamp(settings.horizontalReduction / 100, 0, 1)
             local verticalReduction = math.clamp(settings.verticalReduction / 100, 0, 1)
             local current = root.AssemblyLinearVelocity
+            local moveDirection = hum.MoveDirection
+            local baseHorizontal = moveDirection.Magnitude > 0 and moveDirection.Unit * hum.WalkSpeed or Vector3.zero
+            local currentHorizontal = Vector3.new(current.X, 0, current.Z)
+            local knockbackHorizontal = currentHorizontal - Vector3.new(baseHorizontal.X, 0, baseHorizontal.Z)
+            local reducedHorizontal = knockbackHorizontal * (1 - horizontalReduction)
+            local targetHorizontal = Vector3.new(baseHorizontal.X, 0, baseHorizontal.Z) + reducedHorizontal
             root.AssemblyLinearVelocity = Vector3.new(
-                current.X * (1 - horizontalReduction),
+                targetHorizontal.X,
                 current.Y * (1 - verticalReduction),
-                current.Z * (1 - horizontalReduction)
+                targetHorizontal.Z
             )
         end))
     end
@@ -1965,18 +1984,18 @@ local function createModule(parent, name, defaultEnabled, toggleCallback, settin
 
     local toggleButton = Instance.new("TextButton")
     toggleButton.Name = "ToggleButton"
-    toggleButton.Size = UDim2.new(1, -90, 1, 0)
+    toggleButton.Size = UDim2.new(1, -124, 1, 0)
     toggleButton.BackgroundTransparency = 1
     toggleButton.Text = ""
     toggleButton.Parent = header
 
 
     local keybindBtn = Instance.new("TextButton")
-    keybindBtn.Size = UDim2.new(0, 30, 0, 30)
-    keybindBtn.Position = UDim2.new(1, -80, 0.5, -15)
+    keybindBtn.Size = UDim2.new(0, 64, 0, 30)
+    keybindBtn.Position = UDim2.new(1, -116, 0.5, -15)
     keybindBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
     keybindBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    keybindBtn.Text = moduleKeybinds[name] and moduleKeybinds[name].Name or "ðŸ”‘"
+    keybindBtn.Text = moduleKeybinds[name] and moduleKeybinds[name].Name or "NONE"
     keybindBtn.Font = Enum.Font.Gotham
     keybindBtn.TextSize = 14
     keybindBtn.Parent = header
@@ -1997,7 +2016,7 @@ local function createModule(parent, name, defaultEnabled, toggleCallback, settin
                 local key = input.KeyCode
                 if moduleKeybinds[name] == key then
                     moduleKeybinds[name] = nil
-                    keybindBtn.Text = "ðŸ”‘"
+                    keybindBtn.Text = "NONE"
                 else
                     moduleKeybinds[name] = key
                     keybindBtn.Text = key.Name
@@ -2016,7 +2035,7 @@ local function createModule(parent, name, defaultEnabled, toggleCallback, settin
     settingsBtn.Size = UDim2.new(0, 30, 0, 30)
     settingsBtn.Position = UDim2.new(1, -40, 0.5, -15)
     settingsBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    settingsBtn.Text = "â‹®"
+    settingsBtn.Text = "⋮"
     settingsBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     settingsBtn.Font = Enum.Font.GothamBold
     settingsBtn.TextSize = 24
