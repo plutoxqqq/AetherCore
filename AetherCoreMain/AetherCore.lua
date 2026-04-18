@@ -244,7 +244,7 @@ end
 local function getNearestEnemy(range, ignoreTeam)
     local myChar = getCharacter(lplr)
     if not myChar then return nil, nil end
-    local myTeam = ignoreTeam and nil or lplr.Team
+    local myTeam = ignoreTeam and lplr.Team or nil
     local myHRP = getHRP(myChar)
     if not myHRP then return nil, nil end
 
@@ -689,15 +689,20 @@ local function toggleKillAura(enabled)
         local myHRP = getHRP(myChar)
         if not myHRP then return end
 
+        local settings = moduleSettings["KillAura"]
+        if not settings.attackPlayers and not settings.attackNPCs then
+            return
+        end
+
         local sword = getHeldSword()
-        if moduleSettings["KillAura"].requireSword and not sword then return end
+        if settings.requireSword and not sword then return end
 
 
-        local targetChar, dist = getNearestEnemy(moduleSettings["KillAura"].range, moduleSettings["KillAura"].ignoreTeammates)
-        if not targetChar or dist > moduleSettings["KillAura"].range then return end
+        local targetChar, dist = getTargetByFilters(settings.range, settings.attackPlayers, settings.attackNPCs)
+        if not targetChar or not dist or dist > settings.range then return end
 
         local now = tick()
-        if now - killAuraLastSwing < (1 / moduleSettings["KillAura"].swingSpeed) then return end
+        if now - killAuraLastSwing < (1 / settings.swingSpeed) then return end
 
 
         local attacked = false
@@ -706,12 +711,13 @@ local function toggleKillAura(enabled)
         local controller = getCombatController()
         if controller then
             local hum = getHumanoid(targetChar)
+            local root = getHRP(targetChar)
             pcall(function()
                 if controller.attackEntity then
-                    controller.attackEntity(controller, hum)
+                    controller.attackEntity(controller, hum or targetChar, root and root.Position or nil)
                     attacked = true
                 elseif controller.AttackEntity then
-                    controller.AttackEntity(controller, hum)
+                    controller.AttackEntity(controller, hum or targetChar, root and root.Position or nil)
                     attacked = true
                 end
             end)
@@ -1976,6 +1982,15 @@ local function makeDraggable(frame, dragBar)
     dragBar.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
+            local cameraInstance = Workspace.CurrentCamera
+            if cameraInstance then
+                local viewport = cameraInstance.ViewportSize
+                local maxX = math.max(10, viewport.X - frame.AbsoluteSize.X - 10)
+                local maxY = math.max(10, viewport.Y - frame.AbsoluteSize.Y - 10)
+                local clampedX = math.clamp(frame.Position.X.Offset, 10, maxX)
+                local clampedY = math.clamp(frame.Position.Y.Offset, 10, maxY)
+                frame.Position = UDim2.new(0, clampedX, 0, clampedY)
+            end
             if saveClientSettings then
                 saveClientSettings()
             end
@@ -1990,8 +2005,8 @@ local function makeDraggable(frame, dragBar)
     end)
 end
 
-local mainPanel = createPanel("MainPanel", UDim2.new(0, 210, 0, 430), UDim2.new(0, 80, 0, 120))
-local topBar = createPanel("TopBar", UDim2.new(0, 420, 0, 40), UDim2.new(0, 305, 0, 120))
+local mainPanel = createPanel("MainPanel", UDim2.new(0, 190, 0, 430), UDim2.new(0, 80, 0, 120))
+local topBar = createPanel("TopBar", UDim2.new(0, 350, 0, 40), UDim2.new(0, 285, 0, 120))
 local statusPanel = createPanel("StatusPanel", UDim2.new(0, 265, 0, 24), UDim2.new(0, 80, 0, 560))
 
 local mainTop = Instance.new("Frame")
@@ -2154,7 +2169,7 @@ end
 loadClientSettings()
 
 local function createCategoryColumn(categoryName, index)
-    local panel = createPanel(categoryName .. "Column", UDim2.new(0, 310, 0, 530), UDim2.new(0, 305 + ((index - 1) * 315), 0, 170))
+    local panel = createPanel(categoryName .. "Column", UDim2.new(0, 240, 0, 530), UDim2.new(0, 285 + ((index - 1) * 246), 0, 170))
     panel.Visible = false
 
     local top = Instance.new("Frame")
@@ -2193,6 +2208,13 @@ local function createCategoryColumn(categoryName, index)
     local savedPos = loadedCategoryPositions[categoryName]
     if type(savedPos) == "table" then
         panel.Position = UDim2.new(0, tonumber(savedPos.x) or panel.Position.X.Offset, 0, tonumber(savedPos.y) or panel.Position.Y.Offset)
+    end
+    local cameraInstance = Workspace.CurrentCamera
+    if cameraInstance then
+        local viewport = cameraInstance.ViewportSize
+        local maxX = math.max(10, viewport.X - panel.Size.X.Offset - 10)
+        local maxY = math.max(10, viewport.Y - panel.Size.Y.Offset - 10)
+        panel.Position = UDim2.new(0, math.clamp(panel.Position.X.Offset, 10, maxX), 0, math.clamp(panel.Position.Y.Offset, 10, maxY))
     end
 
     makeDraggable(panel, top)
@@ -2234,6 +2256,24 @@ for _, category in ipairs(categoryData) do
         local panel = categoryPanels[category.name]
         panel.Visible = not panel.Visible
         button.BackgroundColor3 = panel.Visible and palette.active or palette.panel
+        if panel.Visible then
+            local cameraInstance = Workspace.CurrentCamera
+            if cameraInstance then
+                local viewport = cameraInstance.ViewportSize
+                local maxX = math.max(10, viewport.X - panel.AbsoluteSize.X - 10)
+                local maxY = math.max(10, viewport.Y - panel.AbsoluteSize.Y - 10)
+                local visibleCount = 0
+                for _, categoryName in ipairs(categoryOrder) do
+                    local categoryPanel = categoryPanels[categoryName]
+                    if categoryPanel and categoryPanel.Visible and categoryPanel ~= panel then
+                        visibleCount += 1
+                    end
+                end
+                local preferredX = topBar.Position.X.Offset + topBar.Size.X.Offset + 10 + (visibleCount * (panel.Size.X.Offset + 8))
+                local preferredY = mainPanel.Position.Y.Offset + 50
+                panel.Position = UDim2.new(0, math.clamp(preferredX, 10, maxX), 0, math.clamp(preferredY, 10, maxY))
+            end
+        end
         saveClientSettings()
     end)
 end
