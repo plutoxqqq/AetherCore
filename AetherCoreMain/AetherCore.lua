@@ -186,7 +186,7 @@ local function useDaoAbility()
     return used
 end
 
-local function getTargetByFilters(range, attackPlayers, attackNPCs)
+local function getTargetByFilters(range, attackPlayers, attackNPCs, ignoreTeammates)
     local myChar = getCharacter(lplr)
     local myHRP = getHRP(myChar)
     if not myHRP then
@@ -197,7 +197,9 @@ local function getTargetByFilters(range, attackPlayers, attackNPCs)
 
     if attackPlayers then
         for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= lplr and player.Team ~= lplr.Team then
+            local isSelf = player == lplr
+            local sameTeam = player.Team ~= nil and lplr.Team ~= nil and player.Team == lplr.Team
+            if not isSelf and (not ignoreTeammates or not sameTeam) then
                 local targetChar = getCharacter(player)
                 local targetHum = getHumanoid(targetChar)
                 local targetHRP = getHRP(targetChar)
@@ -327,6 +329,75 @@ local function attackTargetWithBedwarsApi(targetCharacter)
     end
 
     return attacked
+end
+
+local function getEffectiveCombatRange(baseRange)
+    local effectiveRange = baseRange or 0
+    if moduleStates["Reach"] and moduleSettings["Reach"] then
+        effectiveRange = math.max(effectiveRange, moduleSettings["Reach"].hitRange or effectiveRange)
+    end
+    return effectiveRange
+end
+
+local function getTargetAimPart(targetCharacter)
+    return targetCharacter and (targetCharacter:FindFirstChild("Head") or getHRP(targetCharacter))
+end
+
+local function isTargetWithinFov(targetCharacter, fovRadius)
+    local myChar = getCharacter(lplr)
+    local myHRP = getHRP(myChar)
+    local targetPart = getTargetAimPart(targetCharacter)
+    if not myHRP or not targetPart then
+        return false
+    end
+
+    local clampedFov = math.clamp(tonumber(fovRadius) or 360, 1, 360)
+    if clampedFov >= 359 then
+        return true
+    end
+
+    local direction = (targetPart.Position - myHRP.Position)
+    if direction.Magnitude <= 0 then
+        return true
+    end
+    local look = camera.CFrame.LookVector
+    local dot = math.clamp(look:Dot(direction.Unit), -1, 1)
+    local angle = math.deg(math.acos(dot))
+    return angle <= (clampedFov / 2)
+end
+
+local function hasLineOfSight(targetCharacter)
+    local myChar = getCharacter(lplr)
+    local myHRP = getHRP(myChar)
+    local targetPart = getTargetAimPart(targetCharacter)
+    if not myHRP or not targetPart then
+        return false
+    end
+
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {myChar}
+    rayParams.IgnoreWater = true
+
+    local direction = targetPart.Position - myHRP.Position
+    local raycastResult = Workspace:Raycast(myHRP.Position, direction, rayParams)
+    if not raycastResult then
+        return true
+    end
+
+    return raycastResult.Instance and raycastResult.Instance:IsDescendantOf(targetCharacter)
+end
+
+local function faceCharacterTarget(targetCharacter)
+    local myChar = getCharacter(lplr)
+    local myHRP = getHRP(myChar)
+    local targetPart = getTargetAimPart(targetCharacter)
+    if not myHRP or not targetPart then
+        return
+    end
+
+    local targetPosition = Vector3.new(targetPart.Position.X, myHRP.Position.Y, targetPart.Position.Z)
+    myHRP.CFrame = CFrame.lookAt(myHRP.Position, targetPosition)
 end
 
 
@@ -681,6 +752,7 @@ local function toggleKillAura(enabled)
     cleanupModule("KillAura")
     if not enabled then return end
 
+    local lockedTarget = nil
 
     local connection = RunService.Heartbeat:Connect(function()
         if not moduleStates["KillAura"] then return end
@@ -689,7 +761,7 @@ local function toggleKillAura(enabled)
         local myHRP = getHRP(myChar)
         if not myHRP then return end
 
-        local settings = moduleSettings["KillAura"]
+        local settings = moduleSettings["KillAura"] or {}
         if not settings.attackPlayers and not settings.attackNPCs then
             return
         end
@@ -697,12 +769,47 @@ local function toggleKillAura(enabled)
         local sword = getHeldSword()
         if settings.requireSword and not sword then return end
 
+        local effectiveRange = getEffectiveCombatRange(settings.range or 14)
+        local function isValidTarget(targetChar)
+            if not targetChar then
+                return false
+            end
+            local hum = getHumanoid(targetChar)
+            local root = getHRP(targetChar)
+            if not hum or not root or hum.Health <= 0 then
+                return false
+            end
+            if (root.Position - myHRP.Position).Magnitude > effectiveRange then
+                return false
+            end
+            if not isTargetWithinFov(targetChar, settings.fovRadius or settings.fov or 360) then
+                return false
+            end
+            if settings.attackThroughWalls == false and not hasLineOfSight(targetChar) then
+                return false
+            end
+            return true
+        end
 
-        local targetChar, dist = getTargetByFilters(settings.range, settings.attackPlayers, settings.attackNPCs)
-        if not targetChar or not dist or dist > settings.range then return end
+        if not isValidTarget(lockedTarget) then
+            lockedTarget = nil
+        end
+        if not lockedTarget then
+            local targetChar = getTargetByFilters(effectiveRange, settings.attackPlayers, settings.attackNPCs, settings.ignoreTeammates ~= false)
+            if isValidTarget(targetChar) then
+                lockedTarget = targetChar
+            end
+        end
+        if not lockedTarget then
+            return
+        end
 
         local now = tick()
-        if now - killAuraLastSwing < (1 / settings.swingSpeed) then return end
+        if now - killAuraLastSwing < (1 / math.max(settings.swingSpeed or 1, 1)) then return end
+
+        if settings.faceTarget then
+            faceCharacterTarget(lockedTarget)
+        end
 
 
         local attacked = false
@@ -710,14 +817,14 @@ local function toggleKillAura(enabled)
 
         local controller = getCombatController()
         if controller then
-            local hum = getHumanoid(targetChar)
-            local root = getHRP(targetChar)
+            local hum = getHumanoid(lockedTarget)
+            local root = getHRP(lockedTarget)
             pcall(function()
                 if controller.attackEntity then
-                    controller.attackEntity(controller, hum or targetChar, root and root.Position or nil)
+                    controller.attackEntity(controller, hum or lockedTarget, root and root.Position or nil)
                     attacked = true
                 elseif controller.AttackEntity then
-                    controller.AttackEntity(controller, hum or targetChar, root and root.Position or nil)
+                    controller.AttackEntity(controller, hum or lockedTarget, root and root.Position or nil)
                     attacked = true
                 end
             end)
@@ -736,7 +843,7 @@ local function toggleKillAura(enabled)
 
 
         if not attacked then
-            attacked = attackTargetWithBedwarsApi(targetChar)
+            attacked = attackTargetWithBedwarsApi(lockedTarget)
         end
 
         if attacked then
@@ -1310,13 +1417,30 @@ local function toggleScaffold(enabled)
         end
         if not hasWool then return end
 
-        local placePos = hrp.Position - Vector3.new(0, 3, 0)
+        local downParams = RaycastParams.new()
+        downParams.FilterType = Enum.RaycastFilterType.Exclude
+        downParams.FilterDescendantsInstances = {myChar}
+        downParams.IgnoreWater = true
+        local downRay = Workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), downParams)
+        if downRay and (hrp.Position.Y - downRay.Position.Y) <= 3.2 then
+            return
+        end
+
+        local basePos = hrp.Position - Vector3.new(0, 3, 0)
+        local function snapToGrid(position)
+            local blockSize = 3
+            local function snap(value)
+                return math.floor((value / blockSize) + 0.5) * blockSize
+            end
+            return Vector3.new(snap(position.X), snap(position.Y), snap(position.Z))
+        end
+        local placePos = snapToGrid(basePos)
 
 
         if moduleSettings["Scaffold"].allowTowering then
             local hum = getHumanoid(myChar)
             if hum and hum:GetState() == Enum.HumanoidStateType.Jumping then
-                placePos = hrp.Position - Vector3.new(0, 0.5, 0)
+                placePos = snapToGrid(hrp.Position - Vector3.new(0, 0.5, 0))
             end
         end
 
@@ -1572,6 +1696,13 @@ local function toggleLongJump(enabled)
         end
 
         local heldTool = char:FindFirstChildOfClass("Tool")
+        if not isDaoTool(heldTool) then
+            local daoTool = getHeldOrBackpackDaoTool()
+            if daoTool and daoTool.Parent ~= char then
+                hum:EquipTool(daoTool)
+                heldTool = daoTool
+            end
+        end
         local isHoldingDao = isDaoTool(heldTool)
         if not isHoldingDao then
             hum.WalkSpeed = originalMovement.walkSpeed or hum.WalkSpeed
