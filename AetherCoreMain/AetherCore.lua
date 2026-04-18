@@ -1240,7 +1240,6 @@ end
 
 moduleSettings["VerticalFly"] = {
     horizontalSpeed = 28,
-    verticalSpeed = 20,
     hoverHeight = 3.2,
     obstacleScanRadius = 10
 }
@@ -1251,9 +1250,6 @@ local function toggleVerticalFly(enabled)
         local char = getCharacter(lplr)
         local hrp = getHRP(char)
         local state = moduleSettings["VerticalFly"]
-        if state then
-            state.heightOffset = 0
-        end
         if hrp and state and state.lastVisualPosition then
             local desired = state.lastVisualPosition + Vector3.new(0, 2.5, 0)
             local rescue = findNearestGroundPosition(desired, char, 12, 6, 3)
@@ -1265,9 +1261,6 @@ local function toggleVerticalFly(enabled)
         end
         return
     end
-
-    moduleSettings["VerticalFly"].heightOffset = moduleSettings["VerticalFly"].heightOffset or 0
-    moduleSettings["VerticalFly"].lastHeightTick = moduleSettings["VerticalFly"].lastHeightTick or 0
 
     local function ensureMover()
         local char = getCharacter(lplr)
@@ -1299,8 +1292,6 @@ local function toggleVerticalFly(enabled)
         if UserInputService:IsKeyDown(Enum.KeyCode.S) then moveDirection -= flatLook end
         if UserInputService:IsKeyDown(Enum.KeyCode.A) then moveDirection -= flatRight end
         if UserInputService:IsKeyDown(Enum.KeyCode.D) then moveDirection += flatRight end
-        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDirection += Vector3.new(0, 1, 0) end
-        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then moveDirection -= Vector3.new(0, 1, 0) end
 
         local planarMove = Vector3.new(moveDirection.X, 0, moveDirection.Z)
         if planarMove.Magnitude > 1 then
@@ -1308,16 +1299,10 @@ local function toggleVerticalFly(enabled)
         end
 
         local desiredPlanar = hrp.Position + (planarMove * settings.horizontalSpeed * 0.07)
-        local now = tick()
-        local deltaT = math.clamp(now - (settings.lastHeightTick or now), 1 / 240, 0.2)
-        settings.lastHeightTick = now
-        settings.heightOffset = math.clamp((settings.heightOffset or 0) + (moveDirection.Y * settings.verticalSpeed * deltaT), -15, 200)
-
-        local desiredVertical = hrp.Position.Y + settings.heightOffset
-        local rayOrigin = Vector3.new(desiredPlanar.X, desiredVertical + 60, desiredPlanar.Z)
+        local rayOrigin = Vector3.new(desiredPlanar.X, hrp.Position.Y + 60, desiredPlanar.Z)
         local groundHit = raycastToGround(rayOrigin, {char}, 520)
         local baseGroundY = groundHit and groundHit.Position.Y or hrp.Position.Y
-        local targetHeight = baseGroundY + settings.hoverHeight + settings.heightOffset
+        local targetHeight = baseGroundY + settings.hoverHeight
 
         local obstacleAnchor = findNearestGroundPosition(
             Vector3.new(desiredPlanar.X, targetHeight, desiredPlanar.Z),
@@ -1365,8 +1350,18 @@ local function toggleAntiDeath(enabled)
     local state = {
         phase = "up",
         phaseUntil = 0,
-        anchorCFrame = nil
+        anchorCFrame = nil,
+        anchorFloorY = nil
     }
+
+    local function floorSnap(origin, character, yOffset)
+        local ray = raycastToGround(origin + Vector3.new(0, 80, 0), {character}, 420)
+        if ray then
+            return ray.Position + Vector3.new(0, yOffset or 3, 0), ray.Position.Y
+        end
+        local sampled = findNearestGroundPosition(origin, character, 14, 7, yOffset or 3)
+        return sampled, sampled and (sampled.Y - (yOffset or 3)) or nil
+    end
 
     addConnection("AntiDeath", RunService.Heartbeat:Connect(function()
         if not moduleStates["AntiDeath"] then return end
@@ -1391,6 +1386,11 @@ local function toggleAntiDeath(enabled)
                 state.phase = "down"
                 state.phaseUntil = now + settings.belowDuration
                 state.anchorCFrame = hrp.CFrame
+                local floorPosition, floorY = floorSnap(hrp.Position, char, 3)
+                if floorPosition then
+                    state.anchorCFrame = CFrame.new(floorPosition)
+                end
+                state.anchorFloorY = floorY
             else
                 state.phase = "up"
                 state.phaseUntil = now + settings.slowMode
@@ -1400,12 +1400,15 @@ local function toggleAntiDeath(enabled)
         if state.phase == "down" then
             local anchor = state.anchorCFrame or hrp.CFrame
             hrp.Anchored = true
-            hrp.CFrame = anchor - Vector3.new(0, settings.voidOffset, 0)
+            local floorY = state.anchorFloorY or (anchor.Position.Y - 3)
+            hrp.CFrame = CFrame.new(anchor.Position.X, floorY - settings.voidOffset, anchor.Position.Z)
             hrp.AssemblyLinearVelocity = Vector3.zero
         else
             hrp.Anchored = false
             if state.anchorCFrame then
-                hrp.CFrame = state.anchorCFrame + Vector3.new(0, 2, 0)
+                local anchorPosition = state.anchorCFrame.Position
+                local floorPosition = floorSnap(anchorPosition, char, 3)
+                hrp.CFrame = CFrame.new(floorPosition or anchorPosition)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
             end
@@ -2615,7 +2618,6 @@ local function validateModuleSettings()
     clampSetting("Reach", "mineRange", moduleSettings.Reach.mineRange, 6, 20, 12)
     clampSetting("Reach", "placeRange", moduleSettings.Reach.placeRange, 6, 20, 12)
     clampSetting("VerticalFly", "horizontalSpeed", moduleSettings.VerticalFly.horizontalSpeed, 8, 60, 28)
-    clampSetting("VerticalFly", "verticalSpeed", moduleSettings.VerticalFly.verticalSpeed, 6, 55, 20)
     clampSetting("VerticalFly", "hoverHeight", moduleSettings.VerticalFly.hoverHeight, 1, 8, 3.2)
     clampSetting("VerticalFly", "obstacleScanRadius", moduleSettings.VerticalFly.obstacleScanRadius, 4, 18, 10)
     clampSetting("AntiDeath", "healthThreshold", moduleSettings.AntiDeath.healthThreshold, 1, 95, 25)
@@ -3194,7 +3196,6 @@ createRegisteredModule("Blatant", "Fly", false, toggleFly, {
 })
 createRegisteredModule("Blatant", "VerticalFly", false, toggleVerticalFly, {
     {type = "slider", name = "Horizontal Speed", min = 8, max = 60, settingName = "horizontalSpeed"},
-    {type = "slider", name = "Vertical Speed", min = 6, max = 55, settingName = "verticalSpeed"},
     {type = "slider", name = "Hover Height", min = 1, max = 8, settingName = "hoverHeight"},
     {type = "slider", name = "Obstacle Radius", min = 4, max = 18, settingName = "obstacleScanRadius"}
 })
