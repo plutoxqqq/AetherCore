@@ -748,6 +748,27 @@ local function getHeldSword()
     return nil
 end
 
+local function getHeldOrBackpackSword()
+    local char = getCharacter(lplr)
+    if not char then
+        return nil
+    end
+    local heldTool = char:FindFirstChildOfClass("Tool")
+    if heldTool and isSwordTool(heldTool) then
+        return heldTool
+    end
+    local backpack = lplr:FindFirstChildOfClass("Backpack")
+    if not backpack then
+        return nil
+    end
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") and isSwordTool(tool) then
+            return tool
+        end
+    end
+    return nil
+end
+
 local function toggleKillAura(enabled)
     cleanupModule("KillAura")
     if not enabled then return end
@@ -767,6 +788,18 @@ local function toggleKillAura(enabled)
         end
 
         local sword = getHeldSword()
+        if not sword then
+            local backpackSword = getHeldOrBackpackSword()
+            if backpackSword and backpackSword.Parent ~= myChar then
+                pcall(function()
+                    local hum = getHumanoid(myChar)
+                    if hum then
+                        hum:EquipTool(backpackSword)
+                        sword = backpackSword
+                    end
+                end)
+            end
+        end
         if settings.requireSword and not sword then return end
 
         local effectiveRange = getEffectiveCombatRange(settings.range or 14)
@@ -846,8 +879,8 @@ local function toggleKillAura(enabled)
             attacked = attackTargetWithBedwarsApi(lockedTarget)
         end
 
-        if attacked then
-            performPrimaryClick()
+        local clicked = performPrimaryClick()
+        if attacked or clicked then
             killAuraLastSwing = now
         end
     end)
