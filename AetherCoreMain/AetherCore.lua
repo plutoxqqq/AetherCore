@@ -332,7 +332,7 @@ end
 
 local function createSlider(parent, name, min, max, default, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, -10, 0, 44)
+    frame.Size = UDim2.new(1, -8, 0, 42)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
 
@@ -340,37 +340,37 @@ local function createSlider(parent, name, min, max, default, callback)
     label.Size = UDim2.new(0.7, 0, 0, 20)
     label.BackgroundTransparency = 1
     label.Text = name
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 14
+    label.TextColor3 = Color3.fromRGB(230, 230, 230)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 13
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = frame
 
     local valueButton = Instance.new("TextButton")
-    valueButton.Size = UDim2.new(0.3, -4, 0, 20)
+    valueButton.Size = UDim2.new(0.3, -4, 0, 18)
     valueButton.Position = UDim2.new(0.7, 4, 0, 0)
-    valueButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    valueButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     valueButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     valueButton.Font = Enum.Font.Gotham
     valueButton.TextSize = 12
     valueButton.Parent = frame
-    Instance.new("UICorner", valueButton).CornerRadius = UDim.new(0, 4)
+    Instance.new("UICorner", valueButton).CornerRadius = UDim.new(0, 7)
 
     local slider = Instance.new("Frame")
-    slider.Size = UDim2.new(1, 0, 0, 18)
+    slider.Size = UDim2.new(1, 0, 0, 10)
     slider.Position = UDim2.new(0, 0, 0, 24)
-    slider.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    slider.BackgroundColor3 = Color3.fromRGB(48, 48, 48)
     slider.Parent = frame
-    Instance.new("UICorner", slider).CornerRadius = UDim.new(0, 4)
+    Instance.new("UICorner", slider).CornerRadius = UDim.new(0, 6)
 
     local fill = Instance.new("Frame")
     local range = max - min
     local percent = (default - min) / range
     fill.Size = UDim2.new(percent, 0, 1, 0)
-    fill.BackgroundColor3 = Color3.fromRGB(140, 80, 255)
+    fill.BackgroundColor3 = Color3.fromRGB(155, 89, 182)
     fill.BorderSizePixel = 0
     fill.Parent = slider
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 4)
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 6)
 
     local dragging = false
     local function formatValue(v)
@@ -382,7 +382,7 @@ local function createSlider(parent, name, min, max, default, callback)
     local function setValue(v)
         default = math.clamp(v, min, max)
         local newPercent = (default - min) / range
-        fill.Size = UDim2.new(newPercent, 0, 1, 0)
+        TweenService:Create(fill, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(newPercent, 0, 1, 0)}):Play()
         valueButton.Text = formatValue(default)
         callback(default)
     end
@@ -421,14 +421,14 @@ local function createSlider(parent, name, min, max, default, callback)
         local inputBox = Instance.new("TextBox")
         inputBox.Size = valueButton.Size
         inputBox.Position = valueButton.Position
-        inputBox.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        inputBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
         inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
         inputBox.Font = Enum.Font.Gotham
         inputBox.TextSize = 12
         inputBox.Text = valueButton.Text
         inputBox.ClearTextOnFocus = false
         inputBox.Parent = frame
-        Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 4)
+        Instance.new("UICorner", inputBox).CornerRadius = UDim.new(0, 7)
         inputBox:CaptureFocus()
 
         inputBox.FocusLost:Connect(function(enterPressed)
@@ -452,7 +452,7 @@ end
 
 local function createToggle(parent, name, default, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, -10, 0, 30)
+    frame.Size = UDim2.new(1, -8, 0, 30)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
 
@@ -460,28 +460,55 @@ local function createToggle(parent, name, default, callback)
     label.Size = UDim2.new(0.7, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.Text = name
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 14
+    label.TextColor3 = Color3.fromRGB(230, 230, 230)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 13
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = frame
 
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(0, 40, 0, 20)
-    button.Position = UDim2.new(1, -40, 0.5, -10)
-    button.BackgroundColor3 = default and Color3.fromRGB(140, 80, 255) or Color3.fromRGB(50, 50, 50)
-    button.Text = default and "ON" or "OFF"
-    button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    button.Font = Enum.Font.GothamBold
-    button.TextSize = 12
+    local button = Instance.new("Frame")
+    button.Size = UDim2.new(0, 36, 0, 20)
+    button.Position = UDim2.new(1, -36, 0.5, -10)
+    button.BackgroundColor3 = default and Color3.fromRGB(155, 89, 182) or Color3.fromRGB(56, 56, 56)
     button.Parent = frame
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 4)
+    Instance.new("UICorner", button).CornerRadius = UDim.new(1, 0)
+
+    local buttonClick = Instance.new("TextButton")
+    buttonClick.Size = UDim2.fromScale(1, 1)
+    buttonClick.BackgroundTransparency = 1
+    buttonClick.Text = ""
+    buttonClick.Parent = button
+
+    local stateText = Instance.new("TextLabel")
+    stateText.Size = UDim2.new(1, 0, 1, 0)
+    stateText.BackgroundTransparency = 1
+    stateText.Text = default and "ON" or "OFF"
+    stateText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    stateText.Font = Enum.Font.GothamBold
+    stateText.TextSize = 9
+    stateText.Parent = button
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 16, 0, 16)
+    knob.Position = default and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    knob.Parent = button
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
     local state = default
-    button.MouseButton1Click:Connect(function()
+    local function updateToggleVisual()
+        TweenService:Create(button, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            BackgroundColor3 = state and Color3.fromRGB(155, 89, 182) or Color3.fromRGB(56, 56, 56)
+        }):Play()
+        TweenService:Create(knob, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+            Position = state and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+        }):Play()
+        stateText.Text = state and "ON" or "OFF"
+    end
+
+    buttonClick.MouseButton1Click:Connect(function()
         state = not state
-        button.BackgroundColor3 = state and Color3.fromRGB(140, 80, 255) or Color3.fromRGB(50, 50, 50)
-        button.Text = state and "ON" or "OFF"
+        updateToggleVisual()
         callback(state)
     end)
 
@@ -489,8 +516,7 @@ local function createToggle(parent, name, default, callback)
         GetValue = function() return state end,
         SetValue = function(v)
             state = v
-            button.BackgroundColor3 = state and Color3.fromRGB(140, 80, 255) or Color3.fromRGB(50, 50, 50)
-            button.Text = state and "ON" or "OFF"
+            updateToggleVisual()
             callback(v)
         end
     }
@@ -498,7 +524,7 @@ end
 
 local function createDropdown(parent, name, options, default, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, -10, 0, 30)
+    frame.Size = UDim2.new(1, -8, 0, 30)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
 
@@ -506,22 +532,22 @@ local function createDropdown(parent, name, options, default, callback)
     label.Size = UDim2.new(0.7, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.Text = name
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 14
+    label.TextColor3 = Color3.fromRGB(230, 230, 230)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 13
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = frame
 
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(0, 80, 0, 20)
     button.Position = UDim2.new(1, -80, 0.5, -10)
-    button.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     button.Text = default
     button.TextColor3 = Color3.fromRGB(255, 255, 255)
     button.Font = Enum.Font.Gotham
     button.TextSize = 12
     button.Parent = frame
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 4)
+    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
 
     local selected = default
     button.MouseButton1Click:Connect(function()
@@ -545,7 +571,7 @@ end
 
 local function createTextBox(parent, name, default, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, -10, 0, 30)
+    frame.Size = UDim2.new(1, -8, 0, 30)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
 
@@ -553,22 +579,22 @@ local function createTextBox(parent, name, default, callback)
     label.Size = UDim2.new(0.7, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.Text = name
-    label.TextColor3 = Color3.fromRGB(200, 200, 200)
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 14
+    label.TextColor3 = Color3.fromRGB(230, 230, 230)
+    label.Font = Enum.Font.GothamMedium
+    label.TextSize = 13
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = frame
 
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(0, 80, 0, 20)
     box.Position = UDim2.new(1, -80, 0.5, -10)
-    box.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    box.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
     box.Text = default
     box.TextColor3 = Color3.fromRGB(255, 255, 255)
     box.Font = Enum.Font.Gotham
     box.TextSize = 12
     box.Parent = frame
-    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 7)
 
     box.FocusLost:Connect(function(enterPressed)
         callback(box.Text)
@@ -1065,7 +1091,7 @@ local function toggleTracers(enabled)
             attach0.WorldPosition = camera.CFrame.Position
             beam.Transparency = NumberSequence.new(moduleSettings["Tracers"].transparency)
         end)
-        addConnection("Tracers_" .. model:GetFullName(), updateConn)
+        addConnection("Tracers", updateConn)
     end
 
     local function scanAndAddTracers()
@@ -1760,9 +1786,9 @@ local function toggleAntiVoid(enabled)
             end
         end
 
-        if pullVelocity and groundPos then
-            local horizontal = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(groundPos.X, 0, groundPos.Z)).Magnitude
-            if horizontal < 4 and hrp.Position.Y <= groundPos.Y + 5 then
+        if pullVelocity and rescueTarget then
+            local horizontal = (Vector3.new(hrp.Position.X, 0, hrp.Position.Z) - Vector3.new(rescueTarget.X, 0, rescueTarget.Z)).Magnitude
+            if horizontal < 4 and hrp.Position.Y <= rescueTarget.Y + 5 then
                 pullVelocity:Destroy()
                 pullVelocity = nil
             end
@@ -1805,457 +1831,84 @@ end
 
 
 
+local palette = {
+    deep = Color3.fromRGB(15, 15, 15),
+    panel = Color3.fromRGB(24, 24, 24),
+    module = Color3.fromRGB(31, 31, 31),
+    hover = Color3.fromRGB(42, 42, 42),
+    active = Color3.fromRGB(36, 36, 36),
+    accent = Color3.fromRGB(164, 94, 233),
+    text = Color3.fromRGB(255, 255, 255),
+    secondary = Color3.fromRGB(170, 170, 170),
+    toggleOff = Color3.fromRGB(58, 58, 58)
+}
+
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "VapeUtility"
+screenGui.Name = "AetherCoreUI"
 screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
 screenGui.Parent = lplr:WaitForChild("PlayerGui")
 
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 1000, 0, 520)
-mainFrame.Position = UDim2.new(0.5, -500, 0.5, -260)
-mainFrame.BackgroundColor3 = Color3.fromRGB(19, 19, 19)
-mainFrame.BorderSizePixel = 0
-mainFrame.Parent = screenGui
-
-Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
-
-local topBar = Instance.new("Frame")
-topBar.Size = UDim2.new(1, 0, 0, 48)
-topBar.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
-topBar.BorderSizePixel = 0
-topBar.Parent = mainFrame
-
-Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 12)
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(0, 140, 1, 0)
-title.Position = UDim2.new(0, 20, 0, 0)
-title.BackgroundTransparency = 1
-title.Text = "AetherCore"
-title.TextColor3 = Color3.fromRGB(180, 80, 255)
-title.TextScaled = true
-title.Font = Enum.Font.GothamBlack
-title.TextXAlignment = Enum.TextXAlignment.Left
-title.Parent = topBar
-
-local uninjectButton = Instance.new("TextButton")
-uninjectButton.Size = UDim2.new(0, 110, 0, 30)
-uninjectButton.Position = UDim2.new(1, -130, 0.5, -15)
-uninjectButton.BackgroundColor3 = Color3.fromRGB(120, 45, 45)
-uninjectButton.Text = "Uninject"
-uninjectButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-uninjectButton.Font = Enum.Font.GothamBold
-uninjectButton.TextSize = 13
-uninjectButton.Parent = topBar
-Instance.new("UICorner", uninjectButton).CornerRadius = UDim.new(0, 8)
-
-local sidebar = Instance.new("Frame")
-sidebar.Size = UDim2.new(0, 160, 1, -48)
-sidebar.Position = UDim2.new(0, 0, 0, 48)
-sidebar.BackgroundColor3 = Color3.fromRGB(22, 22, 22)
-sidebar.BorderSizePixel = 0
-sidebar.Parent = mainFrame
-
-local sidebarLayout = Instance.new("UIListLayout")
-sidebarLayout.SortOrder = Enum.SortOrder.LayoutOrder
-sidebarLayout.Padding = UDim.new(0, 2)
-sidebarLayout.Parent = sidebar
-
-local contentArea = Instance.new("Frame")
-contentArea.Size = UDim2.new(1, -160, 1, -48)
-contentArea.Position = UDim2.new(0, 160, 0, 48)
-contentArea.BackgroundTransparency = 1
-contentArea.Parent = mainFrame
-
-local contentScroller = Instance.new("ScrollingFrame")
-contentScroller.Size = UDim2.new(1, 0, 1, 0)
-contentScroller.Position = UDim2.new(0, 0, 0, 0)
-contentScroller.BackgroundTransparency = 1
-contentScroller.BorderSizePixel = 0
-contentScroller.CanvasSize = UDim2.new(0, 0, 0, 0)
-contentScroller.ScrollBarThickness = 4
-contentScroller.ScrollingDirection = Enum.ScrollingDirection.X
-contentScroller.AutomaticCanvasSize = Enum.AutomaticSize.X
-contentScroller.Parent = contentArea
-
-local columnsList = Instance.new("UIListLayout")
-columnsList.FillDirection = Enum.FillDirection.Horizontal
-columnsList.SortOrder = Enum.SortOrder.LayoutOrder
-columnsList.Padding = UDim.new(0, 10)
-columnsList.Parent = contentScroller
-
-local categories = {"Combat", "Blatant", "Render", "Utility", "World", "Legit", "Movement"}
-local columns = {}
-local columnOrder = 0
-
-local function createCategory(name)
-    local defaultOpen = false
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 46)
-    btn.BackgroundColor3 = defaultOpen and Color3.fromRGB(32, 32, 32) or Color3.fromRGB(22, 22, 22)
-    btn.BorderSizePixel = 0
-    btn.Text = "  " .. name
-    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
-    btn.Font = Enum.Font.GothamSemibold
-    btn.TextSize = 15
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.Parent = sidebar
-
-    local highlight = Instance.new("Frame")
-    highlight.Name = "Highlight"
-    highlight.Size = UDim2.new(0, 4, 1, 0)
-    highlight.BackgroundColor3 = Color3.fromRGB(180, 80, 255)
-    highlight.BorderSizePixel = 0
-    highlight.Visible = defaultOpen
-    highlight.Parent = btn
-
-    local column = Instance.new("Frame")
-    column.Name = name
-    column.Size = UDim2.new(0, 200, 1, 0)
-    column.BackgroundColor3 = Color3.fromRGB(26, 26, 26)
-    column.BorderSizePixel = 0
-    column.Visible = defaultOpen
-    column.LayoutOrder = columnOrder
-    column.Parent = contentScroller
-
-    Instance.new("UICorner", column).CornerRadius = UDim.new(0, 10)
-
-    local colTitle = Instance.new("TextLabel")
-    colTitle.Size = UDim2.new(1, 0, 0, 42)
-    colTitle.BackgroundTransparency = 1
-    colTitle.Text = name
-    colTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    colTitle.Font = Enum.Font.GothamBold
-    colTitle.TextSize = 16
-    colTitle.Parent = column
-
-    local layout = Instance.new("UIListLayout")
-    layout.Name = "ModuleList"
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Padding = UDim.new(0, 8)
-    layout.Parent = column
-
-    columns[name] = column
-    columnOrder += 1
-
-    btn.MouseButton1Click:Connect(function()
-        column.Visible = not column.Visible
-        highlight.Visible = column.Visible
-        btn.BackgroundColor3 = column.Visible and Color3.fromRGB(32, 32, 32) or Color3.fromRGB(22, 22, 22)
-    end)
-end
-
-for _, cat in ipairs(categories) do
-    createCategory(cat)
-end
-
-
+local panelFrames = {}
+local moduleRegistry = {}
+local moduleUi = {}
+local moduleDefinitions = {}
+local categoryButtons = {}
+local activeCategory = "Combat"
+local selectedModuleName = nil
 local keybindListening = false
-local currentModuleForKeybind = nil
-local keybindButton = nil
 
-local function createModule(parent, name, defaultEnabled, toggleCallback, settingsDefinition)
-    local frame = Instance.new("Frame")
-    frame.Name = name .. "Module"
-    frame.Size = UDim2.new(1, -16, 0, 58)
-    frame.BackgroundColor3 = defaultEnabled and Color3.fromRGB(140, 80, 255) or Color3.fromRGB(35, 35, 35)
-    frame.BorderSizePixel = 0
-    frame.LayoutOrder = #parent:GetChildren()
-    frame.Parent = parent
+local moduleHandlers = {
+    KillAura = toggleKillAura,
+    Reach = toggleReach,
+    AimAssist = toggleAimAssist,
+    AutoClicker = toggleAutoClicker,
+    Velocity = toggleVelocity,
+    Speed = toggleSpeed,
+    Fly = toggleFly,
+    LongJump = toggleLongJump,
+    Scaffold = toggleScaffold,
+    ESP = toggleESP,
+    Tracers = toggleTracers,
+    AutoToxic = function(enabled) autoToxicEnabled = enabled end,
+    NoFallDamage = toggleNoFallDamage,
+    AntiVoid = toggleAntiVoid,
+    InfiniteJump = toggleInfiniteJump,
+    Nuker = toggleNuker
+}
 
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
-
-    local header = Instance.new("Frame")
-    header.Name = "Header"
-    header.Size = UDim2.new(1, 0, 0, 58)
-    header.BackgroundTransparency = 1
-    header.Parent = frame
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.6, 0, 1, 0)
-    label.Position = UDim2.new(0, 10, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = name
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
-    label.Font = Enum.Font.GothamSemibold
-    label.TextSize = 15
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = header
-
-    local toggleButton = Instance.new("TextButton")
-    toggleButton.Name = "ToggleButton"
-    toggleButton.Size = UDim2.new(1, -124, 1, 0)
-    toggleButton.BackgroundTransparency = 1
-    toggleButton.Text = ""
-    toggleButton.Parent = header
-
-
-    local keybindBtn = Instance.new("TextButton")
-    keybindBtn.Size = UDim2.new(0, 64, 0, 30)
-    keybindBtn.Position = UDim2.new(1, -116, 0.5, -15)
-    keybindBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    keybindBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    keybindBtn.Text = moduleKeybinds[name] and moduleKeybinds[name].Name or "NONE"
-    keybindBtn.Font = Enum.Font.Gotham
-    keybindBtn.TextSize = 14
-    keybindBtn.Parent = header
-    Instance.new("UICorner", keybindBtn).CornerRadius = UDim.new(0, 6)
-
-    keybindBtn.MouseButton1Click:Connect(function()
-        if keybindListening then return end
-        keybindListening = true
-        currentModuleForKeybind = name
-        keybindButton = keybindBtn
-        keybindBtn.Text = "..."
-        keybindBtn.BackgroundColor3 = Color3.fromRGB(180, 80, 255)
-
-        local conn
-        conn = UserInputService.InputBegan:Connect(function(input, gpe)
-            if gpe then return end
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                local key = input.KeyCode
-                if moduleKeybinds[name] == key then
-                    moduleKeybinds[name] = nil
-                    keybindBtn.Text = "NONE"
-                else
-                    moduleKeybinds[name] = key
-                    keybindBtn.Text = key.Name
-                end
-                keybindBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-                keybindListening = false
-                currentModuleForKeybind = nil
-                keybindButton = nil
-                conn:Disconnect()
-            end
-        end)
-    end)
-
-
-    local settingsBtn = Instance.new("TextButton")
-    settingsBtn.Size = UDim2.new(0, 30, 0, 30)
-    settingsBtn.Position = UDim2.new(1, -40, 0.5, -15)
-    settingsBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-    settingsBtn.Text = "⋮"
-    settingsBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    settingsBtn.Font = Enum.Font.GothamBold
-    settingsBtn.TextSize = 24
-    settingsBtn.Parent = header
-    Instance.new("UICorner", settingsBtn).CornerRadius = UDim.new(0, 6)
-
-
-    local settingsPanel = Instance.new("Frame")
-    settingsPanel.Name = "SettingsPanel"
-    settingsPanel.Size = UDim2.new(1, 0, 0, 0)
-    settingsPanel.Position = UDim2.new(0, 0, 0, 58)
-    settingsPanel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    settingsPanel.BorderSizePixel = 0
-    settingsPanel.ClipsDescendants = true
-    settingsPanel.Visible = true
-    settingsPanel.Parent = frame
-
-    Instance.new("UICorner", settingsPanel).CornerRadius = UDim.new(0, 6)
-    local settingsLayout = Instance.new("UIListLayout")
-    settingsLayout.Padding = UDim.new(0, 4)
-    settingsLayout.Parent = settingsPanel
-
-
-    local settingControls = {}
-    if settingsDefinition then
-        for _, setting in ipairs(settingsDefinition) do
-            if setting.type == "slider" then
-                local ctrl = createSlider(settingsPanel, setting.name, setting.min, setting.max, moduleSettings[name][setting.settingName], function(val)
-                    moduleSettings[name][setting.settingName] = val
-                end)
-                table.insert(settingControls, ctrl)
-            elseif setting.type == "toggle" then
-                local ctrl = createToggle(settingsPanel, setting.name, moduleSettings[name][setting.settingName], function(val)
-                    moduleSettings[name][setting.settingName] = val
-                end)
-                table.insert(settingControls, ctrl)
-            elseif setting.type == "dropdown" then
-                local ctrl = createDropdown(settingsPanel, setting.name, setting.options, moduleSettings[name][setting.settingName], function(val)
-                    moduleSettings[name][setting.settingName] = val
-                end)
-                table.insert(settingControls, ctrl)
-            elseif setting.type == "textbox" then
-                local ctrl = createTextBox(settingsPanel, setting.name, moduleSettings[name][setting.settingName], function(val)
-                    moduleSettings[name][setting.settingName] = val
-                end)
-                table.insert(settingControls, ctrl)
-            end
-        end
-    end
-
-    local settingsOpen = false
-    settingsBtn.MouseButton1Click:Connect(function()
-        settingsOpen = not settingsOpen
-        local targetHeight = 0
-        if settingsOpen then
-            task.wait()
-            targetHeight = settingsLayout.AbsoluteContentSize.Y + 8
-        end
-        TweenService:Create(settingsPanel, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 0, targetHeight)}):Play()
-        TweenService:Create(frame, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {Size = UDim2.new(1, -16, 0, 58 + targetHeight)}):Play()
-    end)
-
-    local enabled = defaultEnabled
-    moduleStates[name] = enabled
-
-    local function updateVisual()
-        frame.BackgroundColor3 = enabled and Color3.fromRGB(140, 80, 255) or Color3.fromRGB(35, 35, 35)
-    end
-
-    local toggleDebounce = false
-    toggleButton.MouseButton1Click:Connect(function()
-        if toggleDebounce then return end
-        toggleDebounce = true
-        enabled = not enabled
-        moduleStates[name] = enabled
-        updateVisual()
-        if name == "AutoToxic" then
-            autoToxicEnabled = enabled
-        end
-        if toggleCallback then
-            toggleCallback(enabled)
-        end
-        task.delay(0.1, function()
-            toggleDebounce = false
-        end)
-    end)
-
-    frame.MouseEnter:Connect(function()
-        if not enabled then
-            TweenService:Create(frame, TweenInfo.new(0.15), {BackgroundColor3 = Color3.fromRGB(45, 45, 45)}):Play()
-        end
-    end)
-    frame.MouseLeave:Connect(updateVisual)
-
-    updateVisual()
-    if defaultEnabled and toggleCallback then
-        toggleCallback(true)
-    end
+local function addCorner(target, radius)
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, radius)
+    corner.Parent = target
+    return corner
 end
 
-
-createModule(columns["Combat"], "KillAura", false, toggleKillAura, {
-    {type = "toggle", name = "Face Target", settingName = "faceTarget"},
-    {type = "slider", name = "FOV Radius", min = 50, max = 600, settingName = "fovRadius"},
-    {type = "slider", name = "Range", min = 5, max = 20, settingName = "range"},
-    {type = "slider", name = "Swing Speed", min = 1, max = 20, settingName = "swingSpeed"},
-    {type = "toggle", name = "Require Sword", settingName = "requireSword"},
-    {type = "toggle", name = "Attack Players", settingName = "attackPlayers"},
-    {type = "toggle", name = "Attack NPCs", settingName = "attackNPCs"}
-})
-
-createModule(columns["Combat"], "Reach", false, toggleReach, {
-    {type = "dropdown", name = "Mode", options = {"Both", "Attribute", "Handle"}, settingName = "mode"},
-    {type = "slider", name = "Hit Range", min = 6, max = 20, settingName = "hitRange"},
-    {type = "slider", name = "Mine Range", min = 6, max = 20, settingName = "mineRange"},
-    {type = "slider", name = "Place Range", min = 6, max = 20, settingName = "placeRange"}
-})
-
-createModule(columns["Blatant"], "Speed", false, toggleSpeed, {
-    {type = "slider", name = "Speed", min = 16, max = 50, settingName = "speed"}
-})
-
-createModule(columns["Blatant"], "Fly", false, toggleFly, {
-    {type = "slider", name = "Horizontal Speed", min = 10, max = 100, settingName = "horizontalSpeed"},
-    {type = "slider", name = "Vertical Speed", min = 10, max = 100, settingName = "verticalSpeed"},
-    {type = "toggle", name = "TP Down", settingName = "tpDownEnabled"},
-    {type = "slider", name = "TP Interval", min = 1, max = 5, settingName = "tpDownInterval"},
-    {type = "slider", name = "TP Return Delay", min = 0.05, max = 1, settingName = "tpDownReturnDelay"}
-})
-
-createModule(columns["Render"], "ESP", false, toggleESP, {})
-
-createModule(columns["Render"], "Tracers", false, toggleTracers, {
-    {type = "slider", name = "Transparency", min = 0, max = 1, settingName = "transparency"}
-})
-
-createModule(columns["Utility"], "AutoToxic", false, nil, {
-    {type = "toggle", name = "Final Kill Message", settingName = "enabledFinalKill"},
-    {type = "textbox", name = "Final Kill Text", settingName = "finalKillMessage"},
-    {type = "toggle", name = "Bed Break Message", settingName = "enabledBedBreak"},
-    {type = "textbox", name = "Bed Break Text", settingName = "bedBreakMessage"},
-    {type = "toggle", name = "Game Win Message", settingName = "enabledGameWin"},
-    {type = "textbox", name = "Game Win Text", settingName = "gameWinMessage"}
-})
-
-createModule(columns["World"], "Nuker", false, toggleNuker, {
-    {type = "toggle", name = "Mine Beds", settingName = "mineBeds"},
-    {type = "toggle", name = "Mine Iron", settingName = "mineIron"},
-    {type = "toggle", name = "Mine Gold", settingName = "mineGold"},
-    {type = "toggle", name = "Mine Diamond", settingName = "mineDiamond"},
-    {type = "toggle", name = "Mine Emerald", settingName = "mineEmerald"},
-    {type = "slider", name = "Radius", min = 5, max = 20, settingName = "mineRadius"}
-})
-
-createModule(columns["World"], "Scaffold", false, toggleScaffold, {
-    {type = "toggle", name = "Allow Towering", settingName = "allowTowering"}
-})
-
-createModule(columns["Legit"], "AimAssist", false, toggleAimAssist, {
-    {type = "slider", name = "Speed", min = 0.01, max = 0.5, settingName = "speed"},
-    {type = "slider", name = "Range", min = 10, max = 50, settingName = "range"}
-})
-
-createModule(columns["Legit"], "AutoClicker", false, toggleAutoClicker, {
-    {type = "slider", name = "CPS", min = 1, max = 20, settingName = "cps"}
-})
-
-createModule(columns["Movement"], "Velocity", false, toggleVelocity, {
-    {type = "slider", name = "Horizontal %", min = 0, max = 100, settingName = "horizontalReduction"},
-    {type = "slider", name = "Vertical %", min = 0, max = 100, settingName = "verticalReduction"}
-})
-
-createModule(columns["Movement"], "LongJump", false, toggleLongJump, {
-    {type = "slider", name = "Speed", min = 50, max = 200, settingName = "speed"},
-    {type = "slider", name = "Duration", min = 0.5, max = 3, settingName = "duration"}
-})
-
-createModule(columns["Movement"], "NoFallDamage", false, toggleNoFallDamage, {
-    {type = "dropdown", name = "Method", options = {"Landing", "NegateVelocity", "Teleport", "DaoExploit"}, settingName = "method"}
-})
-
-createModule(columns["Movement"], "AntiVoid", false, toggleAntiVoid, {
-    {type = "dropdown", name = "Method", options = {"Normal", "Bounce"}, settingName = "method"},
-    {type = "slider", name = "Bounce Power", min = 50, max = 200, settingName = "bouncePower"}
-})
-
-createModule(columns["Movement"], "InfiniteJump", false, toggleInfiniteJump, {})
-
-local function applyModuleToggle(moduleName, enabled)
-    if moduleName == "KillAura" then toggleKillAura(enabled)
-    elseif moduleName == "Reach" then toggleReach(enabled)
-    elseif moduleName == "Speed" then toggleSpeed(enabled)
-    elseif moduleName == "Fly" then toggleFly(enabled)
-    elseif moduleName == "ESP" then toggleESP(enabled)
-    elseif moduleName == "Tracers" then toggleTracers(enabled)
-    elseif moduleName == "AutoToxic" then autoToxicEnabled = enabled
-    elseif moduleName == "Nuker" then toggleNuker(enabled)
-    elseif moduleName == "Scaffold" then toggleScaffold(enabled)
-    elseif moduleName == "AimAssist" then toggleAimAssist(enabled)
-    elseif moduleName == "AutoClicker" then toggleAutoClicker(enabled)
-    elseif moduleName == "Velocity" then toggleVelocity(enabled)
-    elseif moduleName == "LongJump" then toggleLongJump(enabled)
-    elseif moduleName == "NoFallDamage" then toggleNoFallDamage(enabled)
-    elseif moduleName == "AntiVoid" then toggleAntiVoid(enabled)
-    elseif moduleName == "InfiniteJump" then toggleInfiniteJump(enabled)
-    end
+local function stylePanel(panel)
+    panel.BackgroundColor3 = palette.panel
+    panel.BorderSizePixel = 0
+    addCorner(panel, 8)
 end
 
-uninjectButton.MouseButton1Click:Connect(function()
-    for name, enabled in pairs(moduleStates) do
-        if enabled then
-            moduleStates[name] = false
-            applyModuleToggle(name, false)
-        end
-    end
-    screenGui:Destroy()
-end)
+local function createPanel(name, size, position)
+    local panel = Instance.new("Frame")
+    panel.Name = name
+    panel.Size = size
+    panel.Position = position
+    panel.Parent = screenGui
+    stylePanel(panel)
 
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(36, 36, 36)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.2
+    stroke.Parent = panel
 
-local function makeDraggable(frame, dragBar)
+    panelFrames[name] = panel
+    return panel
+end
+
+local function makeDraggable(frame, dragBar, dragWholeFrame)
     local dragging = false
     local dragStart, startPos
 
@@ -2270,55 +1923,662 @@ local function makeDraggable(frame, dragBar)
     dragBar.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             dragging = false
+
+            local snapThreshold = 14
+            for _, other in pairs(panelFrames) do
+                if other ~= frame and other.Visible then
+                    local myPos = frame.AbsolutePosition
+                    local mySize = frame.AbsoluteSize
+                    local otherPos = other.AbsolutePosition
+                    local otherSize = other.AbsoluteSize
+
+                    local verticalOverlap = myPos.Y < otherPos.Y + otherSize.Y and (myPos.Y + mySize.Y) > otherPos.Y
+                    local horizontalOverlap = myPos.X < otherPos.X + otherSize.X and (myPos.X + mySize.X) > otherPos.X
+
+                    if verticalOverlap then
+                        local leftSnap = math.abs((myPos.X + mySize.X) - otherPos.X)
+                        local rightSnap = math.abs(myPos.X - (otherPos.X + otherSize.X))
+                        if leftSnap <= snapThreshold then
+                            frame.Position = UDim2.new(frame.Position.X.Scale, otherPos.X - mySize.X, frame.Position.Y.Scale, frame.Position.Y.Offset)
+                        elseif rightSnap <= snapThreshold then
+                            frame.Position = UDim2.new(frame.Position.X.Scale, otherPos.X + otherSize.X, frame.Position.Y.Scale, frame.Position.Y.Offset)
+                        end
+                    end
+
+                    if horizontalOverlap then
+                        local topSnap = math.abs((myPos.Y + mySize.Y) - otherPos.Y)
+                        local bottomSnap = math.abs(myPos.Y - (otherPos.Y + otherSize.Y))
+                        if topSnap <= snapThreshold then
+                            frame.Position = UDim2.new(frame.Position.X.Scale, frame.Position.X.Offset, frame.Position.Y.Scale, otherPos.Y - mySize.Y)
+                        elseif bottomSnap <= snapThreshold then
+                            frame.Position = UDim2.new(frame.Position.X.Scale, frame.Position.X.Offset, frame.Position.Y.Scale, otherPos.Y + otherSize.Y)
+                        end
+                    end
+                end
+            end
         end
     end)
 
     UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             local delta = input.Position - dragStart
-            frame.Position = UDim2.new(
-                startPos.X.Scale,
-                startPos.X.Offset + delta.X,
-                startPos.Y.Scale,
-                startPos.Y.Offset + delta.Y
-            )
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    if dragWholeFrame then
+        frame.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                dragging = true
+                dragStart = input.Position
+                startPos = frame.Position
+            end
+        end)
+    end
+end
+
+local leftPanel = createPanel("LeftSidebar", UDim2.new(0, 180, 0, 430), UDim2.new(0, 80, 0, 120))
+local middlePanel = createPanel("MiddleModules", UDim2.new(0, 300, 0, 530), UDim2.new(0, 265, 0, 120))
+local rightPanel = createPanel("RightSettings", UDim2.new(0, 260, 0, 530), UDim2.new(0, 550, 0, 120))
+local statusPanel = createPanel("BottomStatus", UDim2.new(0, 740, 0, 28), UDim2.new(0, 80, 0, 565))
+
+local leftTop = Instance.new("Frame")
+leftTop.Size = UDim2.new(1, 0, 0, 40)
+leftTop.BackgroundColor3 = palette.deep
+leftTop.BorderSizePixel = 0
+leftTop.Parent = leftPanel
+addCorner(leftTop, 8)
+
+local leftTitle = Instance.new("TextLabel")
+leftTitle.Size = UDim2.new(1, -16, 1, 0)
+leftTitle.Position = UDim2.new(0, 12, 0, 0)
+leftTitle.BackgroundTransparency = 1
+leftTitle.Text = "VAPE v4"
+leftTitle.TextXAlignment = Enum.TextXAlignment.Left
+leftTitle.Font = Enum.Font.GothamBold
+leftTitle.TextSize = 18
+leftTitle.TextColor3 = palette.accent
+leftTitle.Parent = leftTop
+
+local leftContent = Instance.new("Frame")
+leftContent.Size = UDim2.new(1, -10, 1, -50)
+leftContent.Position = UDim2.new(0, 5, 0, 45)
+leftContent.BackgroundTransparency = 1
+leftContent.Parent = leftPanel
+
+local leftLayout = Instance.new("UIListLayout")
+leftLayout.Padding = UDim.new(0, 6)
+leftLayout.Parent = leftContent
+
+local middleTop = Instance.new("Frame")
+middleTop.Size = UDim2.new(1, 0, 0, 40)
+middleTop.BackgroundColor3 = palette.deep
+middleTop.BorderSizePixel = 0
+middleTop.Parent = middlePanel
+addCorner(middleTop, 8)
+
+local searchBox = Instance.new("TextBox")
+searchBox.Size = UDim2.new(1, -44, 0, 26)
+searchBox.Position = UDim2.new(0, 8, 0, 7)
+searchBox.BackgroundColor3 = palette.module
+searchBox.Text = ""
+searchBox.PlaceholderText = "Search modules..."
+searchBox.ClearTextOnFocus = false
+searchBox.TextColor3 = palette.text
+searchBox.PlaceholderColor3 = palette.secondary
+searchBox.Font = Enum.Font.Gotham
+searchBox.TextSize = 13
+searchBox.Parent = middleTop
+addCorner(searchBox, 6)
+
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 24, 0, 24)
+closeButton.Position = UDim2.new(1, -30, 0, 8)
+closeButton.BackgroundColor3 = palette.module
+closeButton.Text = "X"
+closeButton.TextColor3 = palette.text
+closeButton.Font = Enum.Font.GothamBold
+closeButton.TextSize = 13
+closeButton.Parent = middleTop
+addCorner(closeButton, 6)
+
+local moduleList = Instance.new("ScrollingFrame")
+moduleList.Size = UDim2.new(1, -10, 1, -50)
+moduleList.Position = UDim2.new(0, 5, 0, 45)
+moduleList.BackgroundTransparency = 1
+moduleList.BorderSizePixel = 0
+moduleList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+moduleList.CanvasSize = UDim2.new(0, 0, 0, 0)
+moduleList.ScrollBarThickness = 4
+moduleList.Parent = middlePanel
+
+local moduleLayout = Instance.new("UIListLayout")
+moduleLayout.Padding = UDim.new(0, 6)
+moduleLayout.Parent = moduleList
+
+local modulePadding = Instance.new("UIPadding")
+modulePadding.PaddingBottom = UDim.new(0, 6)
+modulePadding.Parent = moduleList
+
+local rightTop = Instance.new("Frame")
+rightTop.Size = UDim2.new(1, 0, 0, 40)
+rightTop.BackgroundColor3 = palette.deep
+rightTop.BorderSizePixel = 0
+rightTop.Parent = rightPanel
+addCorner(rightTop, 8)
+
+local settingsTitle = Instance.new("TextLabel")
+settingsTitle.Size = UDim2.new(1, -16, 1, 0)
+settingsTitle.Position = UDim2.new(0, 10, 0, 0)
+settingsTitle.BackgroundTransparency = 1
+settingsTitle.Text = "Settings"
+settingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+settingsTitle.Font = Enum.Font.GothamBold
+settingsTitle.TextSize = 15
+settingsTitle.TextColor3 = palette.text
+settingsTitle.Parent = rightTop
+
+local settingsBody = Instance.new("ScrollingFrame")
+settingsBody.Size = UDim2.new(1, -10, 1, -50)
+settingsBody.Position = UDim2.new(0, 5, 0, 45)
+settingsBody.BackgroundTransparency = 1
+settingsBody.BorderSizePixel = 0
+settingsBody.AutomaticCanvasSize = Enum.AutomaticSize.Y
+settingsBody.CanvasSize = UDim2.new(0, 0, 0, 0)
+settingsBody.ScrollBarThickness = 4
+settingsBody.Parent = rightPanel
+
+local settingsLayout = Instance.new("UIListLayout")
+settingsLayout.Padding = UDim.new(0, 6)
+settingsLayout.Parent = settingsBody
+
+local settingsPlaceholder = Instance.new("TextLabel")
+settingsPlaceholder.Size = UDim2.new(1, -8, 0, 26)
+settingsPlaceholder.BackgroundTransparency = 1
+settingsPlaceholder.Text = "Select a module to configure"
+settingsPlaceholder.Font = Enum.Font.Gotham
+settingsPlaceholder.TextSize = 13
+settingsPlaceholder.TextXAlignment = Enum.TextXAlignment.Left
+settingsPlaceholder.TextColor3 = palette.secondary
+settingsPlaceholder.Parent = settingsBody
+
+local statusLeft = Instance.new("TextButton")
+statusLeft.Size = UDim2.new(0.5, 0, 1, 0)
+statusLeft.BackgroundTransparency = 1
+statusLeft.Text = "discord.gg/voidware"
+statusLeft.TextColor3 = palette.secondary
+statusLeft.Font = Enum.Font.Gotham
+statusLeft.TextSize = 12
+statusLeft.TextXAlignment = Enum.TextXAlignment.Left
+statusLeft.Parent = statusPanel
+
+local statusRight = Instance.new("TextLabel")
+statusRight.Size = UDim2.new(0.5, -8, 1, 0)
+statusRight.Position = UDim2.new(0.5, 0, 0, 0)
+statusRight.BackgroundTransparency = 1
+statusRight.Text = "Total Damage: 0 | DPS: 0 | Time: 0s"
+statusRight.TextColor3 = palette.secondary
+statusRight.Font = Enum.Font.Gotham
+statusRight.TextSize = 12
+statusRight.TextXAlignment = Enum.TextXAlignment.Right
+statusRight.Parent = statusPanel
+
+statusLeft.MouseButton1Click:Connect(function()
+    pcall(function()
+        setclipboard("https://discord.gg/voidware")
+    end)
+end)
+
+local function updateStatusTime()
+    local startTick = tick()
+    RunService.RenderStepped:Connect(function()
+        if statusRight and statusRight.Parent then
+            statusRight.Text = string.format("Total Damage: 0 | DPS: 0 | Time: %ds", math.floor(tick() - startTick))
         end
     end)
 end
+updateStatusTime()
 
-makeDraggable(mainFrame, topBar)
-for _, col in pairs(columns) do
-    makeDraggable(col, col:FindFirstChildWhichIsA("TextLabel"))
+makeDraggable(leftPanel, leftTop)
+makeDraggable(middlePanel, middleTop)
+makeDraggable(rightPanel, rightTop)
+makeDraggable(statusPanel, statusPanel, true)
+
+local function clearSettings()
+    for _, child in ipairs(settingsBody:GetChildren()) do
+        if not child:IsA("UIListLayout") then
+            child:Destroy()
+        end
+    end
 end
 
+local function createSettingsForModule(moduleName)
+    clearSettings()
+    settingsTitle.Text = moduleName and (moduleName .. " Settings") or "Settings"
+
+    if not moduleName or not moduleDefinitions[moduleName] or #moduleDefinitions[moduleName] == 0 then
+        settingsPlaceholder = Instance.new("TextLabel")
+        settingsPlaceholder.Size = UDim2.new(1, -8, 0, 26)
+        settingsPlaceholder.BackgroundTransparency = 1
+        settingsPlaceholder.Text = moduleName and "No configurable settings" or "Select a module to configure"
+        settingsPlaceholder.Font = Enum.Font.Gotham
+        settingsPlaceholder.TextSize = 13
+        settingsPlaceholder.TextXAlignment = Enum.TextXAlignment.Left
+        settingsPlaceholder.TextColor3 = palette.secondary
+        settingsPlaceholder.Parent = settingsBody
+        return
+    end
+
+    for _, setting in ipairs(moduleDefinitions[moduleName]) do
+        if setting.type == "slider" then
+            createSlider(settingsBody, setting.name, setting.min, setting.max, moduleSettings[moduleName][setting.settingName], function(val)
+                moduleSettings[moduleName][setting.settingName] = val
+            end)
+        elseif setting.type == "toggle" then
+            createToggle(settingsBody, setting.name, moduleSettings[moduleName][setting.settingName], function(val)
+                moduleSettings[moduleName][setting.settingName] = val
+            end)
+        elseif setting.type == "dropdown" then
+            createDropdown(settingsBody, setting.name, setting.options, moduleSettings[moduleName][setting.settingName], function(val)
+                moduleSettings[moduleName][setting.settingName] = val
+            end)
+        elseif setting.type == "textbox" then
+            createTextBox(settingsBody, setting.name, moduleSettings[moduleName][setting.settingName], function(val)
+                moduleSettings[moduleName][setting.settingName] = val
+            end)
+        end
+    end
+end
+
+local function updateCategoryVisuals()
+    for name, button in pairs(categoryButtons) do
+        local active = name == activeCategory
+        local accent = button:FindFirstChild("Accent")
+        if accent then
+            accent.Visible = active
+        end
+        TweenService:Create(button, TweenInfo.new(0.16, Enum.EasingStyle.Quad), {
+            BackgroundColor3 = active and palette.active or palette.panel
+        }):Play()
+    end
+end
+
+local function refreshModuleFiltering()
+    local query = string.lower(searchBox.Text or "")
+    for moduleName, info in pairs(moduleRegistry) do
+        local categoryMatches = info.category == activeCategory
+        local textMatches = query == "" or string.find(string.lower(moduleName), query, 1, true) ~= nil
+        info.frame.Visible = categoryMatches and textMatches
+    end
+end
+
+local categoryData = {
+    {name = "Combat", icon = "⚔️"},
+    {name = "Blatant", icon = "🚀"},
+    {name = "Render", icon = "👁️"},
+    {name = "Utility", icon = "🛠️"},
+    {name = "World", icon = "🌍"},
+    {name = "Legend", icon = "📜"}
+}
+
+for _, category in ipairs(categoryData) do
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 0, 32)
+    button.BackgroundColor3 = palette.panel
+    button.BorderSizePixel = 0
+    button.AutoButtonColor = false
+    button.Text = string.format("  %s  %s", category.icon, category.name)
+    button.TextColor3 = palette.text
+    button.Font = Enum.Font.GothamSemibold
+    button.TextSize = 12
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.Parent = leftContent
+    addCorner(button, 6)
+
+    local accent = Instance.new("Frame")
+    accent.Name = "Accent"
+    accent.Size = UDim2.new(0, 4, 1, 0)
+    accent.BackgroundColor3 = palette.accent
+    accent.Visible = false
+    accent.Parent = button
+    addCorner(accent, 4)
+
+    button.MouseButton1Click:Connect(function()
+        activeCategory = category.name
+        updateCategoryVisuals()
+        refreshModuleFiltering()
+    end)
+
+    button.MouseEnter:Connect(function()
+        if activeCategory ~= category.name then
+            TweenService:Create(button, TweenInfo.new(0.12), {BackgroundColor3 = palette.hover}):Play()
+        end
+    end)
+
+    button.MouseLeave:Connect(function()
+        if activeCategory ~= category.name then
+            TweenService:Create(button, TweenInfo.new(0.12), {BackgroundColor3 = palette.panel}):Play()
+        end
+    end)
+
+    categoryButtons[category.name] = button
+end
+
+local separator = Instance.new("Frame")
+separator.Size = UDim2.new(1, -8, 0, 1)
+separator.BackgroundColor3 = Color3.fromRGB(52, 52, 52)
+separator.BorderSizePixel = 0
+separator.Parent = leftContent
+
+local miscHeader = Instance.new("TextLabel")
+miscHeader.Size = UDim2.new(1, 0, 0, 20)
+miscHeader.BackgroundTransparency = 1
+miscHeader.Text = "MISC"
+miscHeader.TextXAlignment = Enum.TextXAlignment.Left
+miscHeader.TextColor3 = palette.secondary
+miscHeader.Font = Enum.Font.GothamBold
+miscHeader.TextSize = 11
+miscHeader.Parent = leftContent
+
+for _, misc in ipairs({"👥 Friends", "📋 Profiles", "🎯 Targets", "🖥️ Overlays"}) do
+    local miscLabel = Instance.new("TextLabel")
+    miscLabel.Size = UDim2.new(1, 0, 0, 22)
+    miscLabel.BackgroundTransparency = 1
+    miscLabel.Text = "  " .. misc
+    miscLabel.TextXAlignment = Enum.TextXAlignment.Left
+    miscLabel.TextColor3 = palette.secondary
+    miscLabel.Font = Enum.Font.Gotham
+    miscLabel.TextSize = 12
+    miscLabel.Parent = leftContent
+end
+
+local function createModule(moduleName, defaultEnabled, toggleCallback)
+    local frame = Instance.new("Frame")
+    frame.Name = moduleName .. "Module"
+    frame.Size = UDim2.new(1, -4, 0, 44)
+    frame.BackgroundColor3 = palette.module
+    frame.BorderSizePixel = 0
+    frame.Parent = moduleList
+    addCorner(frame, 6)
+
+    local star = Instance.new("TextLabel")
+    star.Size = UDim2.new(0, 14, 1, 0)
+    star.Position = UDim2.new(0, 8, 0, 0)
+    star.BackgroundTransparency = 1
+    star.Text = "★"
+    star.TextColor3 = palette.secondary
+    star.Font = Enum.Font.GothamBold
+    star.TextSize = 12
+    star.Parent = frame
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Size = UDim2.new(0, 120, 1, 0)
+    nameLabel.Position = UDim2.new(0, 24, 0, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.Text = moduleName
+    nameLabel.TextColor3 = palette.text
+    nameLabel.Font = Enum.Font.GothamSemibold
+    nameLabel.TextSize = 13
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    nameLabel.Parent = frame
+
+    local gear = Instance.new("TextButton")
+    gear.Size = UDim2.new(0, 24, 0, 24)
+    gear.Position = UDim2.new(1, -28, 0.5, -12)
+    gear.BackgroundColor3 = palette.hover
+    gear.Text = "⚙"
+    gear.TextColor3 = palette.text
+    gear.Font = Enum.Font.GothamBold
+    gear.TextSize = 12
+    gear.Parent = frame
+    addCorner(gear, 6)
+
+    local keybindBtn = Instance.new("TextButton")
+    keybindBtn.Size = UDim2.new(0, 44, 0, 22)
+    keybindBtn.Position = UDim2.new(1, -76, 0.5, -11)
+    keybindBtn.BackgroundColor3 = palette.hover
+    keybindBtn.TextColor3 = palette.text
+    keybindBtn.Text = moduleKeybinds[moduleName] and moduleKeybinds[moduleName].Name or "NONE"
+    keybindBtn.Font = Enum.Font.Gotham
+    keybindBtn.TextSize = 10
+    keybindBtn.Parent = frame
+    addCorner(keybindBtn, 8)
+
+    local toggleHolder = Instance.new("Frame")
+    toggleHolder.Size = UDim2.new(0, 36, 0, 20)
+    toggleHolder.Position = UDim2.new(1, -118, 0.5, -10)
+    toggleHolder.BackgroundColor3 = defaultEnabled and palette.accent or palette.toggleOff
+    toggleHolder.BorderSizePixel = 0
+    toggleHolder.Parent = frame
+    addCorner(toggleHolder, 12)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.new(0, 16, 0, 16)
+    knob.Position = defaultEnabled and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+    knob.BackgroundColor3 = palette.text
+    knob.Parent = toggleHolder
+    addCorner(knob, 8)
+
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.fromScale(1, 1)
+    toggleBtn.BackgroundTransparency = 1
+    toggleBtn.Text = ""
+    toggleBtn.Parent = toggleHolder
+
+    local enabled = defaultEnabled
+    moduleStates[moduleName] = enabled
+
+    local function updateVisual()
+        TweenService:Create(toggleHolder, TweenInfo.new(0.14), {BackgroundColor3 = enabled and palette.accent or palette.toggleOff}):Play()
+        TweenService:Create(knob, TweenInfo.new(0.14), {Position = enabled and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)}):Play()
+        TweenService:Create(frame, TweenInfo.new(0.14), {BackgroundColor3 = enabled and Color3.fromRGB(55, 35, 78) or palette.module}):Play()
+    end
+
+    toggleBtn.MouseButton1Click:Connect(function()
+        enabled = not enabled
+        moduleStates[moduleName] = enabled
+        if moduleName == "AutoToxic" then
+            autoToxicEnabled = enabled
+        end
+        if toggleCallback then
+            toggleCallback(enabled)
+        end
+        updateVisual()
+    end)
+
+    gear.MouseButton1Click:Connect(function()
+        selectedModuleName = moduleName
+        createSettingsForModule(moduleName)
+    end)
+
+    keybindBtn.MouseButton1Click:Connect(function()
+        if keybindListening then return end
+        keybindListening = true
+        keybindBtn.Text = "..."
+        keybindBtn.BackgroundColor3 = palette.accent
+        local connection
+        connection = UserInputService.InputBegan:Connect(function(input, gpe)
+            if gpe then return end
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                local key = input.KeyCode
+                if moduleKeybinds[moduleName] == key then
+                    moduleKeybinds[moduleName] = nil
+                    keybindBtn.Text = "NONE"
+                else
+                    moduleKeybinds[moduleName] = key
+                    keybindBtn.Text = key.Name
+                end
+                keybindBtn.BackgroundColor3 = palette.hover
+                keybindListening = false
+                if connection then
+                    connection:Disconnect()
+                end
+            end
+        end)
+    end)
+
+    moduleUi[moduleName] = {
+        setEnabled = function(state)
+            enabled = state
+            moduleStates[moduleName] = state
+            updateVisual()
+        end,
+        setKeyText = function(text)
+            keybindBtn.Text = text
+        end
+    }
+
+    frame.MouseEnter:Connect(function()
+        if not enabled then
+            TweenService:Create(frame, TweenInfo.new(0.1), {BackgroundColor3 = palette.hover}):Play()
+        end
+    end)
+
+    frame.MouseLeave:Connect(function()
+        if not enabled then
+            TweenService:Create(frame, TweenInfo.new(0.1), {BackgroundColor3 = palette.module}):Play()
+        end
+    end)
+
+    updateVisual()
+    if defaultEnabled and toggleCallback then
+        toggleCallback(true)
+    end
+
+    return frame
+end
+
+local function createRegisteredModule(category, name, defaultEnabled, toggleCallback, settingsDefinition)
+    moduleDefinitions[name] = settingsDefinition or {}
+    local frame = createModule(name, defaultEnabled, toggleCallback)
+    moduleRegistry[name] = {frame = frame, category = category}
+end
+
+createRegisteredModule("Combat", "KillAura", false, toggleKillAura, {
+    {type = "toggle", name = "Face Target", settingName = "faceTarget"},
+    {type = "slider", name = "FOV Radius", min = 50, max = 600, settingName = "fovRadius"},
+    {type = "slider", name = "Range", min = 5, max = 20, settingName = "range"},
+    {type = "slider", name = "Swing Speed", min = 1, max = 20, settingName = "swingSpeed"},
+    {type = "toggle", name = "Require Sword", settingName = "requireSword"},
+    {type = "toggle", name = "Attack Players", settingName = "attackPlayers"},
+    {type = "toggle", name = "Attack NPCs", settingName = "attackNPCs"}
+})
+createRegisteredModule("Combat", "Reach", false, toggleReach, {
+    {type = "dropdown", name = "Mode", options = {"Both", "Attribute", "Handle"}, settingName = "mode"},
+    {type = "slider", name = "Hit Range", min = 6, max = 20, settingName = "hitRange"},
+    {type = "slider", name = "Mine Range", min = 6, max = 20, settingName = "mineRange"},
+    {type = "slider", name = "Place Range", min = 6, max = 20, settingName = "placeRange"}
+})
+createRegisteredModule("Combat", "AimAssist", false, toggleAimAssist, {
+    {type = "slider", name = "Speed", min = 0.01, max = 0.5, settingName = "speed"},
+    {type = "slider", name = "Range", min = 10, max = 50, settingName = "range"}
+})
+createRegisteredModule("Combat", "AutoClicker", false, toggleAutoClicker, {
+    {type = "slider", name = "CPS", min = 1, max = 20, settingName = "cps"}
+})
+createRegisteredModule("Combat", "Velocity", false, toggleVelocity, {
+    {type = "slider", name = "Horizontal %", min = 0, max = 100, settingName = "horizontalReduction"},
+    {type = "slider", name = "Vertical %", min = 0, max = 100, settingName = "verticalReduction"}
+})
+
+createRegisteredModule("Blatant", "Speed", false, toggleSpeed, {
+    {type = "slider", name = "Speed", min = 16, max = 50, settingName = "speed"}
+})
+createRegisteredModule("Blatant", "Fly", false, toggleFly, {
+    {type = "slider", name = "Horizontal Speed", min = 10, max = 100, settingName = "horizontalSpeed"},
+    {type = "slider", name = "Vertical Speed", min = 10, max = 100, settingName = "verticalSpeed"},
+    {type = "toggle", name = "TP Down", settingName = "tpDownEnabled"},
+    {type = "slider", name = "TP Interval", min = 1, max = 5, settingName = "tpDownInterval"},
+    {type = "slider", name = "TP Return Delay", min = 0.05, max = 1, settingName = "tpDownReturnDelay"}
+})
+createRegisteredModule("Blatant", "LongJump", false, toggleLongJump, {
+    {type = "slider", name = "Speed", min = 50, max = 200, settingName = "speed"},
+    {type = "slider", name = "Duration", min = 0.5, max = 3, settingName = "duration"}
+})
+createRegisteredModule("Blatant", "Scaffold", false, toggleScaffold, {
+    {type = "toggle", name = "Allow Towering", settingName = "allowTowering"}
+})
+
+createRegisteredModule("Render", "ESP", false, toggleESP, {})
+createRegisteredModule("Render", "Tracers", false, toggleTracers, {
+    {type = "slider", name = "Transparency", min = 0, max = 1, settingName = "transparency"}
+})
+
+createRegisteredModule("Utility", "AutoToxic", false, nil, {
+    {type = "toggle", name = "Final Kill Message", settingName = "enabledFinalKill"},
+    {type = "textbox", name = "Final Kill Text", settingName = "finalKillMessage"},
+    {type = "toggle", name = "Bed Break Message", settingName = "enabledBedBreak"},
+    {type = "textbox", name = "Bed Break Text", settingName = "bedBreakMessage"},
+    {type = "toggle", name = "Game Win Message", settingName = "enabledGameWin"},
+    {type = "textbox", name = "Game Win Text", settingName = "gameWinMessage"}
+})
+createRegisteredModule("Utility", "NoFallDamage", false, toggleNoFallDamage, {
+    {type = "dropdown", name = "Method", options = {"Landing", "NegateVelocity", "Teleport", "DaoExploit"}, settingName = "method"}
+})
+createRegisteredModule("Utility", "AntiVoid", false, toggleAntiVoid, {
+    {type = "dropdown", name = "Method", options = {"Normal", "Bounce"}, settingName = "method"},
+    {type = "slider", name = "Bounce Power", min = 50, max = 200, settingName = "bouncePower"}
+})
+createRegisteredModule("Utility", "InfiniteJump", false, toggleInfiniteJump, {})
+
+createRegisteredModule("World", "Nuker", false, toggleNuker, {
+    {type = "toggle", name = "Mine Beds", settingName = "mineBeds"},
+    {type = "toggle", name = "Mine Iron", settingName = "mineIron"},
+    {type = "toggle", name = "Mine Gold", settingName = "mineGold"},
+    {type = "toggle", name = "Mine Diamond", settingName = "mineDiamond"},
+    {type = "toggle", name = "Mine Emerald", settingName = "mineEmerald"},
+    {type = "slider", name = "Radius", min = 5, max = 20, settingName = "mineRadius"}
+})
+
+local function applyModuleToggle(moduleName, enabled)
+    local handler = moduleHandlers[moduleName]
+    if handler then
+        handler(enabled)
+    end
+end
+
+searchBox:GetPropertyChangedSignal("Text"):Connect(refreshModuleFiltering)
+updateCategoryVisuals()
+refreshModuleFiltering()
+createSettingsForModule(nil)
+
+closeButton.MouseButton1Click:Connect(function()
+    for name, enabled in pairs(moduleStates) do
+        if enabled then
+            moduleStates[name] = false
+            applyModuleToggle(name, false)
+            if moduleUi[name] then
+                moduleUi[name].setEnabled(false)
+            end
+        end
+    end
+    screenGui:Destroy()
+end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if keybindListening then return end
 
+    if input.KeyCode == Enum.KeyCode.RightShift then
+        guiEnabled = not guiEnabled
+        screenGui.Enabled = guiEnabled
+        return
+    end
+
     for moduleName, key in pairs(moduleKeybinds) do
         if input.KeyCode == key then
             local enabled = not moduleStates[moduleName]
             moduleStates[moduleName] = enabled
-            for _, col in pairs(columns) do
-                local moduleFrame = col:FindFirstChild(moduleName .. "Module")
-                if moduleFrame then
-                    moduleFrame.BackgroundColor3 = enabled and Color3.fromRGB(140, 80, 255) or Color3.fromRGB(35, 35, 35)
-                end
+            if moduleUi[moduleName] then
+                moduleUi[moduleName].setEnabled(enabled)
             end
             applyModuleToggle(moduleName, enabled)
             break
         end
     end
-
-    if input.KeyCode == Enum.KeyCode.RightShift then
-        guiEnabled = not guiEnabled
-        screenGui.Enabled = guiEnabled
-    end
 end)
 
-
-lplr.CharacterAdded:Connect(function(char)
+lplr.CharacterAdded:Connect(function()
     for name, enabled in pairs(moduleStates) do
         if enabled then
             applyModuleToggle(name, true)
