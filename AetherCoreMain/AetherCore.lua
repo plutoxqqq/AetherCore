@@ -24,6 +24,11 @@ local guiEnabled = true
 local autoToxicEnabled = false
 local originalCharacterValues = {}
 local SETTINGS_STORE_KEY = "AetherCoreClientConfigV1"
+local AUTO_TOXIC_CONNECTION_KEY = "AetherCoreAutoToxicMessageConnection"
+local mouseMoveRelative = type(mousemoverel) == "function" and mousemoverel or nil
+local clipboardSetter = type(setclipboard) == "function" and setclipboard or nil
+local sharedEnvironmentGetter = type(getgenv) == "function" and getgenv or nil
+local autoToxicMessageConnection
 
 local function logError(scope, err)
     warn(string.format("[AetherCore][%s] %s", tostring(scope), tostring(err)))
@@ -1642,23 +1647,45 @@ end
 
 moduleSettings["Tracers"] = { transparency = 0.5 }
 
+local function clearTracerArtifacts()
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("Beam") and obj.Name == "TracerBeam" then
+            obj:Destroy()
+        elseif obj:IsA("Attachment") and (obj.Name == "TracerAttach0" or obj.Name == "TracerAttach1") then
+            obj:Destroy()
+        elseif obj:IsA("Part") and obj.Name == "TracerAnchorPart" then
+            obj:Destroy()
+        end
+    end
+end
+
 local function toggleTracers(enabled)
     cleanupModule("Tracers")
     if not enabled then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("Beam") and obj.Name == "TracerBeam" then obj:Destroy() end
-        end
+        clearTracerArtifacts()
         return
     end
+    clearTracerArtifacts()
 
     local function createTracerForModel(model)
         if not model or model:FindFirstChild("TracerBeam") then return end
         local head = model:FindFirstChild("Head") or model:FindFirstChild("HumanoidRootPart")
         if not head then return end
 
+        local anchorPart = Instance.new("Part")
+        anchorPart.Name = "TracerAnchorPart"
+        anchorPart.Size = Vector3.new(0.2, 0.2, 0.2)
+        anchorPart.Transparency = 1
+        anchorPart.Anchored = true
+        anchorPart.CanCollide = false
+        anchorPart.CanQuery = false
+        anchorPart.CanTouch = false
+        anchorPart.CFrame = camera.CFrame
+        anchorPart.Parent = Workspace
+
         local attach0 = Instance.new("Attachment")
         attach0.Name = "TracerAttach0"
-        attach0.Parent = camera
+        attach0.Parent = anchorPart
 
         local attach1 = Instance.new("Attachment")
         attach1.Name = "TracerAttach1"
@@ -1678,7 +1705,7 @@ local function toggleTracers(enabled)
             if not moduleStates["Tracers"] then return end
             if not attach0 or not attach0.Parent then return end
             if not camera then return end
-            attach0.WorldPosition = camera.CFrame.Position
+            anchorPart.CFrame = camera.CFrame
             beam.Transparency = NumberSequence.new(moduleSettings["Tracers"].transparency)
         end)
         addConnection("Tracers", updateConn)
@@ -1727,6 +1754,20 @@ moduleSettings["AutoToxic"] = {
 }
 
 local function setupAutoToxic()
+    local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
+    local existingConnection = sharedEnvironment and sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY]
+    if existingConnection then
+        pcall(function()
+            existingConnection:Disconnect()
+        end)
+        sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
+    end
+
+    if autoToxicMessageConnection then
+        autoToxicMessageConnection:Disconnect()
+        autoToxicMessageConnection = nil
+    end
+
     local lastMessageTime = 0
     local function sendToxicMessage(kind)
         if not autoToxicEnabled then
@@ -1749,7 +1790,7 @@ local function setupAutoToxic()
     end
 
     if TextChatService and TextChatService.MessageReceived then
-        TextChatService.MessageReceived:Connect(function(message)
+        autoToxicMessageConnection = TextChatService.MessageReceived:Connect(function(message)
             local text = (message.Text or ""):lower()
             local me = lplr.Name:lower()
             if text:find(me) and text:find("final kill") then
@@ -1760,6 +1801,9 @@ local function setupAutoToxic()
                 sendToxicMessage("win")
             end
         end)
+        if sharedEnvironment then
+            sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = autoToxicMessageConnection
+        end
     end
 end
 setupAutoToxic()
@@ -1972,6 +2016,14 @@ moduleSettings["AimAssist"] = {
 local function toggleAimAssist(enabled)
     cleanupModule("AimAssist")
     if not enabled then return end
+    if not mouseMoveRelative then
+        warn("[AetherCore][AimAssist] mousemoverel is unavailable in this executor; disabling AimAssist.")
+        moduleStates["AimAssist"] = false
+        if moduleUi["AimAssist"] then
+            moduleUi["AimAssist"].setEnabled(false)
+        end
+        return
+    end
 
     local connection = RunService.RenderStepped:Connect(function(deltaTime)
         if not moduleStates["AimAssist"] then return end
@@ -1988,7 +2040,7 @@ local function toggleAimAssist(enabled)
         local mousePos = Vector2.new(mouse.X, mouse.Y)
         local smoothing = math.clamp(settings.speed * deltaTime * 60, 0.01, 1)
         local delta = (targetPos - mousePos) * smoothing
-        mousemoverel(delta.X, delta.Y)
+        mouseMoveRelative(delta.X, delta.Y)
     end)
     addConnection("AimAssist", connection)
 end
@@ -2481,6 +2533,8 @@ local panelFrames = {}
 local moduleUi = {}
 local moduleDefinitions = {}
 local categoryPanels = {}
+local categoryToggleButtons = {}
+local categoryManualVisibility = {}
 local categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Legend"}
 local keybindListening = false
 local searchText = ""
@@ -2658,9 +2712,13 @@ statusTime.TextXAlignment = Enum.TextXAlignment.Right
 statusTime.Parent = statusPanel
 
 statusDiscord.MouseButton1Click:Connect(function()
-    safeCall("CopyDiscord", function()
-        setclipboard("https://discord.gg/mMMFRaUgDz")
-    end)
+    if clipboardSetter then
+        safeCall("CopyDiscord", function()
+            clipboardSetter("https://discord.gg/mMMFRaUgDz")
+        end)
+    else
+        warn("[AetherCore][CopyDiscord] setclipboard is unavailable in this executor.")
+    end
 end)
 
 local function updateStatusTime()
@@ -2717,15 +2775,15 @@ saveClientSettings = function()
             payload.categoryPositions[categoryName] = {x = panel.Position.X.Offset, y = panel.Position.Y.Offset}
         end
         local encoded = HttpService:JSONEncode(payload)
-        if getgenv then
-            getgenv()[SETTINGS_STORE_KEY] = encoded
+        if sharedEnvironmentGetter then
+            sharedEnvironmentGetter()[SETTINGS_STORE_KEY] = encoded
         end
     end)
 end
 
 local function loadClientSettings()
     safeCall("LoadClientSettings", function()
-        local raw = getgenv and getgenv()[SETTINGS_STORE_KEY]
+        local raw = sharedEnvironmentGetter and sharedEnvironmentGetter()[SETTINGS_STORE_KEY]
         if type(raw) ~= "string" then return end
         local decoded = HttpService:JSONDecode(raw)
         if type(decoded) ~= "table" then return end
@@ -2804,6 +2862,7 @@ local function createCategoryColumn(categoryName, index)
 
     makeDraggable(panel, top)
     categoryPanels[categoryName] = panel
+    categoryManualVisibility[categoryName] = panel.Visible
     panelFrames[categoryName] = panel
     return panel, list
 end
@@ -2836,10 +2895,13 @@ for _, category in ipairs(categoryData) do
     button.TextXAlignment = Enum.TextXAlignment.Left
     button.Parent = mainList
     addCorner(button, 6)
+    categoryToggleButtons[category.name] = button
 
     button.MouseButton1Click:Connect(function()
         local panel = categoryPanels[category.name]
-        panel.Visible = not panel.Visible
+        local newVisibility = not panel.Visible
+        panel.Visible = newVisibility
+        categoryManualVisibility[category.name] = newVisibility
         button.BackgroundColor3 = panel.Visible and palette.active or palette.panel
         if panel.Visible then
             local cameraInstance = Workspace.CurrentCamera
@@ -3323,8 +3385,25 @@ createRegisteredModule("World", "Nuker", false, toggleNuker, {
 })
 
 local function refreshSearch()
+    local visibleModulesByCategory = {}
     for _, ui in pairs(moduleUi) do
-        ui.setVisible(filterMatches(ui.name))
+        local moduleVisible = filterMatches(ui.name)
+        ui.setVisible(moduleVisible)
+        if moduleVisible then
+            visibleModulesByCategory[ui.category] = true
+        end
+    end
+
+    local searching = string.lower(searchText or "") ~= ""
+    for categoryName, panel in pairs(categoryPanels) do
+        local manuallyVisible = categoryManualVisibility[categoryName] == true
+        local hasVisibleModules = visibleModulesByCategory[categoryName] == true
+        panel.Visible = searching and manuallyVisible and hasVisibleModules or manuallyVisible
+
+        local categoryButton = categoryToggleButtons[categoryName]
+        if categoryButton then
+            categoryButton.BackgroundColor3 = panel.Visible and palette.active or palette.panel
+        end
     end
 end
 
@@ -3335,6 +3414,15 @@ end)
 refreshSearch()
 
 closeButton.MouseButton1Click:Connect(function()
+    if autoToxicMessageConnection then
+        autoToxicMessageConnection:Disconnect()
+        autoToxicMessageConnection = nil
+    end
+    local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
+    if sharedEnvironment and sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] then
+        sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
+    end
+
     for name, enabled in pairs(moduleStates) do
         if enabled then
             moduleStates[name] = false
