@@ -194,21 +194,77 @@ local function getBlockPlacementController()
     return resolvedBlockPlacementController
 end
 
-local function getHeldOrBackpackDaoTool()
-    local char = getCharacter(lplr)
-    if not char then return nil end
-    local heldTool = char:FindFirstChildOfClass("Tool")
-    if heldTool and heldTool.Name:lower():find("dao") then
-        return heldTool
+local function doesToolNameMatch(tool, query)
+    if not tool or not tool:IsA("Tool") or type(query) ~= "string" then
+        return false
     end
-    local backpack = lplr:FindFirstChildOfClass("Backpack")
-    if not backpack then return nil end
-    for _, tool in ipairs(backpack:GetChildren()) do
-        if tool:IsA("Tool") and tool.Name:lower():find("dao") then
-            return tool
+    local normalizedToolName = tool.Name:lower()
+    local normalizedQuery = query:lower()
+    return normalizedToolName == normalizedQuery or normalizedToolName:find(normalizedQuery, 1, true) ~= nil
+end
+
+local function findToolInContainer(container, query)
+    if not container then
+        return nil
+    end
+
+    local exactMatch = container:FindFirstChild(query)
+    if exactMatch and exactMatch:IsA("Tool") then
+        return exactMatch
+    end
+
+    for _, descendant in ipairs(container:GetChildren()) do
+        if descendant:IsA("Tool") and doesToolNameMatch(descendant, query) then
+            return descendant
         end
     end
+
     return nil
+end
+
+local function hasItem(itemName)
+    if type(itemName) ~= "string" or itemName == "" then
+        return false, nil
+    end
+
+    local char = getCharacter(lplr)
+    local backpack = lplr:FindFirstChildOfClass("Backpack")
+    local equippedTool = char and findToolInContainer(char, itemName) or nil
+    if equippedTool then
+        return true, equippedTool
+    end
+
+    local backpackTool = backpack and findToolInContainer(backpack, itemName) or nil
+    if backpackTool then
+        return true, backpackTool
+    end
+
+    return false, nil
+end
+
+local function getHeldOrBackpackDaoTool()
+    local _, tool = hasItem("dao")
+    return tool
+end
+
+local function equipToolIfNeeded(tool)
+    local char = getCharacter(lplr)
+    local hum = getHumanoid(char)
+    if not tool or not hum or not char then
+        return false
+    end
+    if tool.Parent == char then
+        return true
+    end
+    local equipped = safeCall("EquipTool", function()
+        hum:EquipTool(tool)
+        return true
+    end)
+    if equipped then
+        task.wait()
+        return true
+    end
+    return false
 end
 
 local function isDaoTool(tool)
@@ -221,17 +277,15 @@ end
 
 local function useDaoAbility()
     local char = getCharacter(lplr)
-    local hum = getHumanoid(char)
-    if not char or not hum then return false end
+    if not char then return false end
     local dao = getHeldOrBackpackDaoTool()
     if not dao then return false end
-    if dao.Parent ~= char then
-        hum:EquipTool(dao)
-        task.wait()
+    if not equipToolIfNeeded(dao) then
+        return false
     end
 
     local used = false
-    pcall(function()
+    safeCall("DaoActivate", function()
         dao:Activate()
         used = true
     end)
@@ -240,11 +294,11 @@ local function useDaoAbility()
     if remotes then
         for _, remote in ipairs(remotes:GetDescendants()) do
             if remote:IsA("RemoteEvent") and (remote.Name:lower():find("ability") or remote.Name:lower():find("use")) then
-                pcall(function()
+                safeCall("DaoRemoteString", function()
                     remote:FireServer(dao.Name)
                     used = true
                 end)
-                pcall(function()
+                safeCall("DaoRemoteTable", function()
                     remote:FireServer({item = dao.Name})
                     used = true
                 end)
@@ -487,16 +541,18 @@ local function cleanupModule(moduleName)
 end
 
 local function performPrimaryClick()
-    local clicked = false
-    pcall(function()
+    return safeCall("PrimaryClick", function()
         local mouseLocation = UserInputService:GetMouseLocation()
+        local currentCamera = Workspace.CurrentCamera or camera
+        if not currentCamera then
+            return false
+        end
         VirtualUser:CaptureController()
-        VirtualUser:Button1Down(mouseLocation, camera.CFrame)
+        VirtualUser:Button1Down(mouseLocation, currentCamera.CFrame)
         task.wait()
-        VirtualUser:Button1Up(mouseLocation, camera.CFrame)
-        clicked = true
-    end)
-    return clicked
+        VirtualUser:Button1Up(mouseLocation, currentCamera.CFrame)
+        return true
+    end) or false
 end
 
 
@@ -1458,13 +1514,18 @@ local function toggleFastBreak(enabled)
         local damageRemote = getDamageBlockRemote()
 
         for _ = 1, settings.attemptsPerPulse do
-            if blockController and type(blockController.breakBlock) == "function" then
-                pcall(function()
-                    blockController:breakBlock(targetPosition)
-                end)
+            if blockController then
+                for _, methodName in ipairs({"breakBlock", "BreakBlock", "breakBlockAt", "damageBlock"}) do
+                    local method = blockController[methodName]
+                    if type(method) == "function" then
+                        safeCall("FastBreakController_" .. methodName, function()
+                            method(blockController, targetPosition)
+                        end)
+                    end
+                end
             end
             if damageRemote then
-                pcall(function()
+                safeCall("FastBreakDamageRemote", function()
                     damageRemote:FireServer({
                         blockRef = {blockPosition = targetPosition},
                         hitPosition = targetPosition,
@@ -1472,10 +1533,7 @@ local function toggleFastBreak(enabled)
                     })
                 end)
             end
-            pcall(function()
-                VirtualUser:Button1Down(Vector2.new())
-                VirtualUser:Button1Up(Vector2.new())
-            end)
+            performPrimaryClick()
         end
     end))
 end
@@ -1731,11 +1789,13 @@ local function toggleNuker(enabled)
         if tick() - moduleSettings["Nuker"].lastScan < 0.3 then return end
         moduleSettings["Nuker"].lastScan = tick()
 
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then
-                local dist = (myHRP.Position - obj.Position).Magnitude
-                if dist > settings.mineRadius then continue end
+        local overlapParams = OverlapParams.new()
+        overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+        overlapParams.FilterDescendantsInstances = {myChar}
+        local nearbyParts = Workspace:GetPartBoundsInRadius(myHRP.Position, settings.mineRadius, overlapParams)
 
+        for _, obj in ipairs(nearbyParts) do
+            if obj:IsA("BasePart") then
                 local shouldMine = false
                 local nameLower = obj.Name:lower()
                 if settings.mineBeds and nameLower == "bed" and obj.Parent and obj.Parent.Name ~= lplr.Name then
@@ -1753,9 +1813,10 @@ local function toggleNuker(enabled)
                 if shouldMine then
                     local tool = myChar:FindFirstChildOfClass("Tool")
                     if tool then
-                        pcall(function()
+                        safeCall("NukerActivateTool", function()
                             tool:Activate()
                         end)
+                        performPrimaryClick()
                     end
                 end
             end
@@ -1794,16 +1855,12 @@ local function toggleScaffold(enabled)
         local hrp = getHRP(myChar)
         if not hrp then return end
 
-
-        local hasWool = false
         local woolName = getTeamWoolName()
-        for _, tool in ipairs(myChar:GetChildren()) do
-            if tool:IsA("Tool") and tool.Name:lower():find("wool") then
-                hasWool = true
-                break
-            end
-        end
+        local hasWool, woolTool = hasItem("wool")
         if not hasWool then return end
+        if woolTool and woolTool.Parent ~= myChar then
+            equipToolIfNeeded(woolTool)
+        end
 
         local downParams = RaycastParams.new()
         downParams.FilterType = Enum.RaycastFilterType.Exclude
@@ -1852,15 +1909,15 @@ local function toggleScaffold(enabled)
             for _, fnName in ipairs({"placeBlock", "PlaceBlock", "placeBlockAt", "placeBlockRequest"}) do
                 local fn = blockController[fnName]
                 if type(fn) == "function" then
-                    pcall(function()
+                    safeCall("Scaffold_" .. fnName .. "_CFrame", function()
                         fn(blockController, CFrame.new(placePos))
                         didPlace = true
                     end)
-                    pcall(function()
+                    safeCall("Scaffold_" .. fnName .. "_Vector3", function()
                         fn(blockController, placePos)
                         didPlace = true
                     end)
-                    pcall(function()
+                    safeCall("Scaffold_" .. fnName .. "_ItemAndCFrame", function()
                         fn(blockController, woolName, CFrame.new(placePos))
                         didPlace = true
                     end)
@@ -1873,7 +1930,7 @@ local function toggleScaffold(enabled)
         end
 
         if BedwarsShopController then
-            pcall(function()
+            safeCall("ScaffoldShopFallback", function()
                 local shopController = require(BedwarsShopController)
                 local blockItem = shopController.GetItem and shopController:GetItem(woolName)
                 if blockItem and shopController.PlaceBlock then
@@ -1887,14 +1944,14 @@ local function toggleScaffold(enabled)
             if remotes then
                 for _, remote in ipairs(remotes:GetDescendants()) do
                     if remote:IsA("RemoteEvent") and remote.Name:lower():find("place") and remote.Name:lower():find("block") then
-                        pcall(function()
+                        safeCall("ScaffoldRemoteTable", function()
                             remote:FireServer({
                                 position = placePos,
                                 blockType = woolName
                             })
                             performPrimaryClick()
                         end)
-                        pcall(function()
+                        safeCall("ScaffoldRemoteArgs", function()
                             remote:FireServer(placePos, woolName)
                             performPrimaryClick()
                         end)
