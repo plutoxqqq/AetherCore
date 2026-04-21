@@ -20,6 +20,8 @@ local moduleStates = {}
 local moduleConnections = {}
 local moduleKeybinds = {}
 local moduleSettings = {}
+local moduleUi = {}
+local moduleHandlers = {}
 local guiEnabled = true
 local autoToxicEnabled = false
 local originalCharacterValues = {}
@@ -29,6 +31,16 @@ local mouseMoveRelative = type(mousemoverel) == "function" and mousemoverel or n
 local clipboardSetter = type(setclipboard) == "function" and setclipboard or nil
 local sharedEnvironmentGetter = type(getgenv) == "function" and getgenv or nil
 local autoToxicMessageConnection
+local moduleConflictMap = {
+    Speed = {"Fly", "VerticalFly", "LongJump"},
+    Fly = {"Speed", "VerticalFly", "LongJump", "AntiVoid"},
+    VerticalFly = {"Speed", "Fly", "LongJump", "AntiVoid"},
+    LongJump = {"Speed", "Fly", "VerticalFly", "Scaffold", "NoFallDamage"},
+    Scaffold = {"LongJump"},
+    AntiVoid = {"Fly", "VerticalFly"},
+    KillAura = {"AimAssist"},
+    AimAssist = {"KillAura"}
+}
 
 local function logError(scope, err)
     warn(string.format("[AetherCore][%s] %s", tostring(scope), tostring(err)))
@@ -245,6 +257,58 @@ local function hasItem(itemName)
     end
 
     return false, nil
+end
+
+local function getHeldOrBackpackToolByKeywords(keywords)
+    if type(keywords) ~= "table" or #keywords == 0 then
+        return nil
+    end
+
+    local function matches(tool)
+        if not tool or not tool:IsA("Tool") then
+            return false
+        end
+        local loweredName = tool.Name:lower()
+        for _, keyword in ipairs(keywords) do
+            local loweredKeyword = tostring(keyword):lower()
+            if loweredKeyword ~= "" and loweredName:find(loweredKeyword, 1, true) then
+                return true
+            end
+        end
+        return false
+    end
+
+    local char = getCharacter(lplr)
+    if char then
+        local heldTool = char:FindFirstChildOfClass("Tool")
+        if matches(heldTool) then
+            return heldTool
+        end
+        for _, tool in ipairs(char:GetChildren()) do
+            if matches(tool) then
+                return tool
+            end
+        end
+    end
+
+    local backpack = lplr:FindFirstChildOfClass("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if matches(tool) then
+                return tool
+            end
+        end
+    end
+
+    return nil
+end
+
+local function getHeldOrBackpackBlockTool()
+    return getHeldOrBackpackToolByKeywords({"wool", "clay", "stone", "plank", "obsidian", "concrete", "glass"})
+end
+
+local function getHeldOrBackpackVoidDropTool()
+    return getHeldOrBackpackToolByKeywords({"diamond", "emerald", "iron", "gold"})
 end
 
 local function getHeldOrBackpackDaoTool()
@@ -542,6 +606,25 @@ local function cleanupModule(moduleName)
             pcall(function() conn:Disconnect() end)
         end
         moduleConnections[moduleName] = nil
+    end
+end
+
+local function disableConflictingModules(moduleName)
+    local conflicts = moduleConflictMap[moduleName]
+    if not conflicts then
+        return
+    end
+
+    for _, conflictName in ipairs(conflicts) do
+        if moduleStates[conflictName] then
+            moduleStates[conflictName] = false
+            if moduleHandlers[conflictName] then
+                safeCall(conflictName .. "ConflictDisable", moduleHandlers[conflictName], false)
+            end
+            if moduleUi[conflictName] then
+                moduleUi[conflictName].setEnabled(false)
+            end
+        end
     end
 end
 
@@ -859,7 +942,8 @@ moduleSettings["KillAura"] = {
 
     fovRadius = 360,
     attackPlayers = true,
-    attackNPCs = false
+    attackNPCs = false,
+    fallbackToClickSimulation = false
 }
 
 local killAuraLastSwing = 0
@@ -1009,7 +1093,10 @@ local function toggleKillAura(enabled)
             attacked = attackTargetWithBedwarsApi(lockedTarget)
         end
 
-        local clicked = performPrimaryClick()
+        local clicked = false
+        if not attacked and settings.fallbackToClickSimulation then
+            clicked = performPrimaryClick()
+        end
         if attacked or clicked then
             killAuraLastSwing = now
         end
@@ -1575,7 +1662,14 @@ local function toggleAutoVoidDrop(enabled)
         settings.dropRemote = dropRemote
         if not dropRemote then return end
 
-        for _, resourceName in ipairs({"diamond", "iron", "emerald"}) do
+        local dropTargets = {"diamond", "iron", "emerald", "gold"}
+        local dropTool = getHeldOrBackpackVoidDropTool()
+        if dropTool then
+            table.insert(dropTargets, dropTool.Name)
+            equipToolIfNeeded(dropTool)
+        end
+
+        for _, resourceName in ipairs(dropTargets) do
             pcall(function()
                 dropRemote:FireServer({item = resourceName, amount = 999})
             end)
@@ -1599,8 +1693,31 @@ local function toggleESP(enabled)
         return
     end
 
+    local function removeESPFromModel(model)
+        if not model then return end
+        local old = model:FindFirstChild("ESP_Highlight")
+        if old then
+            old:Destroy()
+        end
+    end
+
+    local function shouldHighlightModel(model)
+        if not model then
+            return false
+        end
+        local hum = model:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then
+            return false
+        end
+        return true
+    end
+
     local function addESPtoModel(model)
-        if not model or model:FindFirstChild("ESP_Highlight") then return end
+        if not shouldHighlightModel(model) then
+            removeESPFromModel(model)
+            return
+        end
+        if model:FindFirstChild("ESP_Highlight") then return end
         local highlight = Instance.new("Highlight")
         highlight.Name = "ESP_Highlight"
         highlight.FillColor = Color3.fromRGB(255, 0, 0)
@@ -1630,12 +1747,26 @@ local function toggleESP(enabled)
                     if not isPlayerChar then
                         addESPtoModel(model)
                     end
+                else
+                    removeESPFromModel(model)
                 end
             end
         end
     end
 
     scanAndAddESP()
+    addConnection("ESP", Players.PlayerAdded:Connect(function(player)
+        addConnection("ESP", player.CharacterAdded:Connect(function(character)
+            if moduleStates["ESP"] then
+                addESPtoModel(character)
+            end
+        end))
+    end))
+    addConnection("ESP", Players.PlayerRemoving:Connect(function(player)
+        if player.Character then
+            removeESPFromModel(player.Character)
+        end
+    end))
     local lastScan = 0
     addConnection("ESP", RunService.Heartbeat:Connect(function()
         if tick() - lastScan < 0.45 then return end
@@ -1900,10 +2031,12 @@ local function toggleScaffold(enabled)
         if not hrp then return end
 
         local woolName = getTeamWoolName()
-        local hasWool, woolTool = hasItem("wool")
-        if not hasWool then return end
-        if woolTool and woolTool.Parent ~= myChar then
-            equipToolIfNeeded(woolTool)
+        local blockTool = getHeldOrBackpackBlockTool()
+        if not blockTool then
+            return
+        end
+        if blockTool.Parent ~= myChar then
+            equipToolIfNeeded(blockTool)
         end
 
         local downParams = RaycastParams.new()
@@ -1962,7 +2095,7 @@ local function toggleScaffold(enabled)
                         didPlace = true
                     end)
                     safeCall("Scaffold_" .. fnName .. "_ItemAndCFrame", function()
-                        fn(blockController, woolName, CFrame.new(placePos))
+                        fn(blockController, blockTool.Name or woolName, CFrame.new(placePos))
                         didPlace = true
                     end)
                 end
@@ -1991,12 +2124,12 @@ local function toggleScaffold(enabled)
                         safeCall("ScaffoldRemoteTable", function()
                             remote:FireServer({
                                 position = placePos,
-                                blockType = woolName
+                                blockType = blockTool.Name or woolName
                             })
                             performPrimaryClick()
                         end)
                         safeCall("ScaffoldRemoteArgs", function()
-                            remote:FireServer(placePos, woolName)
+                            remote:FireServer(placePos, blockTool.Name or woolName)
                             performPrimaryClick()
                         end)
                     end
@@ -2195,6 +2328,9 @@ local function toggleLongJump(enabled)
         local heldTool = char:FindFirstChildOfClass("Tool")
         if not isDaoTool(heldTool) then
             local daoTool = getHeldOrBackpackDaoTool()
+            if not daoTool then
+                daoTool = getHeldOrBackpackToolByKeywords({"dash", "jump", "leap"})
+            end
             if daoTool and daoTool.Parent ~= char then
                 hum:EquipTool(daoTool)
                 heldTool = daoTool
@@ -2530,7 +2666,6 @@ screenGui.IgnoreGuiInset = true
 screenGui.Parent = lplr:WaitForChild("PlayerGui")
 
 local panelFrames = {}
-local moduleUi = {}
 local moduleDefinitions = {}
 local categoryPanels = {}
 local categoryToggleButtons = {}
@@ -2542,7 +2677,7 @@ local settingsOpenByModule = {}
 local loadedCategoryPositions = {}
 local saveClientSettings
 
-local moduleHandlers = {
+moduleHandlers = {
     KillAura = toggleKillAura,
     Reach = toggleReach,
     AimAssist = toggleAimAssist,
@@ -3204,6 +3339,9 @@ local function createModule(category, moduleName, defaultEnabled, toggleCallback
     card.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             enabled = not enabled
+            if enabled then
+                disableConflictingModules(moduleName)
+            end
             moduleStates[moduleName] = enabled
             if moduleName == "AutoToxic" then
                 autoToxicEnabled = enabled
@@ -3299,6 +3437,7 @@ createRegisteredModule("Combat", "KillAura", false, toggleKillAura, {
     {type = "slider", name = "Range", min = 5, max = 20, settingName = "range"},
     {type = "slider", name = "Swing Speed", min = 1, max = 20, settingName = "swingSpeed"},
     {type = "toggle", name = "Require Sword", settingName = "requireSword"},
+    {type = "toggle", name = "Click Simulation", settingName = "fallbackToClickSimulation"},
     {type = "toggle", name = "Attack Players", settingName = "attackPlayers"},
     {type = "toggle", name = "Attack NPCs", settingName = "attackNPCs"}
 })
@@ -3449,6 +3588,9 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     for moduleName, key in pairs(moduleKeybinds) do
         if input.KeyCode == key then
             local enabled = not moduleStates[moduleName]
+            if enabled then
+                disableConflictingModules(moduleName)
+            end
             moduleStates[moduleName] = enabled
             if moduleUi[moduleName] then
                 moduleUi[moduleName].setEnabled(enabled)
