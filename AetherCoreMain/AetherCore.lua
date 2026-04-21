@@ -39,7 +39,8 @@ local moduleConflictMap = {
     Scaffold = {"LongJump"},
     AntiVoid = {"Fly", "VerticalFly"},
     KillAura = {"AimAssist"},
-    AimAssist = {"KillAura"}
+    AimAssist = {"KillAura", "Aimbot"},
+    Aimbot = {"KillAura", "AimAssist"}
 }
 
 local function logError(scope, err)
@@ -487,6 +488,44 @@ local function getNearestEnemy(range, ignoreTeam)
     return nearest, shortest
 end
 
+local function getPlayerBedwarsTeamId(player)
+    if not player then
+        return nil
+    end
+    local directTeam = player:GetAttribute("Team")
+        or player:GetAttribute("team")
+        or player:GetAttribute("BedwarsTeam")
+        or player:GetAttribute("bedwarsTeam")
+    if directTeam ~= nil then
+        return tostring(directTeam)
+    end
+
+    local character = player.Character
+    if character then
+        local charTeam = character:GetAttribute("Team")
+            or character:GetAttribute("team")
+            or character:GetAttribute("BedwarsTeam")
+            or character:GetAttribute("bedwarsTeam")
+        if charTeam ~= nil then
+            return tostring(charTeam)
+        end
+    end
+
+    return nil
+end
+
+local function arePlayersTeammates(playerA, playerB)
+    if not playerA or not playerB then
+        return false
+    end
+    if playerA.Team ~= nil and playerB.Team ~= nil and playerA.Team == playerB.Team then
+        return true
+    end
+    local teamA = getPlayerBedwarsTeamId(playerA)
+    local teamB = getPlayerBedwarsTeamId(playerB)
+    return teamA ~= nil and teamB ~= nil and teamA == teamB
+end
+
 local function attackTargetWithBedwarsApi(targetCharacter)
     if not targetCharacter then
         return false
@@ -607,8 +646,31 @@ local function cleanupModule(moduleName)
 end
 
 local function disableConflictingModules(moduleName)
-    local _ = moduleName
-    return
+    local conflicts = moduleConflictMap[moduleName]
+    if type(conflicts) ~= "table" then
+        return
+    end
+    for _, conflictName in ipairs(conflicts) do
+        if moduleStates[conflictName] then
+            moduleStates[conflictName] = false
+            if moduleHandlers[conflictName] then
+                safeCall(conflictName .. "ConflictDisable", moduleHandlers[conflictName], false)
+            end
+            if moduleUi[conflictName] then
+                moduleUi[conflictName].setEnabled(false)
+            end
+        end
+    end
+end
+
+local function setModuleEnabled(moduleName, enabled)
+    moduleStates[moduleName] = enabled
+    if moduleUi[moduleName] then
+        moduleUi[moduleName].setEnabled(enabled)
+    end
+    if moduleHandlers[moduleName] then
+        safeCall(moduleName .. "ProgrammaticToggle", moduleHandlers[moduleName], enabled)
+    end
 end
 
 local function performPrimaryClick()
@@ -1319,6 +1381,154 @@ local function toggleSpeed(enabled)
         if not moduleStates["Speed"] then return end
         applySpeed()
     end))
+end
+
+moduleSettings["Step"] = {
+    maxHeight = 6,
+    forwardCheckDistance = 2.6
+}
+
+local function toggleStep(enabled)
+    cleanupModule("Step")
+    if not enabled then
+        local char = getCharacter(lplr)
+        local hum = getHumanoid(char)
+        if hum then
+            hum.StepHeight = 2
+        end
+        return
+    end
+
+    addConnection("Step", RunService.Heartbeat:Connect(function()
+        if not moduleStates["Step"] then return end
+        local char = getCharacter(lplr)
+        local hum = getHumanoid(char)
+        local hrp = getHRP(char)
+        if not hum or not hrp or hum.Health <= 0 then return end
+
+        local settings = moduleSettings["Step"]
+        hum.StepHeight = math.clamp(settings.maxHeight or 6, 2, 14)
+        if hum.MoveDirection.Magnitude < 0.05 then
+            return
+        end
+
+        local moveDirection = hum.MoveDirection.Unit
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        rayParams.FilterDescendantsInstances = {char}
+        rayParams.IgnoreWater = true
+
+        local forwardDistance = math.clamp(settings.forwardCheckDistance or 2.6, 1.5, 5)
+        local basePosition = hrp.Position
+        local wallHit = Workspace:Raycast(basePosition + Vector3.new(0, 1.2, 0), moveDirection * forwardDistance, rayParams)
+        if not wallHit then
+            return
+        end
+
+        local maxHeight = math.clamp(settings.maxHeight or 6, 2, 14)
+        local topCastOrigin = wallHit.Position + Vector3.new(0, maxHeight + 2.5, 0)
+        local topHit = Workspace:Raycast(topCastOrigin, Vector3.new(0, -(maxHeight + 4.5), 0), rayParams)
+        if not topHit then
+            return
+        end
+
+        local targetY = topHit.Position.Y + 3
+        local verticalDelta = targetY - hrp.Position.Y
+        if verticalDelta > 0.6 and verticalDelta <= maxHeight + 0.5 then
+            hrp.CFrame = CFrame.new(
+                hrp.Position.X + (moveDirection.X * 1.2),
+                targetY,
+                hrp.Position.Z + (moveDirection.Z * 1.2)
+            )
+        end
+    end))
+end
+
+moduleSettings["SafeWalk"] = {
+    mode = "Normal",
+    maxDrop = 4.5
+}
+
+local function toggleSafeWalk(enabled)
+    cleanupModule("SafeWalk")
+    if not enabled then return end
+
+    local lastSafePosition
+    local lastGroundedAt = 0
+
+    addConnection("SafeWalk", RunService.Heartbeat:Connect(function()
+        if not moduleStates["SafeWalk"] then return end
+        local char = getCharacter(lplr)
+        local hum = getHumanoid(char)
+        local hrp = getHRP(char)
+        if not hum or not hrp or hum.Health <= 0 then return end
+
+        local settings = moduleSettings["SafeWalk"]
+        local moveDirection = hum.MoveDirection
+        local horizontalSpeed = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z).Magnitude
+        if moveDirection.Magnitude < 0.02 and horizontalSpeed < 0.2 then
+            return
+        end
+
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        rayParams.FilterDescendantsInstances = {char}
+        rayParams.IgnoreWater = true
+
+        local footRay = Workspace:Raycast(hrp.Position, Vector3.new(0, -6, 0), rayParams)
+        if footRay then
+            lastSafePosition = hrp.Position
+            lastGroundedAt = tick()
+        end
+
+        local probeDirection = moveDirection.Magnitude > 0 and moveDirection.Unit or Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z).Unit
+        local probeDistance = 1.9
+        local probeOrigin = hrp.Position + (probeDirection * probeDistance)
+        local edgeRay = Workspace:Raycast(probeOrigin + Vector3.new(0, 0.5, 0), Vector3.new(0, -math.max(settings.maxDrop or 4.5, 2), 0), rayParams)
+
+        if edgeRay then
+            return
+        end
+
+        if settings.mode == "Normal" then
+            if lastSafePosition then
+                hrp.CFrame = CFrame.new(lastSafePosition.X, hrp.Position.Y, lastSafePosition.Z)
+                hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
+            end
+        else
+            local shouldRescue = tick() - lastGroundedAt > 0.05 or hrp.AssemblyLinearVelocity.Y < -8
+            if shouldRescue and lastSafePosition then
+                hrp.CFrame = CFrame.new(lastSafePosition + Vector3.new(0, 1.5, 0))
+                hrp.AssemblyLinearVelocity = Vector3.zero
+            end
+        end
+    end))
+end
+
+moduleSettings["HighJump"] = {
+    boost = 40
+}
+
+local function toggleHighJump(enabled)
+    cleanupModule("HighJump")
+    if not enabled then
+        return
+    end
+
+    local char = getCharacter(lplr)
+    local hum = getHumanoid(char)
+    local hrp = getHRP(char)
+    if not hum or not hrp then
+        setModuleEnabled("HighJump", false)
+        return
+    end
+
+    local boost = math.clamp(moduleSettings["HighJump"].boost or 40, 10, 180)
+    hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, boost, hrp.AssemblyLinearVelocity.Z)
+    task.delay(0.08, function()
+        setModuleEnabled("HighJump", false)
+    end)
 end
 
 
@@ -2201,6 +2411,140 @@ local function toggleScaffold(enabled)
 end
 
 
+moduleSettings["Aimbot"] = {
+    enabled = true,
+    fov = 160,
+    smoothness = 0.55,
+    predictionStrength = 1,
+    arrowSpeed = 185,
+    gravity = Workspace.Gravity,
+    wallCheck = true,
+    teamCheck = true,
+    targetPart = "Head",
+    maxDistance = 260,
+    snapStrength = 1
+}
+
+local function getAimbotTargetPart(character, requestedPart)
+    if not character then
+        return nil
+    end
+    if requestedPart == "Head" then
+        return character:FindFirstChild("Head") or getHRP(character)
+    end
+    if requestedPart == "HumanoidRootPart" then
+        return getHRP(character) or character:FindFirstChild("Head")
+    end
+    return character:FindFirstChild(requestedPart) or character:FindFirstChild("Head") or getHRP(character)
+end
+
+local function getProjectileVelocityEstimate(targetCharacter)
+    local hrp = getHRP(targetCharacter)
+    if not hrp then
+        return Vector3.zero
+    end
+    local velocity = hrp.AssemblyLinearVelocity
+    local hum = getHumanoid(targetCharacter)
+    if hum then
+        velocity += hum.MoveDirection * hum.WalkSpeed
+    end
+    return velocity
+end
+
+local function solveProjectileLead(origin, targetPosition, targetVelocity, projectileSpeed, gravity, predictionStrength)
+    projectileSpeed = math.max(projectileSpeed or 185, 1)
+    local gravityVector = Vector3.new(0, -(gravity or Workspace.Gravity), 0)
+    local estimatedTime = math.clamp((targetPosition - origin).Magnitude / projectileSpeed, 0.05, 4)
+    local strength = math.clamp(predictionStrength or 1, 0, 2)
+
+    for _ = 1, 4 do
+        local futurePosition = targetPosition + (targetVelocity * estimatedTime * strength)
+        local displacement = futurePosition - origin
+        estimatedTime = math.clamp(displacement.Magnitude / projectileSpeed, 0.05, 4)
+    end
+
+    local finalFuture = targetPosition + (targetVelocity * estimatedTime * strength)
+    local gravityCompensation = gravityVector * (0.5 * estimatedTime * estimatedTime)
+    return finalFuture - gravityCompensation
+end
+
+local function isVisibleForAimbot(targetCharacter)
+    return hasLineOfSight(targetCharacter)
+end
+
+local function toggleAimbot(enabled)
+    cleanupModule("Aimbot")
+    if not enabled then return end
+
+    addConnection("Aimbot", RunService.RenderStepped:Connect(function(deltaTime)
+        if not moduleStates["Aimbot"] then return end
+        local myChar = getCharacter(lplr)
+        local myHRP = getHRP(myChar)
+        if not myChar or not myHRP then return end
+        local settings = moduleSettings["Aimbot"]
+
+        local bestCharacter
+        local bestScreenDistance = math.huge
+        local viewportCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= lplr then
+                if settings.teamCheck and arePlayersTeammates(lplr, player) then
+                    continue
+                end
+                local character = getCharacter(player)
+                local hum = getHumanoid(character)
+                local targetPart = getAimbotTargetPart(character, settings.targetPart)
+                if hum and hum.Health > 0 and targetPart then
+                    local distance = (targetPart.Position - myHRP.Position).Magnitude
+                    if distance <= (settings.maxDistance or 260) then
+                        if not settings.wallCheck or isVisibleForAimbot(character) then
+                            local screenPosition, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+                            if onScreen then
+                                local pixelDistance = (Vector2.new(screenPosition.X, screenPosition.Y) - viewportCenter).Magnitude
+                                if pixelDistance <= (settings.fov or 160) and pixelDistance < bestScreenDistance then
+                                    bestCharacter = character
+                                    bestScreenDistance = pixelDistance
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        if not bestCharacter then
+            return
+        end
+
+        local targetPart = getAimbotTargetPart(bestCharacter, settings.targetPart)
+        if not targetPart then
+            return
+        end
+        local targetVelocity = getProjectileVelocityEstimate(bestCharacter)
+        local predictedPosition = solveProjectileLead(
+            camera.CFrame.Position,
+            targetPart.Position,
+            targetVelocity,
+            settings.arrowSpeed,
+            settings.gravity,
+            settings.predictionStrength
+        )
+
+        local desiredDirection = (predictedPosition - camera.CFrame.Position)
+        if desiredDirection.Magnitude <= 0.01 then
+            return
+        end
+        desiredDirection = desiredDirection.Unit
+
+        local lookAtCFrame = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + desiredDirection)
+        local smoothness = math.clamp(settings.smoothness or 0.55, 0.01, 1)
+        local snap = math.clamp(settings.snapStrength or 1, 0.05, 2)
+        local alpha = math.clamp((smoothness * snap) * (deltaTime * 60), 0.05, 1)
+        camera.CFrame = camera.CFrame:Lerp(lookAtCFrame, alpha)
+    end))
+end
+
 moduleSettings["AimAssist"] = {
     speed = 0.1,
     range = 30
@@ -2740,9 +3084,13 @@ moduleHandlers = {
     AutoClicker = toggleAutoClicker,
     Velocity = toggleVelocity,
     Speed = toggleSpeed,
+    Step = toggleStep,
+    SafeWalk = toggleSafeWalk,
+    HighJump = toggleHighJump,
     Fly = toggleFly,
     VerticalFly = toggleVerticalFly,
     LongJump = toggleLongJump,
+    Aimbot = toggleAimbot,
     Scaffold = toggleScaffold,
     ESP = toggleESP,
     Tracers = toggleTracers,
@@ -2936,6 +3284,17 @@ local function validateModuleSettings()
     clampSetting("KillAura", "swingSpeed", moduleSettings.KillAura.swingSpeed, 1, 20, 18)
     clampSetting("AutoClicker", "cps", moduleSettings.AutoClicker.cps, 1, 20, 10)
     clampSetting("Speed", "speed", moduleSettings.Speed.speed, 16, 50, 24)
+    clampSetting("Step", "maxHeight", moduleSettings.Step.maxHeight, 2, 14, 6)
+    clampSetting("Step", "forwardCheckDistance", moduleSettings.Step.forwardCheckDistance, 1.5, 5, 2.6)
+    clampSetting("SafeWalk", "maxDrop", moduleSettings.SafeWalk.maxDrop, 2, 10, 4.5)
+    clampSetting("HighJump", "boost", moduleSettings.HighJump.boost, 10, 180, 40)
+    clampSetting("Aimbot", "fov", moduleSettings.Aimbot.fov, 20, 450, 160)
+    clampSetting("Aimbot", "smoothness", moduleSettings.Aimbot.smoothness, 0.01, 1, 0.55)
+    clampSetting("Aimbot", "predictionStrength", moduleSettings.Aimbot.predictionStrength, 0, 2, 1)
+    clampSetting("Aimbot", "arrowSpeed", moduleSettings.Aimbot.arrowSpeed, 40, 350, 185)
+    clampSetting("Aimbot", "gravity", moduleSettings.Aimbot.gravity, 40, 350, Workspace.Gravity)
+    clampSetting("Aimbot", "maxDistance", moduleSettings.Aimbot.maxDistance, 60, 400, 260)
+    clampSetting("Aimbot", "snapStrength", moduleSettings.Aimbot.snapStrength, 0.05, 2, 1)
     clampSetting("Reach", "hitRange", moduleSettings.Reach.hitRange, 6, 20, 12)
     clampSetting("Reach", "mineRange", moduleSettings.Reach.mineRange, 6, 20, 12)
     clampSetting("Reach", "placeRange", moduleSettings.Reach.placeRange, 6, 20, 12)
@@ -3507,6 +3866,18 @@ createRegisteredModule("Combat", "AimAssist", false, toggleAimAssist, {
     {type = "slider", name = "Speed", min = 0.01, max = 0.5, settingName = "speed"},
     {type = "slider", name = "Range", min = 10, max = 50, settingName = "range"}
 })
+createRegisteredModule("Combat", "Aimbot", false, toggleAimbot, {
+    {type = "slider", name = "FOV", min = 20, max = 450, settingName = "fov"},
+    {type = "slider", name = "Smoothness", min = 0.01, max = 1, settingName = "smoothness"},
+    {type = "slider", name = "Prediction", min = 0, max = 2, settingName = "predictionStrength"},
+    {type = "slider", name = "Arrow Speed", min = 40, max = 350, settingName = "arrowSpeed"},
+    {type = "slider", name = "Gravity", min = 40, max = 350, settingName = "gravity"},
+    {type = "slider", name = "Snap Strength", min = 0.05, max = 2, settingName = "snapStrength"},
+    {type = "slider", name = "Max Distance", min = 60, max = 400, settingName = "maxDistance"},
+    {type = "dropdown", name = "Target Part", options = {"Head", "HumanoidRootPart"}, settingName = "targetPart"},
+    {type = "toggle", name = "Wall Check", settingName = "wallCheck"},
+    {type = "toggle", name = "Team Check", settingName = "teamCheck"}
+})
 createRegisteredModule("Combat", "AutoClicker", false, toggleAutoClicker, {
     {type = "slider", name = "CPS", min = 1, max = 20, settingName = "cps"}
 })
@@ -3516,6 +3887,17 @@ createRegisteredModule("Combat", "Velocity", false, toggleVelocity, {
 })
 createRegisteredModule("Blatant", "Speed", false, toggleSpeed, {
     {type = "slider", name = "Speed", min = 16, max = 50, settingName = "speed"}
+})
+createRegisteredModule("Blatant", "Step", false, toggleStep, {
+    {type = "slider", name = "Max Height", min = 2, max = 14, settingName = "maxHeight"},
+    {type = "slider", name = "Forward Check", min = 1.5, max = 5, settingName = "forwardCheckDistance"}
+})
+createRegisteredModule("Blatant", "SafeWalk", false, toggleSafeWalk, {
+    {type = "dropdown", name = "Mode", options = {"Normal", "TP"}, settingName = "mode"},
+    {type = "slider", name = "Max Drop", min = 2, max = 10, settingName = "maxDrop"}
+})
+createRegisteredModule("Blatant", "HighJump", false, toggleHighJump, {
+    {type = "slider", name = "Boost", min = 10, max = 180, settingName = "boost"}
 })
 createRegisteredModule("Blatant", "Fly", false, toggleFly, {
     {type = "slider", name = "Horizontal Speed", min = 10, max = 100, settingName = "horizontalSpeed"},
