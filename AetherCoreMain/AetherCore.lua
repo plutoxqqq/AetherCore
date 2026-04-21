@@ -488,39 +488,36 @@ local function getNearestEnemy(range, ignoreTeam)
 end
 
 local function attackTargetWithBedwarsApi(targetCharacter)
-    local char = getCharacter(lplr)
-    local tool = char and char:FindFirstChildOfClass("Tool")
+    if not targetCharacter then
+        return false
+    end
+
     local controller = getCombatController()
-    local attacked = false
-
-    if controller then
-        local targetHum = getHumanoid(targetCharacter)
-        local targetRoot = getHRP(targetCharacter)
-        for _, fnName in ipairs({"attackEntity", "AttackEntity", "swingSwordAtMouse", "swingSword"}) do
-            local fn = controller[fnName]
-            if type(fn) == "function" then
-                pcall(function()
-                    if fnName == "swingSwordAtMouse" then
-                        fn(controller)
-                    elseif fnName == "attackEntity" or fnName == "AttackEntity" then
-                        fn(controller, targetHum or targetCharacter, targetRoot and targetRoot.Position or nil)
-                    else
-                        fn(controller, targetHum or targetCharacter)
-                    end
-                    attacked = true
-                end)
-            end
-        end
+    if not controller then
+        return false
     end
 
-    if tool and not attacked then
-        pcall(function()
-            tool:Activate()
-            attacked = true
-        end)
+    local targetHum = getHumanoid(targetCharacter)
+    local targetRoot = getHRP(targetCharacter)
+    if not targetHum or not targetRoot then
+        return false
     end
 
-    return attacked
+    if type(controller.attackEntity) == "function" then
+        return safeCall("KillAura_attackEntity", function()
+            controller.attackEntity(controller, targetHum, targetRoot.Position)
+            return true
+        end) or false
+    end
+
+    if type(controller.AttackEntity) == "function" then
+        return safeCall("KillAura_AttackEntity", function()
+            controller.AttackEntity(controller, targetHum, targetRoot.Position)
+            return true
+        end) or false
+    end
+
+    return false
 end
 
 local function getEffectiveCombatRange(baseRange)
@@ -610,22 +607,8 @@ local function cleanupModule(moduleName)
 end
 
 local function disableConflictingModules(moduleName)
-    local conflicts = moduleConflictMap[moduleName]
-    if not conflicts then
-        return
-    end
-
-    for _, conflictName in ipairs(conflicts) do
-        if moduleStates[conflictName] then
-            moduleStates[conflictName] = false
-            if moduleHandlers[conflictName] then
-                safeCall(conflictName .. "ConflictDisable", moduleHandlers[conflictName], false)
-            end
-            if moduleUi[conflictName] then
-                moduleUi[conflictName].setEnabled(false)
-            end
-        end
-    end
+    local _ = moduleName
+    return
 end
 
 local function performPrimaryClick()
@@ -930,11 +913,6 @@ moduleSettings["KillAura"] = {
     range = 14,
     fov = 360,
     swingSpeed = 18,
-    multiTarget = true,
-    multiTargetLimit = 3,
-    targetMode = "Players",
-    priority = "Closest",
-    silent = true,
     faceTarget = false,
     requireSword = false,
     attackThroughWalls = true,
@@ -943,58 +921,156 @@ moduleSettings["KillAura"] = {
     fovRadius = 360,
     attackPlayers = true,
     attackNPCs = false,
-    fallbackToClickSimulation = false
+    fallbackToClickSimulation = false,
+
+    targetSwitchDelay = 0.2
 }
 
 local killAuraLastSwing = 0
 
 local function isSwordTool(tool)
-    if not tool or not tool:IsA("Tool") then return false end
+    if not tool or not tool:IsA("Tool") then
+        return false
+    end
+
     local n = tool.Name:lower()
-    return n:find("sword") or n:find("blade") or n:find("katana") or n:find("dao")
+    return n:find("sword") ~= nil
+        or n:find("blade") ~= nil
+        or n:find("katana") ~= nil
+        or n:find("dao") ~= nil
 end
 
 local function getHeldSword()
     local char = getCharacter(lplr)
-    if not char then return nil end
+    if not char then
+        return nil
+    end
+
     local tool = char:FindFirstChildOfClass("Tool")
-    if tool and isSwordTool(tool) then return tool end
+    if tool and isSwordTool(tool) then
+        return tool
+    end
+
     return nil
 end
 
 local function getHeldOrBackpackSword()
     local char = getCharacter(lplr)
-    if not char then
-        return nil
+    if char then
+        local heldTool = char:FindFirstChildOfClass("Tool")
+        if heldTool and isSwordTool(heldTool) then
+            return heldTool
+        end
     end
-    local heldTool = char:FindFirstChildOfClass("Tool")
-    if heldTool and isSwordTool(heldTool) then
-        return heldTool
-    end
+
     local backpack = lplr:FindFirstChildOfClass("Backpack")
     if not backpack then
         return nil
     end
+
     for _, tool in ipairs(backpack:GetChildren()) do
         if tool:IsA("Tool") and isSwordTool(tool) then
             return tool
         end
     end
+
     return nil
+end
+
+local function getKillAuraTarget(range, settings)
+    local myChar = getCharacter(lplr)
+    local myHRP = getHRP(myChar)
+    if not myHRP then
+        return nil
+    end
+
+    local bestTarget = nil
+    local bestDistance = math.huge
+
+    local function considerTarget(targetChar)
+        if not targetChar then
+            return
+        end
+
+        local hum = getHumanoid(targetChar)
+        local root = getHRP(targetChar)
+        if not hum or not root or hum.Health <= 0 then
+            return
+        end
+
+        local distance = (root.Position - myHRP.Position).Magnitude
+        if distance > range then
+            return
+        end
+
+        if not isTargetWithinFov(targetChar, settings.fovRadius or settings.fov or 360) then
+            return
+        end
+
+        if settings.attackThroughWalls == false and not hasLineOfSight(targetChar) then
+            return
+        end
+
+        if distance < bestDistance then
+            bestDistance = distance
+            bestTarget = targetChar
+        end
+    end
+
+    if settings.attackPlayers then
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= lplr then
+                local sameTeam = player.Team ~= nil and lplr.Team ~= nil and player.Team == lplr.Team
+                if not (settings.ignoreTeammates ~= false and sameTeam) then
+                    considerTarget(getCharacter(player))
+                end
+            end
+        end
+    end
+
+    if settings.attackNPCs then
+        for _, model in ipairs(Workspace:GetDescendants()) do
+            if model:IsA("Model") and model ~= myChar then
+                local hum = model:FindFirstChildOfClass("Humanoid")
+                local hrp = model:FindFirstChild("HumanoidRootPart")
+                if hum and hrp and hum.Health > 0 then
+                    local isPlayerModel = false
+                    for _, plr in ipairs(Players:GetPlayers()) do
+                        if plr.Character == model then
+                            isPlayerModel = true
+                            break
+                        end
+                    end
+                    if not isPlayerModel then
+                        considerTarget(model)
+                    end
+                end
+            end
+        end
+    end
+
+    return bestTarget
 end
 
 local function toggleKillAura(enabled)
     cleanupModule("KillAura")
-    if not enabled then return end
+    if not enabled then
+        return
+    end
 
     local lockedTarget = nil
+    local lastTargetSwitch = 0
 
     local connection = RunService.Heartbeat:Connect(function()
-        if not moduleStates["KillAura"] then return end
+        if not moduleStates["KillAura"] then
+            return
+        end
 
         local myChar = getCharacter(lplr)
         local myHRP = getHRP(myChar)
-        if not myHRP then return end
+        if not myChar or not myHRP then
+            return
+        end
 
         local settings = moduleSettings["KillAura"] or {}
         if not settings.attackPlayers and not settings.attackNPCs then
@@ -1004,100 +1080,84 @@ local function toggleKillAura(enabled)
         local sword = getHeldSword()
         if not sword then
             local backpackSword = getHeldOrBackpackSword()
-            if backpackSword and backpackSword.Parent ~= myChar then
-                pcall(function()
-                    local hum = getHumanoid(myChar)
-                    if hum then
-                        hum:EquipTool(backpackSword)
-                        sword = backpackSword
-                    end
-                end)
+            if backpackSword then
+                equipToolIfNeeded(backpackSword)
+                sword = getHeldSword()
             end
         end
-        if settings.requireSword and not sword then return end
+
+        if settings.requireSword and not sword then
+            return
+        end
 
         local effectiveRange = getEffectiveCombatRange(settings.range or 14)
-        local function isValidTarget(targetChar)
+
+        local function isStillValidTarget(targetChar)
             if not targetChar then
                 return false
             end
+
             local hum = getHumanoid(targetChar)
             local root = getHRP(targetChar)
             if not hum or not root or hum.Health <= 0 then
                 return false
             end
+
             if (root.Position - myHRP.Position).Magnitude > effectiveRange then
                 return false
             end
+
             if not isTargetWithinFov(targetChar, settings.fovRadius or settings.fov or 360) then
                 return false
             end
+
             if settings.attackThroughWalls == false and not hasLineOfSight(targetChar) then
                 return false
             end
+
             return true
         end
 
-        if not isValidTarget(lockedTarget) then
+        if not isStillValidTarget(lockedTarget) then
             lockedTarget = nil
         end
-        if not lockedTarget then
-            local targetChar = getTargetByFilters(effectiveRange, settings.attackPlayers, settings.attackNPCs, settings.ignoreTeammates ~= false)
-            if isValidTarget(targetChar) then
-                lockedTarget = targetChar
+
+        local now = tick()
+        if not lockedTarget or (now - lastTargetSwitch >= (settings.targetSwitchDelay or 0.2)) then
+            local newTarget = getKillAuraTarget(effectiveRange, settings)
+            if newTarget ~= lockedTarget then
+                lockedTarget = newTarget
+                lastTargetSwitch = now
             end
         end
+
         if not lockedTarget then
             return
         end
 
-        local now = tick()
-        if now - killAuraLastSwing < (1 / math.max(settings.swingSpeed or 1, 1)) then return end
+        local swingDelay = 1 / math.max(settings.swingSpeed or 1, 1)
+        if now - killAuraLastSwing < swingDelay then
+            return
+        end
 
         if settings.faceTarget then
             faceCharacterTarget(lockedTarget)
         end
 
+        local attacked = attackTargetWithBedwarsApi(lockedTarget)
 
-        local attacked = false
-
-
-        local controller = getCombatController()
-        if controller then
-            local hum = getHumanoid(lockedTarget)
-            local root = getHRP(lockedTarget)
-            pcall(function()
-                if controller.attackEntity then
-                    controller.attackEntity(controller, hum or lockedTarget, root and root.Position or nil)
-                    attacked = true
-                elseif controller.AttackEntity then
-                    controller.AttackEntity(controller, hum or lockedTarget, root and root.Position or nil)
-                    attacked = true
-                end
-            end)
-            pcall(function()
-                if controller.swingSword then controller.swingSword(controller) end
-            end)
-        end
-
-
-        if sword and not attacked then
-            pcall(function()
+        if not attacked and sword then
+            attacked = safeCall("KillAura_ToolActivate", function()
                 sword:Activate()
-                attacked = true
-            end)
+                return true
+            end) or false
         end
 
-
-        if not attacked then
-            attacked = attackTargetWithBedwarsApi(lockedTarget)
-        end
-
-        local clicked = false
         if not attacked and settings.fallbackToClickSimulation then
-            clicked = performPrimaryClick()
+            attacked = performPrimaryClick() or false
         end
-        if attacked or clicked then
+
+        if attacked then
             killAuraLastSwing = now
         end
     end)
@@ -2150,11 +2210,7 @@ local function toggleAimAssist(enabled)
     cleanupModule("AimAssist")
     if not enabled then return end
     if not mouseMoveRelative then
-        warn("[AetherCore][AimAssist] mousemoverel is unavailable in this executor; disabling AimAssist.")
-        moduleStates["AimAssist"] = false
-        if moduleUi["AimAssist"] then
-            moduleUi["AimAssist"].setEnabled(false)
-        end
+        warn("[AetherCore][AimAssist] mousemoverel is unavailable in this executor.")
         return
     end
 
