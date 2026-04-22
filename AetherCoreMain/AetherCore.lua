@@ -148,6 +148,18 @@ local function getCharacter(player)
     return player and player.Character
 end
 
+local function isPlayerCharacterModel(model)
+    if not model or not model:IsA("Model") then
+        return false
+    end
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player.Character == model then
+            return true
+        end
+    end
+    return false
+end
+
 local function getHumanoid(char)
     return char and char:FindFirstChildOfClass("Humanoid")
 end
@@ -413,14 +425,7 @@ local function getTargetByFilters(range, attackPlayers, attackNPCs, ignoreTeamma
                 local targetHum = model:FindFirstChildOfClass("Humanoid")
                 local targetHRP = model:FindFirstChild("HumanoidRootPart")
                 if targetHum and targetHRP and targetHum.Health > 0 then
-                    local isPlayerModel = false
-                    for _, plr in ipairs(Players:GetPlayers()) do
-                        if plr.Character == model then
-                            isPlayerModel = true
-                            break
-                        end
-                    end
-                    if not isPlayerModel then
+                    if not isPlayerCharacterModel(model) then
                         local distance = (targetHRP.Position - myHRP.Position).Magnitude
                         if distance < nearestDistance then
                             nearest = model
@@ -470,11 +475,7 @@ local function getNearestEnemy(range, ignoreTeam)
             local hum = model:FindFirstChildOfClass("Humanoid")
             local hrp = model:FindFirstChild("HumanoidRootPart")
             if hum and hrp and hum.Health > 0 then
-                local isPlayerChar = false
-                for _, plr in ipairs(Players:GetPlayers()) do
-                    if plr.Character == model then isPlayerChar = true break end
-                end
-                if not isPlayerChar then
+                if not isPlayerCharacterModel(model) then
                     local dist = (myHRP.Position - hrp.Position).Magnitude
                     if dist < shortest then
                         shortest = dist
@@ -1470,6 +1471,14 @@ local function toggleSafeWalk(enabled)
             return
         end
 
+        local humanoidState = hum:GetState()
+        local isAirborne = hum.FloorMaterial == Enum.Material.Air
+            or humanoidState == Enum.HumanoidStateType.Freefall
+            or humanoidState == Enum.HumanoidStateType.Jumping
+        if isAirborne then
+            return
+        end
+
         local rayParams = RaycastParams.new()
         rayParams.FilterType = Enum.RaycastFilterType.Exclude
         rayParams.FilterDescendantsInstances = {char}
@@ -2415,14 +2424,14 @@ moduleSettings["Aimbot"] = {
     enabled = true,
     fov = 160,
     smoothness = 0.55,
-    predictionStrength = 1,
-    arrowSpeed = 185,
-    gravity = Workspace.Gravity,
     wallCheck = true,
     teamCheck = true,
     targetPart = "Head",
     maxDistance = 260,
-    snapStrength = 1
+    targetNPCs = true,
+    predictionStrength = 1,
+    arrowSpeed = 185,
+    gravity = Workspace.Gravity
 }
 
 local function getAimbotTargetPart(character, requestedPart)
@@ -2468,8 +2477,50 @@ local function solveProjectileLead(origin, targetPosition, targetVelocity, proje
     return finalFuture - gravityCompensation
 end
 
-local function isVisibleForAimbot(targetCharacter)
-    return hasLineOfSight(targetCharacter)
+local function isVisibleForAimbot(targetCharacter, requestedPart)
+    local myChar = getCharacter(lplr)
+    local myHRP = getHRP(myChar)
+    local targetPart = getAimbotTargetPart(targetCharacter, requestedPart)
+    if not myHRP or not targetPart then
+        return false
+    end
+
+    local rayParams = RaycastParams.new()
+    rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    rayParams.FilterDescendantsInstances = {myChar}
+    rayParams.IgnoreWater = true
+
+    local direction = targetPart.Position - myHRP.Position
+    local raycastResult = Workspace:Raycast(myHRP.Position, direction, rayParams)
+    if not raycastResult then
+        return true
+    end
+    return raycastResult.Instance and raycastResult.Instance:IsDescendantOf(targetCharacter)
+end
+
+local function getAimbotCandidates(includeNPCs)
+    local candidates = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= lplr then
+            table.insert(candidates, {
+                player = player,
+                character = getCharacter(player)
+            })
+        end
+    end
+
+    if includeNPCs then
+        for _, model in ipairs(Workspace:GetDescendants()) do
+            if model:IsA("Model") and not isPlayerCharacterModel(model) then
+                table.insert(candidates, {
+                    player = nil,
+                    character = model
+                })
+            end
+        end
+    end
+
+    return candidates
 end
 
 local function toggleAimbot(enabled)
@@ -2487,25 +2538,24 @@ local function toggleAimbot(enabled)
         local bestScreenDistance = math.huge
         local viewportCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
 
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= lplr then
-                if settings.teamCheck and arePlayersTeammates(lplr, player) then
-                    continue
-                end
-                local character = getCharacter(player)
-                local hum = getHumanoid(character)
-                local targetPart = getAimbotTargetPart(character, settings.targetPart)
-                if hum and hum.Health > 0 and targetPart then
-                    local distance = (targetPart.Position - myHRP.Position).Magnitude
-                    if distance <= (settings.maxDistance or 260) then
-                        if not settings.wallCheck or isVisibleForAimbot(character) then
-                            local screenPosition, onScreen = camera:WorldToViewportPoint(targetPart.Position)
-                            if onScreen then
-                                local pixelDistance = (Vector2.new(screenPosition.X, screenPosition.Y) - viewportCenter).Magnitude
-                                if pixelDistance <= (settings.fov or 160) and pixelDistance < bestScreenDistance then
-                                    bestCharacter = character
-                                    bestScreenDistance = pixelDistance
-                                end
+        for _, entry in ipairs(getAimbotCandidates(settings.targetNPCs ~= false)) do
+            local player = entry.player
+            local character = entry.character
+            if player and settings.teamCheck and arePlayersTeammates(lplr, player) then
+                continue
+            end
+            local hum = getHumanoid(character)
+            local targetPart = getAimbotTargetPart(character, settings.targetPart)
+            if hum and hum.Health > 0 and targetPart then
+                local distance = (targetPart.Position - myHRP.Position).Magnitude
+                if distance <= (settings.maxDistance or 260) then
+                    if not settings.wallCheck or isVisibleForAimbot(character, settings.targetPart) then
+                        local screenPosition, onScreen = camera:WorldToViewportPoint(targetPart.Position)
+                        if onScreen then
+                            local pixelDistance = (Vector2.new(screenPosition.X, screenPosition.Y) - viewportCenter).Magnitude
+                            if pixelDistance <= (settings.fov or 160) and pixelDistance < bestScreenDistance then
+                                bestCharacter = character
+                                bestScreenDistance = pixelDistance
                             end
                         end
                     end
@@ -2539,8 +2589,7 @@ local function toggleAimbot(enabled)
 
         local lookAtCFrame = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + desiredDirection)
         local smoothness = math.clamp(settings.smoothness or 0.55, 0.01, 1)
-        local snap = math.clamp(settings.snapStrength or 1, 0.05, 2)
-        local alpha = math.clamp((smoothness * snap) * (deltaTime * 60), 0.05, 1)
+        local alpha = math.clamp((smoothness * 1.35) * (deltaTime * 60), 0.06, 1)
         camera.CFrame = camera.CFrame:Lerp(lookAtCFrame, alpha)
     end))
 end
@@ -3294,7 +3343,6 @@ local function validateModuleSettings()
     clampSetting("Aimbot", "arrowSpeed", moduleSettings.Aimbot.arrowSpeed, 40, 350, 185)
     clampSetting("Aimbot", "gravity", moduleSettings.Aimbot.gravity, 40, 350, Workspace.Gravity)
     clampSetting("Aimbot", "maxDistance", moduleSettings.Aimbot.maxDistance, 60, 400, 260)
-    clampSetting("Aimbot", "snapStrength", moduleSettings.Aimbot.snapStrength, 0.05, 2, 1)
     clampSetting("Reach", "hitRange", moduleSettings.Reach.hitRange, 6, 20, 12)
     clampSetting("Reach", "mineRange", moduleSettings.Reach.mineRange, 6, 20, 12)
     clampSetting("Reach", "placeRange", moduleSettings.Reach.placeRange, 6, 20, 12)
@@ -3870,13 +3918,11 @@ createRegisteredModule("Combat", "Aimbot", false, toggleAimbot, {
     {type = "slider", name = "FOV", min = 20, max = 450, settingName = "fov"},
     {type = "slider", name = "Smoothness", min = 0.01, max = 1, settingName = "smoothness"},
     {type = "slider", name = "Prediction", min = 0, max = 2, settingName = "predictionStrength"},
-    {type = "slider", name = "Arrow Speed", min = 40, max = 350, settingName = "arrowSpeed"},
-    {type = "slider", name = "Gravity", min = 40, max = 350, settingName = "gravity"},
-    {type = "slider", name = "Snap Strength", min = 0.05, max = 2, settingName = "snapStrength"},
     {type = "slider", name = "Max Distance", min = 60, max = 400, settingName = "maxDistance"},
     {type = "dropdown", name = "Target Part", options = {"Head", "HumanoidRootPart"}, settingName = "targetPart"},
     {type = "toggle", name = "Wall Check", settingName = "wallCheck"},
-    {type = "toggle", name = "Team Check", settingName = "teamCheck"}
+    {type = "toggle", name = "Team Check", settingName = "teamCheck"},
+    {type = "toggle", name = "Target NPCs", settingName = "targetNPCs"}
 })
 createRegisteredModule("Combat", "AutoClicker", false, toggleAutoClicker, {
     {type = "slider", name = "CPS", min = 1, max = 20, settingName = "cps"}
