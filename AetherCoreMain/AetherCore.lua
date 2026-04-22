@@ -3142,6 +3142,11 @@ local categoryPanels = {}
 local categoryToggleButtons = {}
 local categoryManualVisibility = {}
 local categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Legend"}
+local homeTabButton
+local settingsTabButton
+local homeDashboardPanel
+local settingsDashboardPanel
+local activeSidebarTab = "Home"
 local keybindListening = false
 local searchText = ""
 local settingsOpenByModule = {}
@@ -3192,6 +3197,32 @@ local function stylePanel(panel)
     stroke.Thickness = 1
     stroke.Transparency = 0.2
     stroke.Parent = panel
+end
+
+local function styleDashboardCard(card)
+    card.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
+    card.BorderSizePixel = 0
+    addCorner(card, 10)
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(82, 58, 122)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.45
+    stroke.Parent = card
+end
+
+local function createDashboardSectionTitle(parent, text)
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -24, 0, 24)
+    title.Position = UDim2.new(0, 12, 0, 10)
+    title.BackgroundTransparency = 1
+    title.Text = text
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Font = Enum.Font.GothamSemibold
+    title.TextSize = 17
+    title.TextColor3 = palette.text
+    title.Parent = parent
+    return title
 end
 
 local function createPanel(name, size, position)
@@ -3275,6 +3306,263 @@ mainList.Parent = mainPanel
 local mainListLayout = Instance.new("UIListLayout")
 mainListLayout.Padding = UDim.new(0, 6)
 mainListLayout.Parent = mainList
+
+local dashboardContent = Instance.new("Frame")
+dashboardContent.Name = "DashboardContent"
+dashboardContent.Size = UDim2.new(1, -295, 1, -170)
+dashboardContent.Position = UDim2.new(0, 285, 0, 120)
+dashboardContent.BackgroundTransparency = 1
+dashboardContent.Parent = screenGui
+
+local function createDashboardBase(name)
+    local panel = Instance.new("Frame")
+    panel.Name = name
+    panel.Size = UDim2.new(1, 0, 1, 0)
+    panel.BackgroundColor3 = Color3.fromRGB(11, 11, 20)
+    panel.BorderSizePixel = 0
+    panel.Visible = false
+    panel.Parent = dashboardContent
+    addCorner(panel, 12)
+
+    local panelGradient = Instance.new("UIGradient")
+    panelGradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(13, 13, 24)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 15, 42))
+    })
+    panelGradient.Rotation = 180
+    panelGradient.Parent = panel
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(67, 48, 103)
+    stroke.Thickness = 1
+    stroke.Transparency = 0.45
+    stroke.Parent = panel
+
+    return panel
+end
+
+homeDashboardPanel = createDashboardBase("HomeDashboard")
+settingsDashboardPanel = createDashboardBase("SettingsDashboard")
+
+do
+    local welcomeCard = Instance.new("Frame")
+    welcomeCard.Size = UDim2.new(1, -20, 0, 84)
+    welcomeCard.Position = UDim2.new(0, 10, 0, 12)
+    welcomeCard.Parent = homeDashboardPanel
+    styleDashboardCard(welcomeCard)
+
+    local welcomeTitle = Instance.new("TextLabel")
+    welcomeTitle.Size = UDim2.new(1, -30, 0, 33)
+    welcomeTitle.Position = UDim2.new(0, 15, 0, 12)
+    welcomeTitle.BackgroundTransparency = 1
+    welcomeTitle.Text = "Welcome back, Player!"
+    welcomeTitle.TextXAlignment = Enum.TextXAlignment.Left
+    welcomeTitle.TextColor3 = palette.text
+    welcomeTitle.Font = Enum.Font.GothamBold
+    welcomeTitle.TextSize = 30
+    welcomeTitle.Parent = welcomeCard
+
+    local welcomeSubtitle = Instance.new("TextLabel")
+    welcomeSubtitle.Size = UDim2.new(1, -30, 0, 24)
+    welcomeSubtitle.Position = UDim2.new(0, 15, 0, 47)
+    welcomeSubtitle.BackgroundTransparency = 1
+    welcomeSubtitle.Text = "AetherCore – Advanced BedWars Client"
+    welcomeSubtitle.TextXAlignment = Enum.TextXAlignment.Left
+    welcomeSubtitle.TextColor3 = palette.secondary
+    welcomeSubtitle.Font = Enum.Font.Gotham
+    welcomeSubtitle.TextSize = 16
+    welcomeSubtitle.Parent = welcomeCard
+
+    local playerInfoCard = Instance.new("Frame")
+    playerInfoCard.Size = UDim2.new(0.5, -16, 0, 222)
+    playerInfoCard.Position = UDim2.new(0, 10, 0, 106)
+    playerInfoCard.Parent = homeDashboardPanel
+    styleDashboardCard(playerInfoCard)
+    createDashboardSectionTitle(playerInfoCard, "Player Info")
+
+    local playerInfoLines = {
+        "Username: " .. lplr.Name,
+        "User ID: " .. tostring(lplr.UserId),
+        "Ping: Measuring...",
+        "FPS: Measuring...",
+        "Server: BedWars (Lobby)"
+    }
+
+    for index, text in ipairs(playerInfoLines) do
+        local line = Instance.new("TextLabel")
+        line.Size = UDim2.new(1, -24, 0, 25)
+        line.Position = UDim2.new(0, 12, 0, 38 + ((index - 1) * 32))
+        line.BackgroundTransparency = 1
+        line.Text = text
+        line.TextXAlignment = Enum.TextXAlignment.Left
+        line.Font = Enum.Font.Gotham
+        line.TextSize = 15
+        line.TextColor3 = Color3.fromRGB(215, 215, 215)
+        line.Parent = playerInfoCard
+
+        if text:find("Ping:") == 1 then
+            RunService.Heartbeat:Connect(function()
+                if line.Parent then
+                    local ping = math.floor(Players.LocalPlayer:GetNetworkPing() * 1000)
+                    line.Text = ("Ping: %dms"):format(ping)
+                end
+            end)
+        elseif text:find("FPS:") == 1 then
+            local rollingDt = 1 / 60
+            RunService.RenderStepped:Connect(function(dt)
+                rollingDt = (rollingDt * 0.92) + (dt * 0.08)
+                if line.Parent then
+                    line.Text = ("FPS: %d"):format(math.clamp(math.floor(1 / math.max(rollingDt, 0.0001) + 0.5), 1, 999))
+                end
+            end)
+        end
+    end
+
+    local quickActionsCard = Instance.new("Frame")
+    quickActionsCard.Size = UDim2.new(0.5, -16, 0, 222)
+    quickActionsCard.Position = UDim2.new(0.5, 6, 0, 106)
+    quickActionsCard.Parent = homeDashboardPanel
+    styleDashboardCard(quickActionsCard)
+    createDashboardSectionTitle(quickActionsCard, "Quick Actions")
+
+    local actionButtons = {
+        "Rejoin Server",
+        "Reset Character",
+        "Server Hop",
+        "Join Discord"
+    }
+
+    for index, label in ipairs(actionButtons) do
+        local actionButton = Instance.new("TextButton")
+        actionButton.Size = UDim2.new(1, -24, 0, 38)
+        actionButton.Position = UDim2.new(0, 12, 0, 40 + ((index - 1) * 44))
+        actionButton.BackgroundColor3 = index == 1 and Color3.fromRGB(109, 57, 201) or Color3.fromRGB(31, 31, 47)
+        actionButton.Text = label
+        actionButton.TextColor3 = palette.text
+        actionButton.Font = Enum.Font.GothamSemibold
+        actionButton.TextSize = 14
+        actionButton.AutoButtonColor = false
+        actionButton.Parent = quickActionsCard
+        addCorner(actionButton, 8)
+    end
+
+    local statusCard = Instance.new("Frame")
+    statusCard.Size = UDim2.new(1, -20, 0, 88)
+    statusCard.Position = UDim2.new(0, 10, 1, -100)
+    statusCard.Parent = homeDashboardPanel
+    styleDashboardCard(statusCard)
+    createDashboardSectionTitle(statusCard, "Status")
+
+    local statusText = Instance.new("TextLabel")
+    statusText.Size = UDim2.new(1, -24, 0, 24)
+    statusText.Position = UDim2.new(0, 12, 0, 38)
+    statusText.BackgroundTransparency = 1
+    statusText.Text = "AetherCore is up to date!"
+    statusText.TextXAlignment = Enum.TextXAlignment.Left
+    statusText.TextColor3 = Color3.fromRGB(103, 224, 132)
+    statusText.Font = Enum.Font.GothamSemibold
+    statusText.TextSize = 16
+    statusText.Parent = statusCard
+
+    local versionText = Instance.new("TextLabel")
+    versionText.Size = UDim2.new(1, -24, 0, 18)
+    versionText.Position = UDim2.new(0, 12, 0, 62)
+    versionText.BackgroundTransparency = 1
+    versionText.Text = "Version: v1.0.0"
+    versionText.TextXAlignment = Enum.TextXAlignment.Left
+    versionText.TextColor3 = palette.secondary
+    versionText.Font = Enum.Font.Gotham
+    versionText.TextSize = 13
+    versionText.Parent = statusCard
+end
+
+do
+    local settingsHeader = Instance.new("Frame")
+    settingsHeader.Size = UDim2.new(1, -20, 0, 84)
+    settingsHeader.Position = UDim2.new(0, 10, 0, 12)
+    settingsHeader.Parent = settingsDashboardPanel
+    styleDashboardCard(settingsHeader)
+
+    local settingsTitle = Instance.new("TextLabel")
+    settingsTitle.Size = UDim2.new(1, -30, 0, 34)
+    settingsTitle.Position = UDim2.new(0, 15, 0, 12)
+    settingsTitle.BackgroundTransparency = 1
+    settingsTitle.Text = "Settings"
+    settingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+    settingsTitle.TextColor3 = palette.text
+    settingsTitle.Font = Enum.Font.GothamBold
+    settingsTitle.TextSize = 30
+    settingsTitle.Parent = settingsHeader
+
+    local settingsSubtitle = Instance.new("TextLabel")
+    settingsSubtitle.Size = UDim2.new(1, -30, 0, 24)
+    settingsSubtitle.Position = UDim2.new(0, 15, 0, 48)
+    settingsSubtitle.BackgroundTransparency = 1
+    settingsSubtitle.Text = "Configure AetherCore to your preference."
+    settingsSubtitle.TextXAlignment = Enum.TextXAlignment.Left
+    settingsSubtitle.TextColor3 = palette.secondary
+    settingsSubtitle.Font = Enum.Font.Gotham
+    settingsSubtitle.TextSize = 16
+    settingsSubtitle.Parent = settingsHeader
+
+    local function createSettingsCard(titleText, items, positionScaleX)
+        local card = Instance.new("Frame")
+        card.Size = UDim2.new(0.3333, -14, 0, 236)
+        card.Position = UDim2.new(positionScaleX, 10, 0, 106)
+        card.Parent = settingsDashboardPanel
+        styleDashboardCard(card)
+        createDashboardSectionTitle(card, titleText)
+
+        for index, itemText in ipairs(items) do
+            local item = Instance.new("TextLabel")
+            item.Size = UDim2.new(1, -24, 0, 32)
+            item.Position = UDim2.new(0, 12, 0, 40 + ((index - 1) * 44))
+            item.BackgroundColor3 = Color3.fromRGB(31, 31, 47)
+            item.BorderSizePixel = 0
+            item.Text = itemText
+            item.TextXAlignment = Enum.TextXAlignment.Left
+            item.TextColor3 = Color3.fromRGB(225, 225, 225)
+            item.Font = Enum.Font.Gotham
+            item.TextSize = 14
+            item.Parent = card
+            addCorner(item, 8)
+            item.Text = "  " .. itemText
+        end
+    end
+
+    createSettingsCard("General", {"Notifications", "Auto Rejoin", "Auto Respawn", "Reduce Lag"}, 0)
+    createSettingsCard("UI", {"Theme", "UI Scale", "UI Position", "Show Keybinds"}, 0.3333)
+    createSettingsCard("Config", {"Save Config", "Load Config", "Reset Config", "Auto Save"}, 0.6666)
+
+    local infoCard = Instance.new("Frame")
+    infoCard.Size = UDim2.new(1, -20, 0, 84)
+    infoCard.Position = UDim2.new(0, 10, 1, -96)
+    infoCard.Parent = settingsDashboardPanel
+    styleDashboardCard(infoCard)
+
+    local infoTitle = Instance.new("TextLabel")
+    infoTitle.Size = UDim2.new(1, -24, 0, 24)
+    infoTitle.Position = UDim2.new(0, 12, 0, 12)
+    infoTitle.BackgroundTransparency = 1
+    infoTitle.Text = "Info"
+    infoTitle.TextXAlignment = Enum.TextXAlignment.Left
+    infoTitle.TextColor3 = palette.text
+    infoTitle.Font = Enum.Font.GothamSemibold
+    infoTitle.TextSize = 17
+    infoTitle.Parent = infoCard
+
+    local infoText = Instance.new("TextLabel")
+    infoText.Size = UDim2.new(1, -24, 0, 32)
+    infoText.Position = UDim2.new(0, 12, 0, 40)
+    infoText.BackgroundTransparency = 1
+    infoText.Text = "Settings are saved automatically and configuration changes can be restored at any time."
+    infoText.TextWrapped = true
+    infoText.TextXAlignment = Enum.TextXAlignment.Left
+    infoText.TextColor3 = palette.secondary
+    infoText.Font = Enum.Font.Gotham
+    infoText.TextSize = 13
+    infoText.Parent = infoCard
+end
 
 local searchBox = Instance.new("TextBox")
 searchBox.Size = UDim2.new(1, -130, 0, 26)
@@ -3514,6 +3802,19 @@ local categoryData = {
     {name = "Legend", icon = "📜"}
 }
 
+homeTabButton = Instance.new("TextButton")
+homeTabButton.Size = UDim2.new(1, 0, 0, 32)
+homeTabButton.BackgroundColor3 = palette.active
+homeTabButton.BorderSizePixel = 0
+homeTabButton.AutoButtonColor = false
+homeTabButton.Text = "  🏠  Home"
+homeTabButton.TextColor3 = palette.text
+homeTabButton.Font = Enum.Font.GothamSemibold
+homeTabButton.TextSize = 12
+homeTabButton.TextXAlignment = Enum.TextXAlignment.Left
+homeTabButton.Parent = mainList
+addCorner(homeTabButton, 6)
+
 for _, category in ipairs(categoryData) do
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, 0, 0, 32)
@@ -3556,6 +3857,24 @@ for _, category in ipairs(categoryData) do
         saveClientSettings()
     end)
 end
+
+local settingsTabSeparator = Instance.new("Frame")
+settingsTabSeparator.Size = UDim2.new(1, 0, 0, 12)
+settingsTabSeparator.BackgroundTransparency = 1
+settingsTabSeparator.Parent = mainList
+
+settingsTabButton = Instance.new("TextButton")
+settingsTabButton.Size = UDim2.new(1, 0, 0, 32)
+settingsTabButton.BackgroundColor3 = palette.panel
+settingsTabButton.BorderSizePixel = 0
+settingsTabButton.AutoButtonColor = false
+settingsTabButton.Text = "  ⚙️  Settings"
+settingsTabButton.TextColor3 = palette.text
+settingsTabButton.Font = Enum.Font.GothamSemibold
+settingsTabButton.TextSize = 12
+settingsTabButton.TextXAlignment = Enum.TextXAlignment.Left
+settingsTabButton.Parent = mainList
+addCorner(settingsTabButton, 6)
 
 local function uiCreateSlider(parent, name, min, max, default, callback)
     local frame = Instance.new("Frame")
@@ -4061,10 +4380,11 @@ local function refreshSearch()
     end
 
     local searching = string.lower(searchText or "") ~= ""
+    local showingCategories = activeSidebarTab == "Modules"
     for categoryName, panel in pairs(categoryPanels) do
         local manuallyVisible = categoryManualVisibility[categoryName] == true
         local hasVisibleModules = visibleModulesByCategory[categoryName] == true
-        panel.Visible = searching and manuallyVisible and hasVisibleModules or manuallyVisible
+        panel.Visible = showingCategories and (searching and manuallyVisible and hasVisibleModules or manuallyVisible)
 
         local categoryButton = categoryToggleButtons[categoryName]
         if categoryButton then
@@ -4073,11 +4393,48 @@ local function refreshSearch()
     end
 end
 
+local function setActiveSidebarTab(tabName)
+    activeSidebarTab = tabName
+    homeDashboardPanel.Visible = tabName == "Home"
+    settingsDashboardPanel.Visible = tabName == "Settings"
+
+    if homeTabButton then
+        homeTabButton.BackgroundColor3 = tabName == "Home" and palette.active or palette.panel
+    end
+    if settingsTabButton then
+        settingsTabButton.BackgroundColor3 = tabName == "Settings" and palette.active or palette.panel
+    end
+
+    refreshSearch()
+end
+
 searchBox:GetPropertyChangedSignal("Text"):Connect(function()
     searchText = searchBox.Text or ""
     refreshSearch()
 end)
-refreshSearch()
+homeTabButton.MouseButton1Click:Connect(function()
+    setActiveSidebarTab("Home")
+end)
+
+settingsTabButton.MouseButton1Click:Connect(function()
+    setActiveSidebarTab("Settings")
+end)
+
+for _, category in ipairs(categoryData) do
+    local categoryButton = categoryToggleButtons[category.name]
+    if categoryButton then
+        categoryButton.MouseButton1Click:Connect(function()
+            activeSidebarTab = "Modules"
+            homeDashboardPanel.Visible = false
+            settingsDashboardPanel.Visible = false
+            if homeTabButton then homeTabButton.BackgroundColor3 = palette.panel end
+            if settingsTabButton then settingsTabButton.BackgroundColor3 = palette.panel end
+            refreshSearch()
+        end)
+    end
+end
+
+setActiveSidebarTab("Home")
 
 closeButton.MouseButton1Click:Connect(function()
     if autoToxicMessageConnection then
