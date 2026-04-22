@@ -666,6 +666,9 @@ end
 
 local function setModuleEnabled(moduleName, enabled)
     moduleStates[moduleName] = enabled
+    if moduleName == "AutoToxic" then
+        autoToxicEnabled = enabled
+    end
     if moduleUi[moduleName] then
         moduleUi[moduleName].setEnabled(enabled)
     end
@@ -1391,6 +1394,7 @@ moduleSettings["Step"] = {
 
 local function toggleStep(enabled)
     cleanupModule("Step")
+    moduleSettings["Step"].lastTeleportAt = 0
     if not enabled then
         local char = getCharacter(lplr)
         local hum = getHumanoid(char)
@@ -1422,25 +1426,43 @@ local function toggleStep(enabled)
         local forwardDistance = math.clamp(settings.forwardCheckDistance or 2.6, 1.5, 5)
         local basePosition = hrp.Position
         local wallHit = Workspace:Raycast(basePosition + Vector3.new(0, 1.2, 0), moveDirection * forwardDistance, rayParams)
+            or Workspace:Raycast(basePosition + Vector3.new(0, 2.6, 0), moveDirection * forwardDistance, rayParams)
         if not wallHit then
+            return
+        end
+        if math.abs(wallHit.Normal.Y) > 0.45 then
             return
         end
 
         local maxHeight = math.clamp(settings.maxHeight or 6, 2, 14)
-        local topCastOrigin = wallHit.Position + Vector3.new(0, maxHeight + 2.5, 0)
+        local topCastOrigin = wallHit.Position + (moveDirection * 1.2) + Vector3.new(0, maxHeight + 3.5, 0)
         local topHit = Workspace:Raycast(topCastOrigin, Vector3.new(0, -(maxHeight + 4.5), 0), rayParams)
         if not topHit then
             return
         end
+        if topHit.Normal.Y < 0.45 then
+            return
+        end
 
-        local targetY = topHit.Position.Y + 3
+        local now = tick()
+        if now - (settings.lastTeleportAt or 0) < 0.12 then
+            return
+        end
+
+        local targetY = topHit.Position.Y + 3.1
         local verticalDelta = targetY - hrp.Position.Y
         if verticalDelta > 0.6 and verticalDelta <= maxHeight + 0.5 then
-            hrp.CFrame = CFrame.new(
+            local targetPosition = Vector3.new(
                 hrp.Position.X + (moveDirection.X * 1.2),
                 targetY,
                 hrp.Position.Z + (moveDirection.Z * 1.2)
             )
+            local headClearanceHit = Workspace:Raycast(targetPosition + Vector3.new(0, 0.5, 0), Vector3.new(0, 4.5, 0), rayParams)
+            if headClearanceHit then
+                return
+            end
+            settings.lastTeleportAt = now
+            hrp.CFrame = CFrame.new(targetPosition)
         end
     end))
 end
@@ -3124,6 +3146,7 @@ local keybindListening = false
 local searchText = ""
 local settingsOpenByModule = {}
 local loadedCategoryPositions = {}
+local loadedModuleStates = {}
 local saveClientSettings
 
 moduleHandlers = {
@@ -3363,11 +3386,15 @@ saveClientSettings = function()
     safeCall("SaveClientSettings", function()
         local payload = {
             keybinds = {},
+            moduleStates = {},
             settings = moduleSettings,
             categoryPositions = {}
         }
         for moduleName, key in pairs(moduleKeybinds) do
             payload.keybinds[moduleName] = key and key.Name or nil
+        end
+        for moduleName, enabled in pairs(moduleStates) do
+            payload.moduleStates[moduleName] = enabled == true
         end
         for categoryName, panel in pairs(categoryPanels) do
             payload.categoryPositions[categoryName] = {x = panel.Position.X.Offset, y = panel.Position.Y.Offset}
@@ -3389,6 +3416,13 @@ local function loadClientSettings()
             for moduleName, keyName in pairs(decoded.keybinds) do
                 if Enum.KeyCode[keyName] then
                     moduleKeybinds[moduleName] = Enum.KeyCode[keyName]
+                end
+            end
+        end
+        if type(decoded.moduleStates) == "table" then
+            for moduleName, enabled in pairs(decoded.moduleStates) do
+                if type(enabled) == "boolean" then
+                    loadedModuleStates[moduleName] = enabled
                 end
             end
         end
@@ -3793,7 +3827,13 @@ local function createModule(category, moduleName, defaultEnabled, toggleCallback
     settingsLayout.Parent = settingsHolder
 
     local enabled = defaultEnabled
+    if type(loadedModuleStates[moduleName]) == "boolean" then
+        enabled = loadedModuleStates[moduleName]
+    end
     moduleStates[moduleName] = enabled
+    if moduleName == "AutoToxic" then
+        autoToxicEnabled = enabled
+    end
 
     local function updateCardVisual()
         card.BackgroundColor3 = enabled and palette.active or palette.module
@@ -3871,6 +3911,9 @@ local function createModule(category, moduleName, defaultEnabled, toggleCallback
         setEnabled = function(state)
             enabled = state
             moduleStates[moduleName] = state
+            if moduleName == "AutoToxic" then
+                autoToxicEnabled = state
+            end
             updateCardVisual()
         end,
         setKeyText = function(text)
@@ -3884,7 +3927,7 @@ local function createModule(category, moduleName, defaultEnabled, toggleCallback
     }
 
     updateCardVisual()
-    if defaultEnabled and toggleCallback then
+    if enabled and toggleCallback then
         safeCall(moduleName .. "InitialToggle", toggleCallback, true)
     end
 end
