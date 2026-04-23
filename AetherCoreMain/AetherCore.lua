@@ -1872,9 +1872,11 @@ local function toggleAntiDeath(enabled)
             hrp.Anchored = false
             if state.anchorCFrame then
                 local anchorPosition = state.anchorCFrame.Position
-                local floorPosition = floorSnap(anchorPosition, char, 3)
+                local floorPosition = floorSnap(anchorPosition + Vector3.new(0, 200, 0), char, 3)
                 hrp.CFrame = CFrame.new(floorPosition or anchorPosition)
                 hrp.AssemblyLinearVelocity = Vector3.zero
+                hum:ChangeState(Enum.HumanoidStateType.Landed)
+                task.wait()
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
             end
         end
