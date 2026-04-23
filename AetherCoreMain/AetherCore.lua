@@ -1523,7 +1523,7 @@ local function toggleSafeWalk(enabled)
 
         if settings.mode == "Normal" then
             if lastSafePosition then
-                hrp.CFrame = CFrame.new(lastSafePosition.X, hrp.Position.Y, lastSafePosition.Z)
+                hrp.CFrame = CFrame.new(lastSafePosition)
                 hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
             end
         else
@@ -1665,7 +1665,7 @@ local function toggleFly(enabled)
                 local rayOrigin = hrp.Position
                 local rayDirection = Vector3.new(0, -120, 0)
                 local raycastParams = RaycastParams.new()
-                raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+                raycastParams.FilterType = Enum.RaycastFilterType.Exclude
                 raycastParams.FilterDescendantsInstances = {char}
                 local rayResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
                 if rayResult then
@@ -1709,6 +1709,9 @@ local function toggleVerticalFly(enabled)
         local char = getCharacter(lplr)
         local hrp = getHRP(char)
         resetCameraOffset()
+        if state then
+            state.virtualAltitude = 0
+        end
         if hrp and state and state.lastVisualPosition then
             hrp.CFrame = CFrame.new(state.lastVisualPosition)
         end
@@ -1872,9 +1875,11 @@ local function toggleAntiDeath(enabled)
             hrp.Anchored = false
             if state.anchorCFrame then
                 local anchorPosition = state.anchorCFrame.Position
-                local floorPosition = floorSnap(anchorPosition, char, 3)
+                local floorPosition = floorSnap(anchorPosition + Vector3.new(0, 200, 0), char, 3)
                 hrp.CFrame = CFrame.new(floorPosition or anchorPosition)
                 hrp.AssemblyLinearVelocity = Vector3.zero
+                hum:ChangeState(Enum.HumanoidStateType.Landed)
+                task.wait()
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
             end
         end
@@ -2113,7 +2118,7 @@ local function toggleTracers(enabled)
         anchorPart.CanQuery = false
         anchorPart.CanTouch = false
         anchorPart.CFrame = camera.CFrame
-        anchorPart.Parent = Workspace
+        anchorPart.Parent = model
 
         local attach0 = Instance.new("Attachment")
         attach0.Name = "TracerAttach0"
@@ -2783,6 +2788,7 @@ local function toggleLongJump(enabled)
     local originalMovement = {walkSpeed = nil, jumpPower = nil}
     local boostUntil = 0
     local lastDaoActivation = 0
+    local daoActivatedThisAirborne = false
 
     local connection = RunService.Heartbeat:Connect(function()
         if not moduleStates["LongJump"] then return end
@@ -2825,12 +2831,21 @@ local function toggleLongJump(enabled)
         local bv = setupLongJump()
         if not bv then return end
 
-        if boostUntil <= tick() then
-            if tick() - lastDaoActivation > 0.2 then
-                useDaoAbility()
+        local humanoidState = hum:GetState()
+        local isAirborne = hum.FloorMaterial == Enum.Material.Air
+            or humanoidState == Enum.HumanoidStateType.Freefall
+            or humanoidState == Enum.HumanoidStateType.Jumping
+
+        if not isAirborne then
+            daoActivatedThisAirborne = false
+        end
+
+        if boostUntil <= tick() and isAirborne and not daoActivatedThisAirborne and (tick() - lastDaoActivation) > 0.8 then
+            if useDaoAbility() then
                 lastDaoActivation = tick()
+                daoActivatedThisAirborne = true
+                boostUntil = tick() + moduleSettings["LongJump"].duration
             end
-            boostUntil = tick() + moduleSettings["LongJump"].duration
         end
 
         if boostUntil > tick() then
