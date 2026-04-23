@@ -2742,7 +2742,10 @@ local function toggleVelocity(enabled)
 end
 
 
-moduleSettings["LongJump"] = { speed = 110, duration = 0.6 }
+moduleSettings["LongJump"] = {
+    speed = 37,
+    duration = 0.6
+}
 
 local function toggleLongJump(enabled)
     cleanupModule("LongJump")
@@ -2756,108 +2759,99 @@ local function toggleLongJump(enabled)
         return
     end
 
-    local function setupLongJumpMover()
-        local char = getCharacter(lplr)
-        if not char then return end
-        local hrp = getHRP(char)
-        if not hrp then return end
+    local daoTierOrder = {
+        "emerald_dao", "diamond_dao", "iron_dao", "wood_dao", "stone_dao"
+    }
 
-        local bv = hrp:FindFirstChild("LongJumpVelocity") or Instance.new("BodyVelocity")
-        bv.Name = "LongJumpVelocity"
-        bv.MaxForce = Vector3.new(1e5, 0, 1e5)
-        bv.Velocity = Vector3.zero
-        bv.Parent = hrp
-        return bv, hrp
-    end
-
-    local function getPriorityDaoTool()
-        local daoPriority = {"emerald_dao", "diamond_dao", "iron_dao", "wood_dao", "stone_dao"}
-        for _, daoName in ipairs(daoPriority) do
-            local found, daoTool = hasItem(daoName)
-            if found and daoTool then
-                return daoTool
+    local function getBestDao()
+        for _, daoName in ipairs(daoTierOrder) do
+            local found, tool = hasItem(daoName)
+            if found and tool then
+                return tool
             end
         end
         return nil
     end
 
-    local isCharging = false
-    local boostUntil = 0
-    local boostDirection = Vector3.zero
-    local boostConsumed = false
+    local hookedTool = nil
+    local activatedConnection = nil
 
-    local connection = RunService.Heartbeat:Connect(function()
+    local function applyBoost()
+        local char = getCharacter(lplr)
+        local hrp = getHRP(char)
+        local hum = getHumanoid(char)
+        if not hrp or not hum then return end
+
+        local direction
+        if hum.MoveDirection.Magnitude > 0.1 then
+            direction = Vector3.new(hum.MoveDirection.X, 0, hum.MoveDirection.Z).Unit
+        else
+            local camLook = camera.CFrame.LookVector
+            direction = Vector3.new(camLook.X, 0, camLook.Z)
+            if direction.Magnitude > 0 then
+                direction = direction.Unit
+            else
+                direction = Vector3.new(0, 0, -1)
+            end
+        end
+
+        local bv = hrp:FindFirstChild("LongJumpVelocity") or Instance.new("BodyVelocity")
+        bv.Name = "LongJumpVelocity"
+        bv.MaxForce = Vector3.new(1e5, 0, 1e5)
+        bv.Velocity = direction * moduleSettings["LongJump"].speed
+        bv.Parent = hrp
+
+        task.delay(moduleSettings["LongJump"].duration, function()
+            local liveBv = hrp:FindFirstChild("LongJumpVelocity")
+            if liveBv then liveBv:Destroy() end
+        end)
+    end
+
+    local function hookDao(dao)
+        if hookedTool == dao then return end
+        if activatedConnection then
+            activatedConnection:Disconnect()
+            activatedConnection = nil
+        end
+        hookedTool = dao
+        activatedConnection = dao.Activated:Connect(function()
+            if not moduleStates["LongJump"] then return end
+            applyBoost()
+        end)
+        addConnection("LongJump", activatedConnection)
+    end
+
+    local function unhookDao()
+        if activatedConnection then
+            activatedConnection:Disconnect()
+            activatedConnection = nil
+        end
+        hookedTool = nil
+    end
+
+    -- Heartbeat watches for dao appearing/disappearing
+    addConnection("LongJump", RunService.Heartbeat:Connect(function()
         if not moduleStates["LongJump"] then return end
+
+        local dao = getBestDao()
+        if not dao then
+            unhookDao()
+            return
+        end
+
+        if dao ~= hookedTool then
+            hookDao(dao)
+        end
+
+        -- Auto equip on left click if dao is in backpack
         local char = getCharacter(lplr)
         local hum = getHumanoid(char)
-        local bv, hrp = setupLongJumpMover()
-        if not char or not hum or not hrp then return end
-        local settings = moduleSettings["LongJump"]
-        local now = tick()
-
-        if boostConsumed and now > boostUntil then
-            setModuleEnabled("LongJump", false)
-            return
-        end
-
-        if boostConsumed and now <= boostUntil then
-            bv.Velocity = boostDirection * settings.speed
-            return
-        end
-
-        bv.Velocity = Vector3.zero
-        local daoTool = getPriorityDaoTool()
-        if not daoTool then
-            return
-        end
-
-        local spaceHeld = UserInputService:IsKeyDown(Enum.KeyCode.Space)
-        if spaceHeld then
-            if equipToolIfNeeded(daoTool) and not isCharging then
-                isCharging = true
-                safeCall("LongJumpChargeActivate", function()
-                    daoTool:Activate()
-                end)
+        if hum and dao.Parent ~= char then
+            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                equipToolIfNeeded(dao)
             end
-            return
-        end
-
-        if isCharging then
-            isCharging = false
-            if not equipToolIfNeeded(daoTool) then
-                return
-            end
-            safeCall("LongJumpReleaseDeactivate", function()
-                daoTool:Deactivate()
-            end)
-            local activated = false
-            safeCall("LongJumpReleaseActivate", function()
-                daoTool:Activate()
-                activated = true
-            end)
-            if not activated then return end
-
-            local moveDirection = hum.MoveDirection
-            local forward = moveDirection.Magnitude > 0 and moveDirection or Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
-            if forward.Magnitude <= 0 then
-                forward = Vector3.new(0, 0, -1)
-            else
-                forward = forward.Unit
-            end
-
-            boostDirection = Vector3.new(forward.X, 0, forward.Z)
-            if boostDirection.Magnitude <= 0 then
-                boostDirection = Vector3.new(0, 0, -1)
-            else
-                boostDirection = boostDirection.Unit
-            end
-
-            boostConsumed = true
-            boostUntil = now + settings.duration
-            bv.Velocity = boostDirection * settings.speed
         end
     end)
-    addConnection("LongJump", connection)
 end
 
 
@@ -4331,8 +4325,8 @@ createRegisteredModule("Blatant", "VerticalFly", false, toggleVerticalFly, {
     {type = "slider", name = "Ground Offset", min = 1, max = 8, settingName = "groundOffset"}
 })
 createRegisteredModule("Blatant", "LongJump", false, toggleLongJump, {
-    {type = "slider", name = "Speed", min = 50, max = 200, settingName = "speed"},
-    {type = "slider", name = "Duration", min = 0.5, max = 3, settingName = "duration"}
+    {type = "slider", name = "Speed", min = 10, max = 200, settingName = "speed"},
+    {type = "slider", name = "Duration", min = 0.1, max = 3, settingName = "duration"}
 })
 createRegisteredModule("Blatant", "Scaffold", false, toggleScaffold, {
     {type = "toggle", name = "Allow Towering", settingName = "allowTowering"}
