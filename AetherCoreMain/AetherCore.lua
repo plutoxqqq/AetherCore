@@ -1523,7 +1523,7 @@ local function toggleSafeWalk(enabled)
 
         if settings.mode == "Normal" then
             if lastSafePosition then
-                hrp.CFrame = CFrame.new(lastSafePosition.X, hrp.Position.Y, lastSafePosition.Z)
+                hrp.CFrame = CFrame.new(lastSafePosition)
                 hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
             end
         else
@@ -1665,7 +1665,7 @@ local function toggleFly(enabled)
                 local rayOrigin = hrp.Position
                 local rayDirection = Vector3.new(0, -120, 0)
                 local raycastParams = RaycastParams.new()
-                raycastParams.FilterType = Enum.RaycastFilterType.Blacklist
+                raycastParams.FilterType = Enum.RaycastFilterType.Exclude
                 raycastParams.FilterDescendantsInstances = {char}
                 local rayResult = Workspace:Raycast(rayOrigin, rayDirection, raycastParams)
                 if rayResult then
@@ -1709,6 +1709,9 @@ local function toggleVerticalFly(enabled)
         local char = getCharacter(lplr)
         local hrp = getHRP(char)
         resetCameraOffset()
+        if state then
+            state.virtualAltitude = 0
+        end
         if hrp and state and state.lastVisualPosition then
             hrp.CFrame = CFrame.new(state.lastVisualPosition)
         end
@@ -1872,9 +1875,11 @@ local function toggleAntiDeath(enabled)
             hrp.Anchored = false
             if state.anchorCFrame then
                 local anchorPosition = state.anchorCFrame.Position
-                local floorPosition = floorSnap(anchorPosition, char, 3)
+                local floorPosition = floorSnap(anchorPosition + Vector3.new(0, 200, 0), char, 3)
                 hrp.CFrame = CFrame.new(floorPosition or anchorPosition)
                 hrp.AssemblyLinearVelocity = Vector3.zero
+                hum:ChangeState(Enum.HumanoidStateType.Landed)
+                task.wait()
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
             end
         end
@@ -1891,7 +1896,6 @@ local function toggleFastBreak(enabled)
     if not enabled then return end
 
     moduleSettings["FastBreak"].lastBreak = 0
-    moduleSettings["FastBreak"].cachedController = getBlockPlacementController()
     addConnection("FastBreak", RunService.Heartbeat:Connect(function()
         if not moduleStates["FastBreak"] then return end
         local settings = moduleSettings["FastBreak"]
@@ -1902,31 +1906,17 @@ local function toggleFastBreak(enabled)
         settings.lastBreak = now
 
         local targetPosition = target.Position
-        local blockController = settings.cachedController or getBlockPlacementController()
-        settings.cachedController = blockController
         local damageRemote = getDamageBlockRemote()
+        if not damageRemote then return end
 
         for _ = 1, settings.attemptsPerPulse do
-            if blockController then
-                for _, methodName in ipairs({"breakBlock", "BreakBlock", "breakBlockAt", "damageBlock"}) do
-                    local method = blockController[methodName]
-                    if type(method) == "function" then
-                        safeCall("FastBreakController_" .. methodName, function()
-                            method(blockController, targetPosition)
-                        end)
-                    end
-                end
-            end
-            if damageRemote then
-                safeCall("FastBreakDamageRemote", function()
-                    damageRemote:FireServer({
-                        blockRef = {blockPosition = targetPosition},
-                        hitPosition = targetPosition,
-                        hitNormal = Vector3.new(0, 1, 0)
-                    })
-                end)
-            end
-            performPrimaryClick()
+            safeCall("FastBreakDamageRemote", function()
+                damageRemote:FireServer({
+                    blockRef = {blockPosition = targetPosition},
+                    hitPosition = targetPosition,
+                    hitNormal = Vector3.new(0, 1, 0)
+                })
+            end)
         end
     end))
 end
@@ -2113,7 +2103,7 @@ local function toggleTracers(enabled)
         anchorPart.CanQuery = false
         anchorPart.CanTouch = false
         anchorPart.CFrame = camera.CFrame
-        anchorPart.Parent = Workspace
+        anchorPart.Parent = model
 
         local attach0 = Instance.new("Attachment")
         attach0.Name = "TracerAttach0"
@@ -2269,6 +2259,9 @@ local function toggleNuker(enabled)
         overlapParams.FilterType = Enum.RaycastFilterType.Exclude
         overlapParams.FilterDescendantsInstances = {myChar}
         local nearbyParts = Workspace:GetPartBoundsInRadius(myHRP.Position, settings.mineRadius, overlapParams)
+        local damageRemote = getDamageBlockRemote()
+        if not damageRemote then return end
+        local firedPositions = {}
 
         for _, obj in ipairs(nearbyParts) do
             if obj:IsA("BasePart") then
@@ -2287,12 +2280,17 @@ local function toggleNuker(enabled)
                 end
 
                 if shouldMine then
-                    local tool = myChar:FindFirstChildOfClass("Tool")
-                    if tool then
-                        safeCall("NukerActivateTool", function()
-                            tool:Activate()
+                    local targetPosition = obj.Position
+                    local key = string.format("%.3f|%.3f|%.3f", targetPosition.X, targetPosition.Y, targetPosition.Z)
+                    if not firedPositions[key] then
+                        firedPositions[key] = true
+                        safeCall("NukerDamageRemote", function()
+                            damageRemote:FireServer({
+                                blockRef = {blockPosition = targetPosition},
+                                hitPosition = targetPosition,
+                                hitNormal = Vector3.new(0, 1, 0)
+                            })
                         end)
-                        performPrimaryClick()
                     end
                 end
             end
@@ -2744,29 +2742,21 @@ local function toggleVelocity(enabled)
 end
 
 
-moduleSettings["LongJump"] = { speed = 110, duration = 2 }
+moduleSettings["LongJump"] = { speed = 110, duration = 0.6 }
 
 local function toggleLongJump(enabled)
     cleanupModule("LongJump")
     if not enabled then
         local char = getCharacter(lplr)
-        if char then
-            local hum = getHumanoid(char)
-            local hrp = getHRP(char)
-            if hum then
-                hum.WalkSpeed = 16
-                hum.JumpPower = 50
-            end
-            if hrp then
-                local bv = hrp:FindFirstChild("LongJumpVelocity")
-                if bv then bv:Destroy() end
-                hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
-            end
+        local hrp = getHRP(char)
+        if hrp then
+            local bv = hrp:FindFirstChild("LongJumpVelocity")
+            if bv then bv:Destroy() end
         end
         return
     end
 
-    local function setupLongJump()
+    local function setupLongJumpMover()
         local char = getCharacter(lplr)
         if not char then return end
         local hrp = getHRP(char)
@@ -2777,63 +2767,76 @@ local function toggleLongJump(enabled)
         bv.MaxForce = Vector3.new(1e5, 0, 1e5)
         bv.Velocity = Vector3.zero
         bv.Parent = hrp
-        return bv
+        return bv, hrp
     end
 
-    local originalMovement = {walkSpeed = nil, jumpPower = nil}
+    local function getPriorityDaoTool()
+        local daoPriority = {"emerald_dao", "diamond_dao", "iron_dao", "wood_dao", "stone_dao"}
+        for _, daoName in ipairs(daoPriority) do
+            local found, daoTool = hasItem(daoName)
+            if found and daoTool then
+                return daoTool
+            end
+        end
+        return nil
+    end
+
+    local isCharging = false
     local boostUntil = 0
-    local lastDaoActivation = 0
+    local boostDirection = Vector3.zero
+    local boostConsumed = false
 
     local connection = RunService.Heartbeat:Connect(function()
         if not moduleStates["LongJump"] then return end
         local char = getCharacter(lplr)
         local hum = getHumanoid(char)
-        local hrp = getHRP(char)
+        local bv, hrp = setupLongJumpMover()
         if not char or not hum or not hrp then return end
+        local settings = moduleSettings["LongJump"]
+        local now = tick()
 
-        if not originalMovement.walkSpeed then
-            originalMovement.walkSpeed = hum.WalkSpeed
-            originalMovement.jumpPower = hum.JumpPower
-        end
-
-        local heldTool = char:FindFirstChildOfClass("Tool")
-        if not isDaoTool(heldTool) then
-            local daoTool = getHeldOrBackpackDaoTool()
-            if not daoTool then
-                daoTool = getHeldOrBackpackToolByKeywords({"dash", "jump", "leap"})
-            end
-            if daoTool and daoTool.Parent ~= char then
-                hum:EquipTool(daoTool)
-                heldTool = daoTool
-            end
-        end
-        local isHoldingDao = isDaoTool(heldTool)
-        if not isHoldingDao then
-            hum.WalkSpeed = originalMovement.walkSpeed or hum.WalkSpeed
-            hum.JumpPower = originalMovement.jumpPower or hum.JumpPower
-            local waitingBv = hrp:FindFirstChild("LongJumpVelocity")
-            if waitingBv then
-                waitingBv.Velocity = Vector3.zero
-            end
-            boostUntil = 0
+        if boostConsumed and now > boostUntil then
+            setModuleEnabled("LongJump", false)
             return
         end
 
-        hum.WalkSpeed = originalMovement.walkSpeed
-        hum.JumpPower = originalMovement.jumpPower
-
-        local bv = setupLongJump()
-        if not bv then return end
-
-        if boostUntil <= tick() then
-            if tick() - lastDaoActivation > 0.2 then
-                useDaoAbility()
-                lastDaoActivation = tick()
-            end
-            boostUntil = tick() + moduleSettings["LongJump"].duration
+        if boostConsumed and now <= boostUntil then
+            bv.Velocity = boostDirection * settings.speed
+            return
         end
 
-        if boostUntil > tick() then
+        bv.Velocity = Vector3.zero
+        local daoTool = getPriorityDaoTool()
+        if not daoTool then
+            return
+        end
+
+        local spaceHeld = UserInputService:IsKeyDown(Enum.KeyCode.Space)
+        if spaceHeld then
+            if equipToolIfNeeded(daoTool) and not isCharging then
+                isCharging = true
+                safeCall("LongJumpChargeActivate", function()
+                    daoTool:Activate()
+                end)
+            end
+            return
+        end
+
+        if isCharging then
+            isCharging = false
+            if not equipToolIfNeeded(daoTool) then
+                return
+            end
+            safeCall("LongJumpReleaseDeactivate", function()
+                daoTool:Deactivate()
+            end)
+            local activated = false
+            safeCall("LongJumpReleaseActivate", function()
+                daoTool:Activate()
+                activated = true
+            end)
+            if not activated then return end
+
             local moveDirection = hum.MoveDirection
             local forward = moveDirection.Magnitude > 0 and moveDirection or Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
             if forward.Magnitude <= 0 then
@@ -2841,9 +2844,17 @@ local function toggleLongJump(enabled)
             else
                 forward = forward.Unit
             end
-            bv.Velocity = forward * moduleSettings["LongJump"].speed
-        else
-            bv.Velocity = Vector3.zero
+
+            boostDirection = Vector3.new(forward.X, 0, forward.Z)
+            if boostDirection.Magnitude <= 0 then
+                boostDirection = Vector3.new(0, 0, -1)
+            else
+                boostDirection = boostDirection.Unit
+            end
+
+            boostConsumed = true
+            boostUntil = now + settings.duration
+            bv.Velocity = boostDirection * settings.speed
         end
     end)
     addConnection("LongJump", connection)
