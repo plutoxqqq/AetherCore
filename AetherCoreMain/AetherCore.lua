@@ -19,7 +19,27 @@ local camera = Workspace.CurrentCamera
 local moduleStates = {}
 local moduleConnections = {}
 local moduleKeybinds = {}
-local moduleSettings = {}
+local moduleSettings = {
+    KillAura = {range = 14, swingSpeed = 18},
+    AutoClicker = {cps = 10},
+    Speed = {speed = 24},
+    Step = {maxHeight = 6, forwardCheckDistance = 2.6},
+    SafeWalk = {maxDrop = 4.5},
+    HighJump = {boost = 40},
+    Aimbot = {
+        fov = 160,
+        smoothness = 0.55,
+        predictionStrength = 1,
+        arrowSpeed = 185,
+        gravity = Workspace and Workspace.Gravity or 196.2,
+        maxDistance = 260
+    },
+    Reach = {hitRange = 12, mineRange = 12, placeRange = 12},
+    VerticalFly = {horizontalSpeed = 28, verticalSpeed = 45, groundOffset = 3.2, hoverHeight = 3.2},
+    AntiDeath = {healthThreshold = 25, belowDuration = 2, slowMode = 1.5, voidOffset = 130},
+    FastBreak = {cooldown = 0.03, attemptsPerPulse = 2},
+    AutoVoidDrop = {triggerOffset = 18, dropInterval = 0.45}
+}
 local moduleUi = {}
 local moduleHandlers = {}
 local guiEnabled = true
