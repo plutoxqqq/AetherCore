@@ -1409,7 +1409,8 @@ end
 
 moduleSettings["Step"] = {
     maxHeight = 6,
-    forwardCheckDistance = 2.6
+    forwardCheckDistance = 2.6,
+    stepCooldown = 0.09
 }
 
 local function toggleStep(enabled)
@@ -1432,58 +1433,55 @@ local function toggleStep(enabled)
         if not hum or not hrp or hum.Health <= 0 then return end
 
         local settings = moduleSettings["Step"]
-        hum.StepHeight = math.clamp(settings.maxHeight or 6, 2, 14)
+        local maxHeight = math.clamp(settings.maxHeight or 6, 2, 14)
+        hum.StepHeight = maxHeight
+
         if hum.MoveDirection.Magnitude < 0.05 then
             return
         end
 
-        local moveDirection = hum.MoveDirection.Unit
         local rayParams = RaycastParams.new()
         rayParams.FilterType = Enum.RaycastFilterType.Exclude
         rayParams.FilterDescendantsInstances = {char}
         rayParams.IgnoreWater = true
 
-        local forwardDistance = math.clamp(settings.forwardCheckDistance or 2.6, 1.5, 5)
-        local basePosition = hrp.Position
-        local wallHit = Workspace:Raycast(basePosition + Vector3.new(0, 1.2, 0), moveDirection * forwardDistance, rayParams)
-            or Workspace:Raycast(basePosition + Vector3.new(0, 2.6, 0), moveDirection * forwardDistance, rayParams)
-        if not wallHit then
-            return
-        end
-        if math.abs(wallHit.Normal.Y) > 0.45 then
+        local moveDirection = hum.MoveDirection.Unit
+        local forwardDistance = math.clamp(settings.forwardCheckDistance or 2.6, 1.2, 5)
+        local wallHit = Workspace:Raycast(hrp.Position + Vector3.new(0, 2, 0), moveDirection * forwardDistance, rayParams)
+        if not wallHit or math.abs(wallHit.Normal.Y) > 0.45 then
             return
         end
 
-        local maxHeight = math.clamp(settings.maxHeight or 6, 2, 14)
-        local topCastOrigin = wallHit.Position + (moveDirection * 1.2) + Vector3.new(0, maxHeight + 3.5, 0)
-        local topHit = Workspace:Raycast(topCastOrigin, Vector3.new(0, -(maxHeight + 4.5), 0), rayParams)
-        if not topHit then
+        local surfaceProbeOrigin = wallHit.Position + moveDirection * 1.1 + Vector3.new(0, maxHeight + 2.5, 0)
+        local stepSurfaceHit = Workspace:Raycast(surfaceProbeOrigin, Vector3.new(0, -(maxHeight + 3.5), 0), rayParams)
+        if not stepSurfaceHit or stepSurfaceHit.Normal.Y < 0.55 then
             return
         end
-        if topHit.Normal.Y < 0.45 then
+
+        local targetY = stepSurfaceHit.Position.Y + (hrp.Size.Y * 0.5) + 0.08
+        local verticalDelta = targetY - hrp.Position.Y
+        if verticalDelta <= 0.6 or verticalDelta > maxHeight + 0.35 then
             return
         end
 
         local now = tick()
-        if now - (settings.lastTeleportAt or 0) < 0.12 then
+        local cooldown = math.clamp(settings.stepCooldown or 0.09, 0.03, 0.25)
+        if now - (settings.lastTeleportAt or 0) < cooldown then
             return
         end
 
-        local targetY = topHit.Position.Y + 3.1
-        local verticalDelta = targetY - hrp.Position.Y
-        if verticalDelta > 0.6 and verticalDelta <= maxHeight + 0.5 then
-            local targetPosition = Vector3.new(
-                hrp.Position.X + (moveDirection.X * 1.2),
-                targetY,
-                hrp.Position.Z + (moveDirection.Z * 1.2)
-            )
-            local headClearanceHit = Workspace:Raycast(targetPosition + Vector3.new(0, 0.5, 0), Vector3.new(0, 4.5, 0), rayParams)
-            if headClearanceHit then
-                return
-            end
-            settings.lastTeleportAt = now
-            hrp.CFrame = CFrame.new(targetPosition)
+        local targetPosition = Vector3.new(
+            hrp.Position.X + moveDirection.X * 0.85,
+            targetY,
+            hrp.Position.Z + moveDirection.Z * 0.85
+        )
+        local headClearanceHit = Workspace:Raycast(targetPosition + Vector3.new(0, 0.5, 0), Vector3.new(0, 3.5, 0), rayParams)
+        if headClearanceHit then
+            return
         end
+
+        settings.lastTeleportAt = now
+        hrp.CFrame = CFrame.new(targetPosition, targetPosition + Vector3.new(moveDirection.X, 0, moveDirection.Z))
     end))
 end
 
@@ -1710,7 +1708,8 @@ end
 moduleSettings["VerticalFly"] = {
     horizontalSpeed = 28,
     verticalSpeed = 45,
-    groundOffset = 3.2
+    groundOffset = 3.2,
+    antiKickSink = 1.4
 }
 
 local function toggleVerticalFly(enabled)
@@ -1748,7 +1747,8 @@ local function toggleVerticalFly(enabled)
         if not hrp then return nil end
         local mover = hrp:FindFirstChild("VerticalFlyVelocity") or Instance.new("BodyVelocity")
         mover.Name = "VerticalFlyVelocity"
-        mover.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+        mover.MaxForce = Vector3.new(9e4, 9e4, 9e4)
+        mover.P = 8e3
         mover.Velocity = Vector3.zero
         mover.Parent = hrp
         return mover, hrp, char
@@ -1759,7 +1759,6 @@ local function toggleVerticalFly(enabled)
         local mover, hrp, char = ensureMover()
         if not mover or not hrp then return end
         local settings = moduleSettings["VerticalFly"]
-        settings.virtualAltitude = settings.virtualAltitude or 0
 
         local cameraLook = camera.CFrame.LookVector
         local cameraRight = camera.CFrame.RightVector
@@ -1787,33 +1786,22 @@ local function toggleVerticalFly(enabled)
             verticalInput -= 1
         end
 
-        settings.virtualAltitude = math.max(0, settings.virtualAltitude + (verticalInput * settings.verticalSpeed * dt))
-
-        local currentGround = settings.lastGroundPosition or hrp.Position
-        local desiredPlanar = currentGround + (planarMove * settings.horizontalSpeed * dt)
-        local rayOrigin = Vector3.new(desiredPlanar.X, math.max(hrp.Position.Y, desiredPlanar.Y) + 900, desiredPlanar.Z)
-        local groundHit = raycastToGround(rayOrigin, {char}, 1800)
-
-        local groundY = groundHit and groundHit.Position.Y or currentGround.Y
-        local groundedPosition = Vector3.new(desiredPlanar.X, groundY + settings.groundOffset, desiredPlanar.Z)
-        local visualPosition = groundedPosition + Vector3.new(0, settings.virtualAltitude, 0)
-
-        settings.lastGroundPosition = groundedPosition
-        settings.lastVisualPosition = visualPosition
-
         local hum = getHumanoid(char)
         if hum then
-            hum.CameraOffset = Vector3.new(0, math.clamp(settings.virtualAltitude, 0, 1500), 0)
+            hum.CameraOffset = Vector3.zero
+            hum:ChangeState(Enum.HumanoidStateType.Physics)
         end
 
-        local delta = groundedPosition - hrp.Position
-        local smoothVelocity = delta * 14
-        smoothVelocity = Vector3.new(
-            math.clamp(smoothVelocity.X, -settings.horizontalSpeed, settings.horizontalSpeed),
-            math.clamp(smoothVelocity.Y, -120, 120),
-            math.clamp(smoothVelocity.Z, -settings.horizontalSpeed, settings.horizontalSpeed)
-        )
-        mover.Velocity = smoothVelocity
+        local horizontalSpeed = math.clamp(settings.horizontalSpeed or 28, 5, 80)
+        local verticalSpeed = math.clamp(settings.verticalSpeed or 45, 8, 120)
+        local antiKickSink = math.clamp(settings.antiKickSink or 1.4, 0, 6)
+
+        local desiredVelocity = Vector3.new(planarMove.X * horizontalSpeed, verticalInput * verticalSpeed, planarMove.Z * horizontalSpeed)
+        if verticalInput == 0 then
+            desiredVelocity = Vector3.new(desiredVelocity.X, -antiKickSink, desiredVelocity.Z)
+        end
+        mover.Velocity = desiredVelocity
+        state.lastVisualPosition = hrp.Position
     end))
 end
 
@@ -2321,7 +2309,8 @@ end
 
 
 moduleSettings["Scaffold"] = {
-    allowTowering = true
+    allowTowering = true,
+    placeAhead = 1
 }
 
 local function getTeamWoolName()
@@ -2343,11 +2332,89 @@ local function toggleScaffold(enabled)
     cleanupModule("Scaffold")
     if not enabled then return end
 
+    local function snapToBlockGrid(position)
+        local blockSize = 3
+        local function snap(value)
+            return math.floor((value / blockSize) + 0.5) * blockSize
+        end
+        return Vector3.new(snap(position.X), snap(position.Y), snap(position.Z))
+    end
+
+    local function placeWithController(blockController, blockTool, woolName, placePosition)
+        local didPlace = false
+        local payloads = {
+            CFrame.new(placePosition),
+            placePosition,
+            {blockPosition = placePosition},
+            {position = placePosition},
+            {blockType = blockTool.Name or woolName, position = placePosition}
+        }
+        for _, fnName in ipairs({"placeBlock", "PlaceBlock", "placeBlockAt", "placeBlockRequest"}) do
+            local fn = blockController[fnName]
+            if type(fn) == "function" then
+                for _, payload in ipairs(payloads) do
+                    local ok = safeCall("Scaffold_" .. fnName, function()
+                        fn(blockController, payload)
+                        return true
+                    end)
+                    didPlace = didPlace or (ok == true)
+                    if didPlace then
+                        return true
+                    end
+                end
+            end
+        end
+        return didPlace
+    end
+
+    local function placeWithRemotes(blockTool, woolName, placePosition)
+        local netManaged = getNetManagedFolder()
+        if netManaged then
+            for _, remoteName in ipairs({"PlaceBlock", "placeBlock", "ClientPlaceBlock"}) do
+                local remote = netManaged:FindFirstChild(remoteName)
+                if remote and remote:IsA("RemoteEvent") then
+                    local didFire = safeCall("ScaffoldNetManaged_" .. remoteName, function()
+                        remote:FireServer({
+                            blockType = blockTool.Name or woolName,
+                            blockPosition = placePosition,
+                            position = placePosition
+                        })
+                        return true
+                    end)
+                    if didFire then
+                        return true
+                    end
+                end
+            end
+        end
+
+        local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
+        if remotes then
+            for _, remote in ipairs(remotes:GetDescendants()) do
+                if remote:IsA("RemoteEvent") and remote.Name:lower():find("place") and remote.Name:lower():find("block") then
+                    local didFire = safeCall("ScaffoldRemote_" .. remote.Name, function()
+                        remote:FireServer({
+                            position = placePosition,
+                            blockPosition = placePosition,
+                            blockType = blockTool.Name or woolName
+                        })
+                        return true
+                    end)
+                    if didFire then
+                        return true
+                    end
+                end
+            end
+        end
+        return false
+    end
+
     local connection = RunService.Heartbeat:Connect(function()
         if not moduleStates["Scaffold"] then return end
         local myChar = getCharacter(lplr)
+        local hum = getHumanoid(myChar)
         local hrp = getHRP(myChar)
-        if not hrp then return end
+        if not hrp or not hum then return end
 
         local woolName = getTeamWoolName()
         local blockTool = getHeldOrBackpackBlockTool()
@@ -2362,26 +2429,25 @@ local function toggleScaffold(enabled)
         downParams.FilterType = Enum.RaycastFilterType.Exclude
         downParams.FilterDescendantsInstances = {myChar}
         downParams.IgnoreWater = true
-        local downRay = Workspace:Raycast(hrp.Position, Vector3.new(0, -4.5, 0), downParams)
+        local downRay = Workspace:Raycast(hrp.Position, Vector3.new(0, -4.8, 0), downParams)
         if downRay and (hrp.Position.Y - downRay.Position.Y) <= 3.2 then
             return
         end
 
-        local basePos = hrp.Position - Vector3.new(0, 3, 0)
-        local function snapToGrid(position)
-            local blockSize = 3
-            local function snap(value)
-                return math.floor((value / blockSize) + 0.5) * blockSize
-            end
-            return Vector3.new(snap(position.X), snap(position.Y), snap(position.Z))
+        local lookPlanar = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+        if lookPlanar.Magnitude > 0 then
+            lookPlanar = lookPlanar.Unit
+        else
+            lookPlanar = Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z).Unit
         end
-        local placePos = snapToGrid(basePos)
+        local placeAhead = math.clamp(moduleSettings["Scaffold"].placeAhead or 1, 0, 2)
+        local basePos = hrp.Position + (lookPlanar * (placeAhead * 1.5)) - Vector3.new(0, 3, 0)
+        local placePos = snapToBlockGrid(basePos)
 
 
         if moduleSettings["Scaffold"].allowTowering then
-            local hum = getHumanoid(myChar)
             if hum and hum:GetState() == Enum.HumanoidStateType.Jumping then
-                placePos = snapToGrid(hrp.Position - Vector3.new(0, 0.5, 0))
+                placePos = snapToBlockGrid(hrp.Position - Vector3.new(0, 0.8, 0))
             end
         end
 
@@ -2400,29 +2466,14 @@ local function toggleScaffold(enabled)
         if blockExists then return end
 
         local blockController = getBlockPlacementController()
-        if blockController then
-            local didPlace = false
-            for _, fnName in ipairs({"placeBlock", "PlaceBlock", "placeBlockAt", "placeBlockRequest"}) do
-                local fn = blockController[fnName]
-                if type(fn) == "function" then
-                    safeCall("Scaffold_" .. fnName .. "_CFrame", function()
-                        fn(blockController, CFrame.new(placePos))
-                        didPlace = true
-                    end)
-                    safeCall("Scaffold_" .. fnName .. "_Vector3", function()
-                        fn(blockController, placePos)
-                        didPlace = true
-                    end)
-                    safeCall("Scaffold_" .. fnName .. "_ItemAndCFrame", function()
-                        fn(blockController, blockTool.Name or woolName, CFrame.new(placePos))
-                        didPlace = true
-                    end)
-                end
-            end
-            if didPlace then
-                performPrimaryClick()
-                return
-            end
+        if blockController and placeWithController(blockController, blockTool, woolName, placePos) then
+            performPrimaryClick()
+            return
+        end
+
+        if placeWithRemotes(blockTool, woolName, placePos) then
+            performPrimaryClick()
+            return
         end
 
         if BedwarsShopController then
@@ -2434,26 +2485,6 @@ local function toggleScaffold(enabled)
                     performPrimaryClick()
                 end
             end)
-        else
-
-            local remotes = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage
-            if remotes then
-                for _, remote in ipairs(remotes:GetDescendants()) do
-                    if remote:IsA("RemoteEvent") and remote.Name:lower():find("place") and remote.Name:lower():find("block") then
-                        safeCall("ScaffoldRemoteTable", function()
-                            remote:FireServer({
-                                position = placePos,
-                                blockType = blockTool.Name or woolName
-                            })
-                            performPrimaryClick()
-                        end)
-                        safeCall("ScaffoldRemoteArgs", function()
-                            remote:FireServer(placePos, blockTool.Name or woolName)
-                            performPrimaryClick()
-                        end)
-                    end
-                end
-            end
         end
     end)
     addConnection("Scaffold", connection)
@@ -2464,6 +2495,7 @@ moduleSettings["Aimbot"] = {
     enabled = true,
     fov = 160,
     smoothness = 0.55,
+    snapStrength = 0.85,
     wallCheck = true,
     teamCheck = true,
     targetPart = "Head",
@@ -2627,6 +2659,17 @@ local function toggleAimbot(enabled)
         end
         desiredDirection = desiredDirection.Unit
 
+        local targetViewportPoint, isOnScreen = camera:WorldToViewportPoint(predictedPosition)
+        if mouseMoveRelative and isOnScreen then
+            local viewportCenter = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+            local offset = Vector2.new(targetViewportPoint.X, targetViewportPoint.Y) - viewportCenter
+            local smoothness = math.clamp(settings.smoothness or 0.55, 0.01, 1)
+            local snapStrength = math.clamp(settings.snapStrength or 0.85, 0.1, 1)
+            local interpolation = math.clamp((smoothness * snapStrength) * (deltaTime * 60), 0.05, 1)
+            mouseMoveRelative(offset.X * interpolation, offset.Y * interpolation)
+            return
+        end
+
         local lookAtCFrame = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + desiredDirection)
         local smoothness = math.clamp(settings.smoothness or 0.55, 0.01, 1)
         local alpha = math.clamp((smoothness * 1.35) * (deltaTime * 60), 0.06, 1)
@@ -2764,7 +2807,8 @@ end
 
 moduleSettings["LongJump"] = {
     speed = 37,
-    duration = 0.6
+    duration = 0.6,
+    cooldown = 0.45
 }
 
 local function toggleLongJump(enabled)
@@ -2795,12 +2839,19 @@ local function toggleLongJump(enabled)
 
     local hookedTool = nil
     local activatedConnection = nil
+    local deactivatedConnection = nil
+    local lastBoostAt = 0
 
     local function applyBoost()
         local char = getCharacter(lplr)
         local hrp = getHRP(char)
         local hum = getHumanoid(char)
         if not hrp or not hum then return end
+        local cooldown = math.clamp(moduleSettings["LongJump"].cooldown or 0.45, 0.1, 2)
+        if tick() - lastBoostAt < cooldown then
+            return
+        end
+        lastBoostAt = tick()
 
         local direction
         if hum.MoveDirection.Magnitude > 0.1 then
@@ -2833,12 +2884,21 @@ local function toggleLongJump(enabled)
             activatedConnection:Disconnect()
             activatedConnection = nil
         end
+        if deactivatedConnection then
+            deactivatedConnection:Disconnect()
+            deactivatedConnection = nil
+        end
         hookedTool = dao
         activatedConnection = dao.Activated:Connect(function()
             if not moduleStates["LongJump"] then return end
             applyBoost()
         end)
+        deactivatedConnection = dao.Deactivated:Connect(function()
+            if not moduleStates["LongJump"] then return end
+            applyBoost()
+        end)
         addConnection("LongJump", activatedConnection)
+        addConnection("LongJump", deactivatedConnection)
     end
 
     local function unhookDao()
@@ -2846,8 +2906,23 @@ local function toggleLongJump(enabled)
             activatedConnection:Disconnect()
             activatedConnection = nil
         end
+        if deactivatedConnection then
+            deactivatedConnection:Disconnect()
+            deactivatedConnection = nil
+        end
         hookedTool = nil
     end
+
+    addConnection("LongJump", UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe or not moduleStates["LongJump"] then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.F then
+            local char = getCharacter(lplr)
+            local held = char and char:FindFirstChildOfClass("Tool")
+            if held and isDaoTool(held) then
+                applyBoost()
+            end
+        end
+    end))
 
     -- Heartbeat watches for dao appearing/disappearing
     addConnection("LongJump", RunService.Heartbeat:Connect(function()
@@ -4304,6 +4379,7 @@ createRegisteredModule("Combat", "AimAssist", false, toggleAimAssist, {
 createRegisteredModule("Combat", "Aimbot", false, toggleAimbot, {
     {type = "slider", name = "FOV", min = 20, max = 450, settingName = "fov"},
     {type = "slider", name = "Smoothness", min = 0.01, max = 1, settingName = "smoothness"},
+    {type = "slider", name = "Snap Strength", min = 0.1, max = 1, settingName = "snapStrength"},
     {type = "slider", name = "Prediction", min = 0, max = 2, settingName = "predictionStrength"},
     {type = "slider", name = "Max Distance", min = 60, max = 400, settingName = "maxDistance"},
     {type = "dropdown", name = "Target Part", options = {"Head", "HumanoidRootPart"}, settingName = "targetPart"},
@@ -4323,7 +4399,8 @@ createRegisteredModule("Blatant", "Speed", false, toggleSpeed, {
 })
 createRegisteredModule("Blatant", "Step", false, toggleStep, {
     {type = "slider", name = "Max Height", min = 2, max = 14, settingName = "maxHeight"},
-    {type = "slider", name = "Forward Check", min = 1.5, max = 5, settingName = "forwardCheckDistance"}
+    {type = "slider", name = "Forward Check", min = 1.5, max = 5, settingName = "forwardCheckDistance"},
+    {type = "slider", name = "Step Cooldown", min = 0.03, max = 0.25, settingName = "stepCooldown"}
 })
 createRegisteredModule("Blatant", "SafeWalk", false, toggleSafeWalk, {
     {type = "dropdown", name = "Mode", options = {"Normal", "TP"}, settingName = "mode"},
@@ -4342,14 +4419,17 @@ createRegisteredModule("Blatant", "Fly", false, toggleFly, {
 createRegisteredModule("Blatant", "VerticalFly", false, toggleVerticalFly, {
     {type = "slider", name = "Horizontal Speed", min = 8, max = 60, settingName = "horizontalSpeed"},
     {type = "slider", name = "Vertical Speed", min = 10, max = 120, settingName = "verticalSpeed"},
-    {type = "slider", name = "Ground Offset", min = 1, max = 8, settingName = "groundOffset"}
+    {type = "slider", name = "Ground Offset", min = 1, max = 8, settingName = "groundOffset"},
+    {type = "slider", name = "Anti Kick Sink", min = 0, max = 6, settingName = "antiKickSink"}
 })
 createRegisteredModule("Blatant", "LongJump", false, toggleLongJump, {
     {type = "slider", name = "Speed", min = 10, max = 200, settingName = "speed"},
-    {type = "slider", name = "Duration", min = 0.1, max = 3, settingName = "duration"}
+    {type = "slider", name = "Duration", min = 0.1, max = 3, settingName = "duration"},
+    {type = "slider", name = "Cooldown", min = 0.1, max = 2, settingName = "cooldown"}
 })
 createRegisteredModule("Blatant", "Scaffold", false, toggleScaffold, {
-    {type = "toggle", name = "Allow Towering", settingName = "allowTowering"}
+    {type = "toggle", name = "Allow Towering", settingName = "allowTowering"},
+    {type = "slider", name = "Place Ahead", min = 0, max = 2, settingName = "placeAhead"}
 })
 createRegisteredModule("Render", "ESP", false, toggleESP, {})
 createRegisteredModule("Render", "Tracers", false, toggleTracers, {
