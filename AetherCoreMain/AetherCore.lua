@@ -762,9 +762,15 @@ local function legacyCreateSlider(parent, name, min, max, default, callback)
         end
         return string.format("%.2f", v)
     end
-    local function setValue(v)
-        default = math.clamp(v, min, max)
-        local newPercent = (default - min) / range
+    local function setValue(v, fromTextEntry)
+        local numeric = tonumber(v)
+        if not numeric then
+            return
+        end
+        local appliedValue = fromTextEntry and math.max(numeric, min) or math.clamp(numeric, min, max)
+        local visualValue = math.clamp(appliedValue, min, max)
+        default = appliedValue
+        local newPercent = (visualValue - min) / range
         TweenService:Create(fill, TweenInfo.new(0.08, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(newPercent, 0, 1, 0)}):Play()
         valueButton.Text = formatValue(default)
         callback(default)
@@ -787,7 +793,7 @@ local function legacyCreateSlider(parent, name, min, max, default, callback)
             local relativeX = math.clamp((input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X, 0, 1)
             local val = min + relativeX * range
             if math.abs(val - default) > 0.001 then
-                setValue(val)
+                setValue(val, false)
             end
         end
     end)
@@ -818,7 +824,7 @@ local function legacyCreateSlider(parent, name, min, max, default, callback)
             if enterPressed then
                 local typed = tonumber(inputBox.Text)
                 if typed then
-                    setValue(typed)
+                    setValue(typed, true)
                 end
             end
             inputBox:Destroy()
@@ -828,7 +834,7 @@ local function legacyCreateSlider(parent, name, min, max, default, callback)
     return {
         GetValue = function() return default end,
         SetValue = function(v)
-            setValue(v)
+            setValue(v, false)
         end
     }
 end
@@ -1850,10 +1856,22 @@ local function toggleAntiDeath(enabled)
         local lowHealth = hum.Health <= settings.healthThreshold
 
         if not lowHealth then
+            if state.phase == "down" and state.anchorCFrame then
+                local anchorPosition = state.anchorCFrame.Position
+                local floorPosition = floorSnap(anchorPosition + Vector3.new(0, 200, 0), char, 3)
+                hrp.Anchored = false
+                hrp.CFrame = CFrame.new(floorPosition or anchorPosition)
+                hrp.AssemblyLinearVelocity = Vector3.zero
+                hum:ChangeState(Enum.HumanoidStateType.Landed)
+                task.wait()
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+            else
+                hrp.Anchored = false
+            end
             state.phase = "up"
             state.phaseUntil = 0
             state.anchorCFrame = nil
-            hrp.Anchored = false
+            state.anchorFloorY = nil
             return
         end
 
@@ -3760,7 +3778,7 @@ local function validateModuleSettings()
     clampSetting("VerticalFly", "horizontalSpeed", moduleSettings.VerticalFly.horizontalSpeed, 8, 60, 28)
     clampSetting("VerticalFly", "verticalSpeed", moduleSettings.VerticalFly.verticalSpeed, 10, 120, 45)
     clampSetting("VerticalFly", "groundOffset", moduleSettings.VerticalFly.groundOffset or moduleSettings.VerticalFly.hoverHeight, 1, 8, 3.2)
-    clampSetting("AntiDeath", "healthThreshold", moduleSettings.AntiDeath.healthThreshold, 1, 95, 25)
+    moduleSettings.AntiDeath.healthThreshold = math.max(1, tonumber(moduleSettings.AntiDeath.healthThreshold) or 25)
     clampSetting("AntiDeath", "belowDuration", moduleSettings.AntiDeath.belowDuration, 0.5, 4, 2)
     clampSetting("AntiDeath", "slowMode", moduleSettings.AntiDeath.slowMode, 0.2, 5, 1.5)
     clampSetting("AntiDeath", "voidOffset", moduleSettings.AntiDeath.voidOffset, 60, 250, 130)
@@ -4016,11 +4034,18 @@ local function uiCreateSlider(parent, name, min, max, default, callback)
 
     local dragging = false
     local range = max - min
-    local function apply(v)
-        local clamped = math.clamp(v, min, max)
-        fill.Size = UDim2.new((clamped - min) / range, 0, 1, 0)
-        valueButton.Text = tostring(math.floor(clamped * 100) / 100)
-        callback(clamped)
+    local function apply(v, fromTextEntry)
+        local numeric = tonumber(v)
+        if not numeric then
+            return
+        end
+
+        local appliedValue = fromTextEntry and math.max(numeric, min) or math.clamp(numeric, min, max)
+        local visualValue = math.clamp(appliedValue, min, max)
+
+        fill.Size = UDim2.new((visualValue - min) / range, 0, 1, 0)
+        valueButton.Text = tostring(math.floor(appliedValue * 100) / 100)
+        callback(appliedValue)
     end
 
     apply(default)
@@ -4034,7 +4059,7 @@ local function uiCreateSlider(parent, name, min, max, default, callback)
     UserInputService.InputChanged:Connect(function(input)
         if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
             local percent = math.clamp((input.Position.X - slider.AbsolutePosition.X) / slider.AbsoluteSize.X, 0, 1)
-            apply(min + (percent * range))
+            apply(min + (percent * range), false)
         end
     end)
 
@@ -4064,7 +4089,7 @@ local function uiCreateSlider(parent, name, min, max, default, callback)
             if enterPressed then
                 local typed = tonumber(box.Text)
                 if typed then
-                    apply(typed)
+                    apply(typed, true)
                 end
             end
             box:Destroy()
@@ -4172,7 +4197,7 @@ local function createSettingsContent(parent, moduleName)
             uiCreateSlider(parent, setting.name, setting.min, setting.max, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
                 saveClientSettings()
-            end)
+            })
         elseif setting.type == "toggle" then
             uiCreateToggle(parent, setting.name, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
