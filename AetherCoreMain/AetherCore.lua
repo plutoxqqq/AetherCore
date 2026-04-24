@@ -2871,7 +2871,7 @@ local function toggleLongJump(enabled)
                 equipToolIfNeeded(dao)
             end
         end
-    end)
+    end))
 end
 
 
