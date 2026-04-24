@@ -37,6 +37,7 @@ local moduleSettings = {
     Reach = {hitRange = 12, mineRange = 12, placeRange = 12},
     VerticalFly = {horizontalSpeed = 28, verticalSpeed = 45, groundOffset = 3.2, hoverHeight = 3.2},
     AntiDeath = {healthThreshold = 25, belowDuration = 2, slowMode = 1.5, voidOffset = 130},
+    AntiHit = {slowMode = 1, riseWindow = 0.14, voidOffset = 130, antiDamageJitter = 2.2},
     FastBreak = {cooldown = 0.03, attemptsPerPulse = 2},
     AutoVoidDrop = {triggerOffset = 18, dropInterval = 0.45}
 }
@@ -60,7 +61,9 @@ local moduleConflictMap = {
     AntiVoid = {"Fly", "VerticalFly"},
     KillAura = {"AimAssist"},
     AimAssist = {"KillAura", "Aimbot"},
-    Aimbot = {"KillAura", "AimAssist"}
+    Aimbot = {"KillAura", "AimAssist"},
+    AntiDeath = {"AntiHit"},
+    AntiHit = {"AntiDeath"}
 }
 
 local function logError(scope, err)
@@ -1812,6 +1815,16 @@ moduleSettings["AntiDeath"] = {
     voidOffset = 130
 }
 
+local function floorSnapPosition(origin, character, yOffset)
+    local offset = yOffset or 3
+    local ray = raycastToGround(origin + Vector3.new(0, 80, 0), {character}, 420)
+    if ray then
+        return ray.Position + Vector3.new(0, offset, 0), ray.Position.Y
+    end
+    local sampled = findNearestGroundPosition(origin, character, 14, 7, offset)
+    return sampled, sampled and (sampled.Y - offset) or nil
+end
+
 local function toggleAntiDeath(enabled)
     cleanupModule("AntiDeath")
     if not enabled then
@@ -1830,15 +1843,6 @@ local function toggleAntiDeath(enabled)
         anchorFloorY = nil
     }
 
-    local function floorSnap(origin, character, yOffset)
-        local ray = raycastToGround(origin + Vector3.new(0, 80, 0), {character}, 420)
-        if ray then
-            return ray.Position + Vector3.new(0, yOffset or 3, 0), ray.Position.Y
-        end
-        local sampled = findNearestGroundPosition(origin, character, 14, 7, yOffset or 3)
-        return sampled, sampled and (sampled.Y - (yOffset or 3)) or nil
-    end
-
     addConnection("AntiDeath", RunService.Heartbeat:Connect(function()
         if not moduleStates["AntiDeath"] then return end
         local char = getCharacter(lplr)
@@ -1852,7 +1856,7 @@ local function toggleAntiDeath(enabled)
         if not lowHealth then
             if state.phase == "down" and state.anchorCFrame then
                 local anchorPosition = state.anchorCFrame.Position
-                local floorPosition = floorSnap(anchorPosition + Vector3.new(0, 200, 0), char, 3)
+                local floorPosition = floorSnapPosition(anchorPosition + Vector3.new(0, 200, 0), char, 3)
                 hrp.Anchored = false
                 hrp.CFrame = CFrame.new(floorPosition or anchorPosition)
                 hrp.AssemblyLinearVelocity = Vector3.zero
@@ -1874,7 +1878,7 @@ local function toggleAntiDeath(enabled)
                 state.phase = "down"
                 state.phaseUntil = now + settings.belowDuration
                 state.anchorCFrame = hrp.CFrame
-                local floorPosition, floorY = floorSnap(hrp.Position, char, 3)
+                local floorPosition, floorY = floorSnapPosition(hrp.Position, char, 3)
                 if floorPosition then
                     state.anchorCFrame = CFrame.new(floorPosition)
                 end
@@ -1895,13 +1899,107 @@ local function toggleAntiDeath(enabled)
             hrp.Anchored = false
             if state.anchorCFrame then
                 local anchorPosition = state.anchorCFrame.Position
-                local floorPosition = floorSnap(anchorPosition + Vector3.new(0, 200, 0), char, 3)
+                local floorPosition = floorSnapPosition(anchorPosition + Vector3.new(0, 200, 0), char, 3)
                 hrp.CFrame = CFrame.new(floorPosition or anchorPosition)
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hum:ChangeState(Enum.HumanoidStateType.Landed)
                 task.wait()
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
             end
+        end
+    end))
+end
+
+moduleSettings["AntiHit"] = {
+    slowMode = 1,
+    riseWindow = 0.14,
+    voidOffset = 130,
+    antiDamageJitter = 2.2
+}
+
+local function toggleAntiHit(enabled)
+    cleanupModule("AntiHit")
+    if not enabled then
+        local char = getCharacter(lplr)
+        local hrp = getHRP(char)
+        if hrp then
+            hrp.Anchored = false
+        end
+        return
+    end
+
+    local state = {
+        phase = "down",
+        phaseUntil = 0,
+        surfaceCFrame = nil,
+        surfaceFloorY = nil,
+        lastHealth = nil,
+        damagePulseUntil = 0
+    }
+
+    addConnection("AntiHit", RunService.Heartbeat:Connect(function()
+        if not moduleStates["AntiHit"] then return end
+        local char = getCharacter(lplr)
+        local hum = getHumanoid(char)
+        local hrp = getHRP(char)
+        if not hum or not hrp or hum.Health <= 0 then return end
+
+        local settings = moduleSettings["AntiHit"]
+        local now = tick()
+        local downDuration = math.clamp(settings.slowMode or 1, 0.2, 5)
+        local upDuration = math.clamp(settings.riseWindow or 0.14, 0.08, 0.35)
+        local voidOffset = math.clamp(settings.voidOffset or 130, 60, 260)
+        local jitter = math.clamp(settings.antiDamageJitter or 2.2, 0, 6)
+        local currentHealth = hum.Health
+
+        if state.lastHealth and currentHealth < state.lastHealth then
+            state.damagePulseUntil = now + 1.2
+        end
+        state.lastHealth = currentHealth
+
+        if state.phaseUntil <= now then
+            if state.phase == "down" then
+                state.phase = "up"
+                state.phaseUntil = now + (state.damagePulseUntil > now and math.max(0.08, upDuration * 0.7) or upDuration)
+                local surfacePosition, floorY = floorSnapPosition(hrp.Position + Vector3.new(0, 220, 0), char, 3)
+                if surfacePosition then
+                    state.surfaceCFrame = CFrame.new(surfacePosition)
+                    state.surfaceFloorY = floorY
+                elseif state.surfaceCFrame == nil then
+                    state.surfaceCFrame = hrp.CFrame
+                    state.surfaceFloorY = hrp.Position.Y - 3
+                end
+            else
+                state.phase = "down"
+                state.phaseUntil = now + downDuration
+                local snapPosition, floorY = floorSnapPosition(hrp.Position, char, 3)
+                if snapPosition then
+                    state.surfaceCFrame = CFrame.new(snapPosition)
+                    state.surfaceFloorY = floorY
+                end
+            end
+        end
+
+        if state.phase == "up" then
+            hrp.Anchored = false
+            if state.surfaceCFrame then
+                local anchorPosition = state.surfaceCFrame.Position
+                local resnapPosition = floorSnapPosition(anchorPosition + Vector3.new(0, 150, 0), char, 3)
+                hrp.CFrame = CFrame.new(resnapPosition or anchorPosition)
+            end
+            local v = hrp.AssemblyLinearVelocity
+            hrp.AssemblyLinearVelocity = Vector3.new(v.X * 0.92, math.clamp(v.Y, -35, 70), v.Z * 0.92)
+            hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+        else
+            hrp.Anchored = false
+            local surface = state.surfaceCFrame and state.surfaceCFrame.Position or hrp.Position
+            local floorY = state.surfaceFloorY or (surface.Y - 3)
+            local timeFactor = math.sin(now * 7.2) * 0.5 + 0.5
+            local yJitter = jitter * timeFactor
+            local xJitter = math.sin(now * 13.1) * (jitter * 0.25)
+            local zJitter = math.cos(now * 11.7) * (jitter * 0.25)
+            hrp.CFrame = CFrame.new(surface.X + xJitter, floorY - voidOffset - yJitter, surface.Z + zJitter)
+            hrp.AssemblyLinearVelocity = Vector3.new(0, math.min(hrp.AssemblyLinearVelocity.Y, 0), 0)
         end
     end))
 end
@@ -3285,6 +3383,7 @@ moduleHandlers = {
     Tracers = toggleTracers,
     AutoToxic = function(enabled) autoToxicEnabled = enabled end,
     AntiDeath = toggleAntiDeath,
+    AntiHit = toggleAntiHit,
     NoFallDamage = toggleNoFallDamage,
     AntiVoid = toggleAntiVoid,
     InfiniteJump = toggleInfiniteJump,
@@ -3776,6 +3875,10 @@ local function validateModuleSettings()
     clampSetting("AntiDeath", "belowDuration", moduleSettings.AntiDeath.belowDuration, 0.5, 4, 2)
     clampSetting("AntiDeath", "slowMode", moduleSettings.AntiDeath.slowMode, 0.2, 5, 1.5)
     clampSetting("AntiDeath", "voidOffset", moduleSettings.AntiDeath.voidOffset, 60, 250, 130)
+    clampSetting("AntiHit", "slowMode", moduleSettings.AntiHit.slowMode, 0.2, 5, 1)
+    clampSetting("AntiHit", "riseWindow", moduleSettings.AntiHit.riseWindow, 0.08, 0.35, 0.14)
+    clampSetting("AntiHit", "voidOffset", moduleSettings.AntiHit.voidOffset, 60, 260, 130)
+    clampSetting("AntiHit", "antiDamageJitter", moduleSettings.AntiHit.antiDamageJitter, 0, 6, 2.2)
     clampSetting("FastBreak", "cooldown", moduleSettings.FastBreak.cooldown, 0, 0.3, 0.03)
     clampSetting("FastBreak", "attemptsPerPulse", moduleSettings.FastBreak.attemptsPerPulse, 1, 6, 2)
     clampSetting("AutoVoidDrop", "triggerOffset", moduleSettings.AutoVoidDrop.triggerOffset, 4, 60, 18)
@@ -4474,6 +4577,12 @@ createRegisteredModule("Utility", "AntiDeath", false, toggleAntiDeath, {
     {type = "slider", name = "Down Duration", min = 0.5, max = 4, settingName = "belowDuration"},
     {type = "slider", name = "Slow Mode", min = 0.2, max = 5, settingName = "slowMode"},
     {type = "slider", name = "Void Offset", min = 60, max = 250, settingName = "voidOffset"}
+})
+createRegisteredModule("Utility", "AntiHit", false, toggleAntiHit, {
+    {type = "slider", name = "Slow Mode", min = 0.2, max = 5, settingName = "slowMode"},
+    {type = "slider", name = "Rise Window", min = 0.08, max = 0.35, settingName = "riseWindow"},
+    {type = "slider", name = "Void Offset", min = 60, max = 260, settingName = "voidOffset"},
+    {type = "slider", name = "Damage Jitter", min = 0, max = 6, settingName = "antiDamageJitter"}
 })
 createRegisteredModule("Utility", "AntiVoid", false, toggleAntiVoid, {
     {type = "dropdown", name = "Method", options = {"Normal", "Bounce"}, settingName = "method"},
