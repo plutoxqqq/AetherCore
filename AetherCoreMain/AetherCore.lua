@@ -1418,73 +1418,27 @@ moduleSettings["Step"] = {
 
 local function toggleStep(enabled)
     cleanupModule("Step")
-    moduleSettings["Step"].lastTeleportAt = 0
-    if not enabled then
-        local char = getCharacter(lplr)
+
+    local function applyStep(char)
+        char = char or getCharacter(lplr)
         local hum = getHumanoid(char)
         if hum then
-            hum.StepHeight = 2
+            hum.StepHeight = enabled and math.clamp(moduleSettings["Step"].maxHeight or 6, 2, 14) or 2
         end
+    end
+
+    if not enabled then
+        applyStep()
         return
     end
 
+    applyStep()
+    addConnection("Step", lplr.CharacterAdded:Connect(function(char)
+        applyStep(char)
+    end))
     addConnection("Step", RunService.Heartbeat:Connect(function()
         if not moduleStates["Step"] then return end
-        local char = getCharacter(lplr)
-        local hum = getHumanoid(char)
-        local hrp = getHRP(char)
-        if not hum or not hrp or hum.Health <= 0 then return end
-
-        local settings = moduleSettings["Step"]
-        local maxHeight = math.clamp(settings.maxHeight or 6, 2, 14)
-        hum.StepHeight = maxHeight
-
-        if hum.MoveDirection.Magnitude < 0.05 then
-            return
-        end
-
-        local rayParams = RaycastParams.new()
-        rayParams.FilterType = Enum.RaycastFilterType.Exclude
-        rayParams.FilterDescendantsInstances = {char}
-        rayParams.IgnoreWater = true
-
-        local moveDirection = hum.MoveDirection.Unit
-        local forwardDistance = math.clamp(settings.forwardCheckDistance or 2.6, 1.2, 5)
-        local wallHit = Workspace:Raycast(hrp.Position + Vector3.new(0, 2, 0), moveDirection * forwardDistance, rayParams)
-        if not wallHit or math.abs(wallHit.Normal.Y) > 0.45 then
-            return
-        end
-
-        local surfaceProbeOrigin = wallHit.Position + moveDirection * 1.1 + Vector3.new(0, maxHeight + 2.5, 0)
-        local stepSurfaceHit = Workspace:Raycast(surfaceProbeOrigin, Vector3.new(0, -(maxHeight + 3.5), 0), rayParams)
-        if not stepSurfaceHit or stepSurfaceHit.Normal.Y < 0.55 then
-            return
-        end
-
-        local targetY = stepSurfaceHit.Position.Y + (hrp.Size.Y * 0.5) + 0.08
-        local verticalDelta = targetY - hrp.Position.Y
-        if verticalDelta <= 0.6 or verticalDelta > maxHeight + 0.35 then
-            return
-        end
-
-        local now = tick()
-        local cooldown = math.clamp(settings.stepCooldown or 0.09, 0.03, 0.25)
-        if now - (settings.lastTeleportAt or 0) < cooldown then
-            return
-        end
-
-        local targetPosition = Vector3.new(
-            hrp.Position.X + moveDirection.X * 0.85,
-            targetY,
-            hrp.Position.Z + moveDirection.Z * 0.85
-        )
-        local headClearanceHit = Workspace:Raycast(targetPosition + Vector3.new(0, 0.5, 0), Vector3.new(0, 3.5, 0), rayParams)
-        if headClearanceHit then
-            return
-        end
-
-        settings.lastTeleportAt = now
-        hrp.CFrame = CFrame.new(targetPosition, targetPosition + Vector3.new(moveDirection.X, 0, moveDirection.Z))
+        applyStep()
     end))
 end
 
