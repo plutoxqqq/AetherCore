@@ -1418,6 +1418,7 @@ moduleSettings["Step"] = {
 
 local function toggleStep(enabled)
     cleanupModule("Step")
+    moduleSettings["Step"].lastStepAt = 0
 
     local function applyStep(char)
         char = char or getCharacter(lplr)
@@ -1436,9 +1437,52 @@ local function toggleStep(enabled)
     addConnection("Step", lplr.CharacterAdded:Connect(function(char)
         applyStep(char)
     end))
+
     addConnection("Step", RunService.Heartbeat:Connect(function()
         if not moduleStates["Step"] then return end
-        applyStep()
+        local char = getCharacter(lplr)
+        local hum = getHumanoid(char)
+        local hrp = getHRP(char)
+        if not hum or not hrp or hum.Health <= 0 then return end
+
+        applyStep(char)
+
+        if hum.MoveDirection.Magnitude < 0.05 then return end
+
+        local settings = moduleSettings["Step"]
+        local now = tick()
+        local cooldown = math.clamp(settings.stepCooldown or 0.09, 0.03, 0.25)
+        if now - (settings.lastStepAt or 0) < cooldown then return end
+
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        rayParams.FilterDescendantsInstances = {char}
+        rayParams.IgnoreWater = true
+
+        local moveDir = hum.MoveDirection.Unit
+        local forwardDist = math.clamp(settings.forwardCheckDistance or 2.6, 1.2, 5)
+
+        -- check for wall ahead
+        local wallHit = Workspace:Raycast(hrp.Position, moveDir * forwardDist, rayParams)
+        if not wallHit or math.abs(wallHit.Normal.Y) > 0.45 then return end
+
+        -- check there's a surface above the wall to land on
+        local probeOrigin = wallHit.Position + moveDir * 1.1 + Vector3.new(0, settings.maxHeight + 2.5, 0)
+        local surfaceHit = Workspace:Raycast(probeOrigin, Vector3.new(0, -(settings.maxHeight + 3.5), 0), rayParams)
+        if not surfaceHit or surfaceHit.Normal.Y < 0.55 then return end
+
+        local verticalDelta = surfaceHit.Position.Y - hrp.Position.Y
+        if verticalDelta <= 0.6 or verticalDelta > settings.maxHeight + 0.35 then return end
+
+        settings.lastStepAt = now
+
+        -- launch upward with velocity instead of CFrame teleport
+        local launchPower = math.clamp(verticalDelta * 8, 20, 80)
+        hrp.AssemblyLinearVelocity = Vector3.new(
+            hrp.AssemblyLinearVelocity.X,
+            launchPower,
+            hrp.AssemblyLinearVelocity.Z
+        )
     end))
 end
 
