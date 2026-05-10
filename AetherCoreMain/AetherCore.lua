@@ -3352,8 +3352,10 @@ local categoryManualVisibility = {}
 local categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Legend"}
 local homeTabButton
 local settingsTabButton
+local scriptHubTabButton
 local homeDashboardPanel
 local settingsDashboardPanel
+local scriptHubDashboardPanel
 local activeSidebarTab = "Home"
 local keybindListening = false
 local searchText = ""
@@ -3552,6 +3554,7 @@ end
 
 homeDashboardPanel = createDashboardBase("HomeDashboard")
 settingsDashboardPanel = createDashboardBase("SettingsDashboard")
+scriptHubDashboardPanel = createDashboardBase("ScriptHubDashboard")
 
 do
     local welcomeCard = Instance.new("Frame")
@@ -3683,6 +3686,161 @@ do
     versionText.Font = Enum.Font.Gotham
     versionText.TextSize = 13
     versionText.Parent = statusCard
+end
+
+do
+    local scriptHubHeader = Instance.new("Frame")
+    scriptHubHeader.Size = UDim2.new(1, -20, 0, 84)
+    scriptHubHeader.Position = UDim2.new(0, 10, 0, 12)
+    scriptHubHeader.Parent = scriptHubDashboardPanel
+    styleDashboardCard(scriptHubHeader)
+
+    local scriptHubTitle = Instance.new("TextLabel")
+    scriptHubTitle.Size = UDim2.new(1, -30, 0, 34)
+    scriptHubTitle.Position = UDim2.new(0, 15, 0, 12)
+    scriptHubTitle.BackgroundTransparency = 1
+    scriptHubTitle.Text = "ScriptHub AI Assistant"
+    scriptHubTitle.TextXAlignment = Enum.TextXAlignment.Left
+    scriptHubTitle.TextColor3 = palette.text
+    scriptHubTitle.Font = Enum.Font.GothamBold
+    scriptHubTitle.TextSize = 30
+    scriptHubTitle.Parent = scriptHubHeader
+
+    local scriptHubSubtitle = Instance.new("TextLabel")
+    scriptHubSubtitle.Size = UDim2.new(1, -30, 0, 24)
+    scriptHubSubtitle.Position = UDim2.new(0, 15, 0, 48)
+    scriptHubSubtitle.BackgroundTransparency = 1
+    scriptHubSubtitle.Text = "Ask about Roblox executors and exploit scripting guidance."
+    scriptHubSubtitle.TextXAlignment = Enum.TextXAlignment.Left
+    scriptHubSubtitle.TextColor3 = palette.secondary
+    scriptHubSubtitle.Font = Enum.Font.Gotham
+    scriptHubSubtitle.TextSize = 16
+    scriptHubSubtitle.Parent = scriptHubHeader
+
+    local chatCard = Instance.new("Frame")
+    chatCard.Size = UDim2.new(1, -20, 1, -120)
+    chatCard.Position = UDim2.new(0, 10, 0, 106)
+    chatCard.Parent = scriptHubDashboardPanel
+    styleDashboardCard(chatCard)
+
+    local chatLog = Instance.new("ScrollingFrame")
+    chatLog.Size = UDim2.new(1, -24, 1, -74)
+    chatLog.Position = UDim2.new(0, 12, 0, 12)
+    chatLog.BackgroundColor3 = Color3.fromRGB(14, 14, 22)
+    chatLog.BorderSizePixel = 0
+    chatLog.ScrollBarThickness = 5
+    chatLog.CanvasSize = UDim2.new(0, 0, 0, 0)
+    chatLog.Parent = chatCard
+    addCorner(chatLog, 8)
+
+    local chatLayout = Instance.new("UIListLayout")
+    chatLayout.Padding = UDim.new(0, 6)
+    chatLayout.Parent = chatLog
+
+    local chatInput = Instance.new("TextBox")
+    chatInput.Size = UDim2.new(1, -118, 0, 44)
+    chatInput.Position = UDim2.new(0, 12, 1, -56)
+    chatInput.BackgroundColor3 = Color3.fromRGB(21, 21, 33)
+    chatInput.BorderSizePixel = 0
+    chatInput.PlaceholderText = "Ask about Solara, Wave, Delta, Hydrogen, Arceus X, Codex, Fluxus, and more..."
+    chatInput.Text = ""
+    chatInput.TextColor3 = palette.text
+    chatInput.PlaceholderColor3 = palette.secondary
+    chatInput.Font = Enum.Font.Gotham
+    chatInput.TextSize = 14
+    chatInput.TextXAlignment = Enum.TextXAlignment.Left
+    chatInput.ClearTextOnFocus = false
+    chatInput.Parent = chatCard
+    addCorner(chatInput, 8)
+
+    local sendButton = Instance.new("TextButton")
+    sendButton.Size = UDim2.new(0, 94, 0, 44)
+    sendButton.Position = UDim2.new(1, -106, 1, -56)
+    sendButton.BackgroundColor3 = Color3.fromRGB(109, 57, 201)
+    sendButton.Text = "Send"
+    sendButton.TextColor3 = palette.text
+    sendButton.Font = Enum.Font.GothamSemibold
+    sendButton.TextSize = 14
+    sendButton.AutoButtonColor = false
+    sendButton.Parent = chatCard
+    addCorner(sendButton, 8)
+
+    local executorKnowledge = {
+        ["solara"] = "Solara is a Windows-oriented Roblox executor. Always verify authenticity from trusted community channels and avoid unofficial downloads.",
+        ["wave"] = "Wave commonly refers to a modern Windows executor toolchain with script execution and UI support.",
+        ["delta"] = "Delta is known as a mobile-friendly executor with broad script compatibility and a beginner-focused interface.",
+        ["hydrogen"] = "Hydrogen is commonly discussed for Android support and streamlined execution workflows.",
+        ["arceus x"] = "Arceus X is known in mobile exploit communities and is usually paired with a built-in script browser.",
+        ["codex"] = "Codex is widely referenced as a mobile executor option with script injection and utility menus.",
+        ["fluxus"] = "Fluxus is a long-standing executor brand frequently associated with script hub usage.",
+        ["krnl"] = "KRNL is a legacy Windows executor name that remains frequently referenced in scripts and tutorials.",
+        ["synapse"] = "Synapse is historically one of the most referenced premium executor families in Roblox exploitation.",
+        ["evon"] = "Evon is mentioned in community lists as an executor with broad script support; always validate safety before use."
+    }
+
+    local function addChatBubble(message, isUser)
+        local bubble = Instance.new("TextLabel")
+        bubble.Size = UDim2.new(1, -12, 0, 0)
+        bubble.AutomaticSize = Enum.AutomaticSize.Y
+        bubble.BackgroundColor3 = isUser and Color3.fromRGB(68, 45, 110) or Color3.fromRGB(29, 29, 45)
+        bubble.BorderSizePixel = 0
+        bubble.Text = (isUser and "You: " or "Aether AI: ") .. message
+        bubble.TextColor3 = palette.text
+        bubble.Font = Enum.Font.Gotham
+        bubble.TextSize = 14
+        bubble.TextWrapped = true
+        bubble.TextXAlignment = Enum.TextXAlignment.Left
+        bubble.TextYAlignment = Enum.TextYAlignment.Top
+        bubble.Parent = chatLog
+        addCorner(bubble, 8)
+
+        task.wait()
+        chatLog.CanvasSize = UDim2.new(0, 0, 0, chatLayout.AbsoluteContentSize.Y + 10)
+        chatLog.CanvasPosition = Vector2.new(0, math.max(0, chatLog.CanvasSize.Y.Offset - chatLog.AbsoluteWindowSize.Y))
+    end
+
+    local function buildAssistantReply(prompt)
+        local normalized = (prompt or ""):lower()
+        local responses = {}
+        for executorName, info in pairs(executorKnowledge) do
+            if normalized:find(executorName, 1, true) then
+                table.insert(responses, info)
+            end
+        end
+
+        if #responses == 0 then
+            if normalized:find("best", 1, true) then
+                return "There is no universal best executor. Compare stability, update speed, script compatibility, and safety reputation before choosing one."
+            elseif normalized:find("safe", 1, true) or normalized:find("virus", 1, true) then
+                return "Safety is critical: use trusted sources, scan files, avoid suspicious link shorteners, and never disable system protections for an executor."
+            elseif normalized:find("script", 1, true) then
+                return "For scripting quality, prioritize clear loadstring sources, readable code, and scripts that are maintained after Roblox patches."
+            else
+                return "I can help with executor comparisons, safety checks, script compatibility, and setup guidance. Mention an executor name for targeted details."
+            end
+        end
+
+        return table.concat(responses, " ") .. " Keep in mind that executor availability changes frequently, so always re-verify current status."
+    end
+
+    local function submitChatPrompt()
+        local prompt = (chatInput.Text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+        if prompt == "" then
+            return
+        end
+        addChatBubble(prompt, true)
+        chatInput.Text = ""
+        addChatBubble(buildAssistantReply(prompt), false)
+    end
+
+    sendButton.MouseButton1Click:Connect(submitChatPrompt)
+    chatInput.FocusLost:Connect(function(enterPressed)
+        if enterPressed then
+            submitChatPrompt()
+        end
+    end)
+
+    addChatBubble("Hello. I am your ScriptHub assistant. Ask me about Roblox executors, safety, or exploit script compatibility.", false)
 end
 
 do
@@ -4088,6 +4246,19 @@ settingsTabButton.TextSize = 12
 settingsTabButton.TextXAlignment = Enum.TextXAlignment.Left
 settingsTabButton.Parent = mainList
 addCorner(settingsTabButton, 6)
+
+scriptHubTabButton = Instance.new("TextButton")
+scriptHubTabButton.Size = UDim2.new(1, 0, 0, 32)
+scriptHubTabButton.BackgroundColor3 = palette.panel
+scriptHubTabButton.BorderSizePixel = 0
+scriptHubTabButton.AutoButtonColor = false
+scriptHubTabButton.Text = "  🤖  ScriptHub"
+scriptHubTabButton.TextColor3 = palette.text
+scriptHubTabButton.Font = Enum.Font.GothamSemibold
+scriptHubTabButton.TextSize = 12
+scriptHubTabButton.TextXAlignment = Enum.TextXAlignment.Left
+scriptHubTabButton.Parent = mainList
+addCorner(scriptHubTabButton, 6)
 
 local function uiCreateSlider(parent, name, min, max, default, callback, options)
     options = options or {}
@@ -4632,12 +4803,16 @@ local function setActiveSidebarTab(tabName)
     activeSidebarTab = tabName
     homeDashboardPanel.Visible = tabName == "Home"
     settingsDashboardPanel.Visible = tabName == "Settings"
+    scriptHubDashboardPanel.Visible = tabName == "ScriptHub"
 
     if homeTabButton then
         homeTabButton.BackgroundColor3 = tabName == "Home" and palette.active or palette.panel
     end
     if settingsTabButton then
         settingsTabButton.BackgroundColor3 = tabName == "Settings" and palette.active or palette.panel
+    end
+    if scriptHubTabButton then
+        scriptHubTabButton.BackgroundColor3 = tabName == "ScriptHub" and palette.active or palette.panel
     end
 
     refreshSearch()
@@ -4655,6 +4830,10 @@ settingsTabButton.MouseButton1Click:Connect(function()
     setActiveSidebarTab("Settings")
 end)
 
+scriptHubTabButton.MouseButton1Click:Connect(function()
+    setActiveSidebarTab("ScriptHub")
+end)
+
 for _, category in ipairs(categoryData) do
     local categoryButton = categoryToggleButtons[category.name]
     if categoryButton then
@@ -4664,6 +4843,7 @@ for _, category in ipairs(categoryData) do
             settingsDashboardPanel.Visible = false
             if homeTabButton then homeTabButton.BackgroundColor3 = palette.panel end
             if settingsTabButton then settingsTabButton.BackgroundColor3 = palette.panel end
+            if scriptHubTabButton then scriptHubTabButton.BackgroundColor3 = palette.panel end
             refreshSearch()
         end)
     end
