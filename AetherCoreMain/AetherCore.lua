@@ -22,6 +22,7 @@ local moduleKeybinds = {}
 local moduleSettings = {
     KillAura = {range = 14, swingSpeed = 18},
     AutoClicker = {cps = 10},
+    Sprint = {omni = true},
     Speed = {speed = 24},
     Step = {maxHeight = 6, forwardCheckDistance = 2.6},
     SafeWalk = {maxDrop = 4.5},
@@ -41,7 +42,11 @@ local moduleSettings = {
     FastBreak = {cooldown = 0.03, attemptsPerPulse = 2},
     AutoVoidDrop = {triggerOffset = 18, dropInterval = 0.45},
     FastPickup = {range = 14},
-    AutoLeave = {staffOnly = true, leaveOnMatchEnd = true}
+    AutoLeave = {staffOnly = true, leaveOnMatchEnd = true},
+    Blink = {pulseSeconds = 0},
+    AutoQueue = {delay = 1},
+    AutoBuy = {sword = true, armor = true, upgrades = true},
+    BedNuker = {range = 28}
 }
 local moduleUi = {}
 local moduleHandlers = {}
@@ -56,6 +61,7 @@ local sharedEnvironmentGetter = type(getgenv) == "function" and getgenv or nil
 local autoToxicMessageConnection
 local moduleConflictMap = {
     Speed = {"Fly", "VerticalFly", "LongJump"},
+    Sprint = {},
     Fly = {"Speed", "VerticalFly", "LongJump", "AntiVoid"},
     VerticalFly = {"Speed", "Fly", "LongJump", "AntiVoid"},
     LongJump = {"Speed", "Fly", "VerticalFly", "Scaffold", "NoFallDamage"},
@@ -1440,6 +1446,40 @@ local function toggleSpeed(enabled)
     addConnection("Speed", RunService.Heartbeat:Connect(function()
         if not moduleStates["Speed"] then return end
         applySpeed()
+    end))
+end
+
+local function toggleSprint(enabled)
+    cleanupModule("Sprint")
+    if not enabled then return end
+    local function applySprint()
+        local char = getCharacter(lplr)
+        local hum = char and getHumanoid(char)
+        if not hum then return end
+        hum:SetAttribute("AetherSprintForced", true)
+        pcall(function()
+            hum.WalkSpeed = math.max(hum.WalkSpeed, 16)
+        end)
+    end
+    addConnection("Sprint", RunService.RenderStepped:Connect(function()
+        if not moduleStates["Sprint"] then return end
+        local char = getCharacter(lplr)
+        local hum = char and getHumanoid(char)
+        if not hum then return end
+        local moveDir = hum.MoveDirection
+        if moveDir.Magnitude > 0.01 then
+            if (moduleSettings["Sprint"] or {}).omni then
+                hum:ChangeState(Enum.HumanoidStateType.Running)
+            end
+            pcall(function()
+                hum.AutoRotate = true
+            end)
+        end
+    end))
+    applySprint()
+    addConnection("Sprint", lplr.CharacterAdded:Connect(function()
+        task.wait(0.1)
+        applySprint()
     end))
 end
 
@@ -3275,6 +3315,123 @@ local function toggleLongJump(enabled)
     end))
 end
 
+local function toggleBlink(enabled)
+    cleanupModule("Blink")
+    if not enabled then return end
+    local remoteCache = {}
+    local pulseSeconds = math.max(0, tonumber((moduleSettings["Blink"] or {}).pulseSeconds) or 0)
+    local metatable = getrawmetatable(game)
+    if not metatable then return end
+    local oldNamecall = metatable.__namecall
+    setreadonly(metatable, false)
+    metatable.__namecall = newcclosure(function(self, ...)
+        local args = {...}
+        local method = getnamecallmethod()
+        if moduleStates["Blink"] and method == "FireServer" and typeof(self) == "Instance" and self:IsA("RemoteEvent") then
+            table.insert(remoteCache, {self, args})
+            return nil
+        end
+        return oldNamecall(self, ...)
+    end)
+    setreadonly(metatable, true)
+    addConnection("Blink", {
+        Disconnect = function()
+            setreadonly(metatable, false)
+            metatable.__namecall = oldNamecall
+            setreadonly(metatable, true)
+            for _, packet in ipairs(remoteCache) do
+                pcall(function()
+                    packet[1]:FireServer(table.unpack(packet[2]))
+                end)
+            end
+            table.clear(remoteCache)
+        end
+    })
+    if pulseSeconds > 0 then
+        local lastPulse = tick()
+        addConnection("Blink", RunService.Heartbeat:Connect(function()
+            if tick() - lastPulse >= pulseSeconds then
+                lastPulse = tick()
+                for _, packet in ipairs(remoteCache) do
+                    pcall(function()
+                        packet[1]:FireServer(table.unpack(packet[2]))
+                    end)
+                end
+                table.clear(remoteCache)
+            end
+        end))
+    end
+end
+
+local function toggleAutoQueue(enabled)
+    cleanupModule("AutoQueue")
+    if not enabled then return end
+    addConnection("AutoQueue", task.spawn(function()
+        while moduleStates["AutoQueue"] do
+            task.wait(math.max(0.1, tonumber((moduleSettings["AutoQueue"] or {}).delay) or 1))
+            pcall(function()
+                local queueRemote = getNetManagedFolder() and getNetManagedFolder():FindFirstChild("JoinQueue")
+                if queueRemote then
+                    queueRemote:InvokeServer({queueType = "bedwars_test_squads"})
+                end
+            end)
+        end
+    end))
+end
+
+local function toggleBedNuker(enabled)
+    cleanupModule("BedNuker")
+    if not enabled then return end
+    addConnection("BedNuker", RunService.Heartbeat:Connect(function()
+        if not moduleStates["BedNuker"] then return end
+        local char = getCharacter(lplr)
+        local hrp = getHRP(char)
+        if not hrp then return end
+        local range = math.max(6, tonumber((moduleSettings["BedNuker"] or {}).range) or 28)
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name:lower():find("bed") and obj:IsA("BasePart") and (obj.Position - hrp.Position).Magnitude <= range then
+                local remote = getDamageBlockRemote()
+                if remote then
+                    pcall(function()
+                        remote:InvokeServer({blockRef = {blockPosition = obj.Position}})
+                    end)
+                end
+            end
+        end
+    end))
+end
+
+local function toggleAutoBuy(enabled)
+    cleanupModule("AutoBuy")
+    if not enabled then return end
+end
+
+local function toggleOpenShop(enabled)
+    cleanupModule("OpenShop")
+    if enabled then
+        pcall(function()
+            local remote = getNetManagedFolder() and getNetManagedFolder():FindFirstChild("SetShownApp")
+            if remote then
+                remote:FireServer(5)
+            end
+        end)
+        task.defer(function() moduleStates["OpenShop"] = false end)
+    end
+end
+
+local function toggleOpenTeamUpgrades(enabled)
+    cleanupModule("OpenTeamUpgrades")
+    if enabled then
+        pcall(function()
+            local remote = getNetManagedFolder() and getNetManagedFolder():FindFirstChild("SetShownApp")
+            if remote then
+                remote:FireServer(4)
+            end
+        end)
+        task.defer(function() moduleStates["OpenTeamUpgrades"] = false end)
+    end
+end
+
 
 moduleSettings["NoFallDamage"] = {
     method = "Landing"
@@ -3360,6 +3517,10 @@ local function toggleNoFallDamage(enabled)
         applyNoFall(lplr.Character)
     end
     addConnection("NoFallDamage", lplr.CharacterAdded:Connect(applyNoFall))
+end
+
+local function toggleNoFall(enabled)
+    toggleNoFallDamage(enabled)
 end
 
 
@@ -3587,6 +3748,8 @@ moduleHandlers = {
     Reach = toggleReach,
     AimAssist = toggleAimAssist,
     AutoClicker = toggleAutoClicker,
+    Sprint = toggleSprint,
+    AutoQueue = toggleAutoQueue,
     Velocity = toggleVelocity,
     Speed = toggleSpeed,
     Step = toggleStep,
@@ -3606,14 +3769,21 @@ moduleHandlers = {
     AntiDeath = toggleAntiDeath,
     AntiHit = toggleAntiHit,
     NoFallDamage = toggleNoFallDamage,
+    NoFall = toggleNoFall,
     AntiVoid = toggleAntiVoid,
     FastPickup = toggleFastPickup,
     AutoLeave = toggleAutoLeave,
     AntiCrash = toggleAntiCrash,
     InfiniteJump = toggleInfiniteJump,
+    Blink = toggleBlink,
+    BedNuker = toggleBedNuker,
     Nuker = toggleNuker,
     FastBreak = toggleFastBreak,
     AutoVoidDrop = toggleAutoVoidDrop
+    ,
+    AutoBuy = toggleAutoBuy,
+    OpenShop = toggleOpenShop,
+    OpenTeamUpgrades = toggleOpenTeamUpgrades
 }
 
 local function addCorner(target, radius)
@@ -5096,6 +5266,12 @@ createRegisteredModule("Combat", "Aimbot", false, toggleAimbot, {
 createRegisteredModule("Combat", "AutoClicker", false, toggleAutoClicker, {
     {type = "slider", name = "CPS", min = 1, max = 20, settingName = "cps"}
 })
+createRegisteredModule("Combat", "Sprint", false, toggleSprint, {
+    {type = "toggle", name = "Omni Sprint", settingName = "omni"}
+})
+createRegisteredModule("Combat", "AutoQueue", false, toggleAutoQueue, {
+    {type = "slider", name = "Queue Delay", min = 0.1, max = 5, settingName = "delay"}
+})
 createRegisteredModule("Combat", "Velocity", false, toggleVelocity, {
     {type = "slider", name = "Horizontal %", min = 0, max = 100, settingName = "horizontalReduction"},
     {type = "slider", name = "Vertical %", min = 0, max = 100, settingName = "verticalReduction"}
@@ -5134,6 +5310,15 @@ createRegisteredModule("Blatant", "LongJump", false, toggleLongJump, {
     {type = "slider", name = "Duration", min = 0.1, max = 3, settingName = "duration"},
     {type = "slider", name = "Cooldown", min = 0.1, max = 2, settingName = "cooldown"}
 })
+createRegisteredModule("Blatant", "Blink", false, toggleBlink, {
+    {type = "slider", name = "Pulse Seconds", min = 0, max = 5, settingName = "pulseSeconds"}
+})
+createRegisteredModule("Blatant", "BedNuker", false, toggleBedNuker, {
+    {type = "slider", name = "Range", min = 8, max = 40, settingName = "range"}
+})
+createRegisteredModule("Blatant", "NoFall", false, toggleNoFall, {
+    {type = "dropdown", name = "Method", options = {"Landing", "NegateVelocity", "Teleport", "DaoExploit"}, settingName = "method"}
+})
 createRegisteredModule("Blatant", "Scaffold", false, toggleScaffold, {
     {type = "toggle", name = "Allow Towering", settingName = "allowTowering"},
     {type = "slider", name = "Place Ahead", min = 0, max = 2, settingName = "placeAhead"}
@@ -5155,6 +5340,13 @@ createRegisteredModule("Utility", "AutoToxic", false, nil, {
     {type = "toggle", name = "Sponsor Mode", settingName = "sponsorMode"},
     {type = "textbox", name = "Custom Phrases (|)", settingName = "customPhrases"}
 })
+createRegisteredModule("Utility", "AutoBuy", false, toggleAutoBuy, {
+    {type = "toggle", name = "Auto Sword", settingName = "sword"},
+    {type = "toggle", name = "Auto Armor", settingName = "armor"},
+    {type = "toggle", name = "Auto Upgrades", settingName = "upgrades"}
+})
+createRegisteredModule("Utility", "OpenShop", false, toggleOpenShop, {})
+createRegisteredModule("Utility", "OpenTeamUpgrades", false, toggleOpenTeamUpgrades, {})
 createRegisteredModule("Utility", "NoFallDamage", false, toggleNoFallDamage, {
     {type = "dropdown", name = "Method", options = {"Landing", "NegateVelocity", "Teleport", "DaoExploit"}, settingName = "method"}
 })
