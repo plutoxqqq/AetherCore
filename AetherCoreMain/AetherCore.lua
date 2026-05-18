@@ -39,7 +39,9 @@ local moduleSettings = {
     AntiDeath = {healthThreshold = 25, belowDuration = 2, slowMode = 1.5, voidOffset = 130},
     AntiHit = {slowMode = 1, riseWindow = 0.14, voidOffset = 130, antiDamageJitter = 2.2},
     FastBreak = {cooldown = 0.03, attemptsPerPulse = 2},
-    AutoVoidDrop = {triggerOffset = 18, dropInterval = 0.45}
+    AutoVoidDrop = {triggerOffset = 18, dropInterval = 0.45},
+    FastPickup = {range = 14},
+    AutoLeave = {staffOnly = true, leaveOnMatchEnd = true}
 }
 local moduleUi = {}
 local moduleHandlers = {}
@@ -63,7 +65,8 @@ local moduleConflictMap = {
     AimAssist = {"KillAura", "Aimbot"},
     Aimbot = {"KillAura", "AimAssist"},
     AntiDeath = {"AntiHit"},
-    AntiHit = {"AntiDeath"}
+    AntiHit = {"AntiDeath"},
+    Blink = {"LongJump"}
 }
 
 local function logError(scope, err)
@@ -131,6 +134,30 @@ local function fetchControllers()
     end
 end
 fetchControllers()
+
+local vapeFunctionTable = {}
+local function refreshVapeFunctionTable()
+    for _, value in ipairs(getgc(true)) do
+        if type(value) == "table" then
+            if rawget(value, "ClientStore") and not vapeFunctionTable.ClientStore then
+                vapeFunctionTable.ClientStore = value.ClientStore
+            end
+            if rawget(value, "BlockEngine") and type(value.BlockEngine) == "table" and not vapeFunctionTable.BlockEngine then
+                vapeFunctionTable.BlockEngine = value.BlockEngine
+            end
+            if rawget(value, "ClientBlockEngine") and not vapeFunctionTable.ClientBlockEngine then
+                vapeFunctionTable.ClientBlockEngine = value.ClientBlockEngine
+            end
+            if rawget(value, "getInventory") and not vapeFunctionTable.getInventory then
+                vapeFunctionTable.getInventory = value.getInventory
+            end
+            if rawget(value, "attackEntity") and not vapeFunctionTable.attackEntity then
+                vapeFunctionTable.attackEntity = value.attackEntity
+            end
+        end
+    end
+end
+pcall(refreshVapeFunctionTable)
 
 local function getNetManagedFolder()
     if cachedNetManagedFolder and cachedNetManagedFolder.Parent then
@@ -580,6 +607,12 @@ local function attackTargetWithBedwarsApi(targetCharacter)
         end) or false
     end
 
+    if type(vapeFunctionTable.attackEntity) == "function" then
+        return safeCall("KillAura_vapeAttackEntity", function()
+            vapeFunctionTable.attackEntity(targetHum, targetRoot.Position)
+            return true
+        end) or false
+    end
     return false
 end
 
@@ -1376,7 +1409,7 @@ local function toggleReach(enabled)
 end
 
 
-moduleSettings["Speed"] = { speed = 24 }
+moduleSettings["Speed"] = { speed = 24, autoJump = true }
 
 local function toggleSpeed(enabled)
     cleanupModule("Speed")
@@ -1399,6 +1432,9 @@ local function toggleSpeed(enabled)
         if hum then
             hum.WalkSpeed = moduleSettings["Speed"].speed
             hum.JumpPower = 60
+            if moduleSettings["Speed"].autoJump and hum.FloorMaterial ~= Enum.Material.Air and hum.MoveDirection.Magnitude > 0.05 then
+                hum:ChangeState(Enum.HumanoidStateType.Jumping)
+            end
         end
     end
 
@@ -2281,6 +2317,83 @@ local function toggleTracers(enabled)
     end))
 end
 
+local function toggleBedESP(enabled)
+    cleanupModule("BedESP")
+    if not enabled then return end
+    local folder = Instance.new("Folder")
+    folder.Name = "AetherCoreBedESP"
+    folder.Parent = Workspace
+    addConnection("BedESP", RunService.Heartbeat:Connect(function()
+        if not moduleStates["BedESP"] then return end
+        folder:ClearAllChildren()
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and obj.Name:lower() == "bed" then
+                local box = Instance.new("BoxHandleAdornment")
+                box.Adornee = obj
+                box.Size = obj.Size + Vector3.new(0.3, 0.3, 0.3)
+                box.AlwaysOnTop = true
+                box.ZIndex = 4
+                box.Transparency = 0.55
+                box.Color3 = Color3.fromRGB(255, 80, 80)
+                box.Parent = folder
+            end
+        end
+    end))
+end
+
+local function toggleNameTags(enabled)
+    cleanupModule("NameTags")
+    if not enabled then return end
+    local tags = {}
+    local function clearTag(plr)
+        if tags[plr] then
+            tags[plr]:Destroy()
+            tags[plr] = nil
+        end
+    end
+    addConnection("NameTags", RunService.Heartbeat:Connect(function()
+        if not moduleStates["NameTags"] then return end
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= lplr and plr.Character then
+                local head = plr.Character:FindFirstChild("Head")
+                local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                local root = getHRP(plr.Character)
+                if head and hum and root then
+                    local bb = tags[plr]
+                    if not bb then
+                        bb = Instance.new("BillboardGui")
+                        bb.Size = UDim2.fromOffset(220, 34)
+                        bb.AlwaysOnTop = true
+                        bb.StudsOffset = Vector3.new(0, 2.5, 0)
+                        bb.Adornee = head
+                        local label = Instance.new("TextLabel")
+                        label.Name = "Label"
+                        label.Size = UDim2.fromScale(1, 1)
+                        label.BackgroundTransparency = 1
+                        label.Font = Enum.Font.GothamBold
+                        label.TextScaled = true
+                        label.Parent = bb
+                        bb.Parent = head
+                        tags[plr] = bb
+                    end
+                    local dist = math.floor((root.Position - camera.CFrame.Position).Magnitude / 3)
+                    local hpRatio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
+                    local r = math.floor(255 * (1 - hpRatio))
+                    local g = math.floor(255 * hpRatio)
+                    local tool = plr.Character:FindFirstChildOfClass("Tool")
+                    local item = tool and (" | " .. tool.Name) or ""
+                    bb.Label.TextColor3 = Color3.fromRGB(r, g, 40)
+                    bb.Label.Text = string.format("%s [%d❤] [%db]%s", plr.DisplayName, math.floor(hum.Health), dist, item)
+                else
+                    clearTag(plr)
+                end
+            else
+                clearTag(plr)
+            end
+        end
+    end))
+end
+
 
 moduleSettings["AutoToxic"] = {
     finalKillMessage = "ez final kill",
@@ -2288,7 +2401,10 @@ moduleSettings["AutoToxic"] = {
     gameWinMessage = "gg ez",
     enabledFinalKill = true,
     enabledBedBreak = true,
-    enabledGameWin = true
+    enabledGameWin = true,
+    autoGG = true,
+    sponsorMode = false,
+    customPhrases = "outplayed|too easy|nt"
 }
 
 local function setupAutoToxic()
@@ -2315,14 +2431,20 @@ local function setupAutoToxic()
             return
         end
         local settings = moduleSettings["AutoToxic"]
+        local customList = {}
+        for phrase in string.gmatch(tostring(settings.customPhrases or ""), "([^|]+)") do
+            table.insert(customList, phrase)
+        end
+        local randomPhrase = #customList > 0 and customList[math.random(1, #customList)] or nil
+        local sponsorSuffix = settings.sponsorMode and " | AetherCore" or ""
         if kind == "final" and settings.enabledFinalKill then
-            sayInChat(settings.finalKillMessage)
+            sayInChat((randomPhrase or settings.finalKillMessage) .. sponsorSuffix)
             lastMessageTime = tick()
         elseif kind == "bed" and settings.enabledBedBreak then
-            sayInChat(settings.bedBreakMessage)
+            sayInChat(settings.bedBreakMessage .. sponsorSuffix)
             lastMessageTime = tick()
         elseif kind == "win" and settings.enabledGameWin then
-            sayInChat(settings.gameWinMessage)
+            sayInChat((settings.autoGG and "gg " or "") .. settings.gameWinMessage .. sponsorSuffix)
             lastMessageTime = tick()
         end
     end
@@ -2345,6 +2467,141 @@ local function setupAutoToxic()
     end
 end
 setupAutoToxic()
+
+local function toggleNoClickDelay(enabled)
+    cleanupModule("NoClickDelay")
+    if not enabled then
+        return
+    end
+    addConnection("NoClickDelay", UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe or not moduleStates["NoClickDelay"] then
+            return
+        end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            performPrimaryClick()
+        end
+    end))
+end
+
+local function toggleFastPickup(enabled)
+    cleanupModule("FastPickup")
+    if not enabled then
+        return
+    end
+    addConnection("FastPickup", RunService.Heartbeat:Connect(function()
+        if not moduleStates["FastPickup"] then
+            return
+        end
+        local myChar = getCharacter(lplr)
+        local myHRP = getHRP(myChar)
+        if not myHRP then
+            return
+        end
+        local pickupRemote = resolveClientRemote("PickupItemDrop")
+        if not pickupRemote then
+            return
+        end
+        local range = math.clamp(tonumber((moduleSettings["FastPickup"] or {}).range) or 14, 4, 30)
+        local overlapParams = OverlapParams.new()
+        overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+        overlapParams.FilterDescendantsInstances = {myChar}
+        for _, part in ipairs(Workspace:GetPartBoundsInRadius(myHRP.Position, range, overlapParams)) do
+            if part:IsA("BasePart") then
+                local parent = part.Parent
+                local nameLower = part.Name:lower()
+                local parentLower = parent and parent.Name:lower() or ""
+                if nameLower:find("drop") or nameLower:find("pickup") or parentLower:find("drop") then
+                    pcall(function()
+                        pickupRemote:FireServer({itemDrop = parent or part})
+                    end)
+                end
+            end
+        end
+    end))
+end
+
+local function toggleAntiCrash(enabled)
+    cleanupModule("AntiCrash")
+    if not enabled then
+        return
+    end
+    addConnection("AntiCrash", Workspace.DescendantAdded:Connect(function(obj)
+        if not moduleStates["AntiCrash"] then
+            return
+        end
+        if obj and obj.Name == "LightningStrike" then
+            pcall(function() obj:Destroy() end)
+        end
+    end))
+end
+
+local function toggleAutoLeave(enabled)
+    cleanupModule("AutoLeave")
+    if not enabled then
+        return
+    end
+    local function leaveMatch()
+        pcall(function()
+            lplr:Kick("AetherCore AutoLeave triggered.")
+        end)
+    end
+    addConnection("AutoLeave", Players.PlayerAdded:Connect(function(player)
+        if not moduleStates["AutoLeave"] then
+            return
+        end
+        local isStaff = player:GetAttribute("isStaff") == true
+            or tostring(player:GetAttribute("rank")):lower():find("moderator") ~= nil
+            or tostring(player:GetAttribute("rank")):lower():find("admin") ~= nil
+        if (moduleSettings["AutoLeave"] or {}).staffOnly and isStaff then
+            leaveMatch()
+        end
+    end))
+    addConnection("AutoLeave", TextChatService.MessageReceived:Connect(function(message)
+        if not moduleStates["AutoLeave"] or not ((moduleSettings["AutoLeave"] or {}).leaveOnMatchEnd) then
+            return
+        end
+        local text = string.lower(message.Text or "")
+        if text:find("victory") or text:find("match ended") or text:find("game over") then
+            leaveMatch()
+        end
+    end))
+end
+
+local function toggleSprint(enabled)
+    cleanupModule("Sprint")
+    if not enabled then return end
+    addConnection("Sprint", RunService.Heartbeat:Connect(function()
+        if not moduleStates["Sprint"] then return end
+        local char = getCharacter(lplr)
+        local hum = getHumanoid(char)
+        if hum and hum.MoveDirection.Magnitude > 0.05 then
+            hum.WalkSpeed = math.max(hum.WalkSpeed, 20)
+        end
+    end))
+end
+
+local function toggleBlink(enabled)
+    cleanupModule("Blink")
+    if not enabled then return end
+    local queue = {}
+    local limit = 120
+    local remote = resolveClientRemote("CombatRemote") or resolveClientRemote("EntityDamageEvent")
+    addConnection("Blink", RunService.Heartbeat:Connect(function()
+        if not moduleStates["Blink"] then return end
+        if #queue > limit then
+            table.remove(queue, 1)
+        end
+    end))
+    addConnection("Blink", UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe or not moduleStates["Blink"] then return end
+        if input.KeyCode == Enum.KeyCode.B and remote then
+            for _, payload in ipairs(queue) do
+                pcall(function() remote:FireServer(payload) end)
+            end
+            table.clear(queue)
+        end
+    end))
+end
 
 
 moduleSettings["Nuker"] = {
@@ -3065,6 +3322,18 @@ moduleSettings["NoFallDamage"] = {
 local function toggleNoFallDamage(enabled)
     cleanupModule("NoFallDamage")
     if not enabled then return end
+    for _, value in ipairs(getgc(true)) do
+        if type(value) == "table" and rawget(value, "requestSelfDamage") and type(value.requestSelfDamage) == "function" then
+            local oldSelfDamage = value.requestSelfDamage
+            value.requestSelfDamage = function(...)
+                if moduleStates["NoFallDamage"] then
+                    return nil
+                end
+                return oldSelfDamage(...)
+            end
+            break
+        end
+    end
 
     local function applyNoFall(char)
         local hum = char:WaitForChild("Humanoid")
@@ -3369,6 +3638,7 @@ moduleHandlers = {
     Reach = toggleReach,
     AimAssist = toggleAimAssist,
     AutoClicker = toggleAutoClicker,
+    Sprint = toggleSprint,
     Velocity = toggleVelocity,
     Speed = toggleSpeed,
     Step = toggleStep,
@@ -3377,15 +3647,22 @@ moduleHandlers = {
     Fly = toggleFly,
     VerticalFly = toggleVerticalFly,
     LongJump = toggleLongJump,
+    Blink = toggleBlink,
     Aimbot = toggleAimbot,
     Scaffold = toggleScaffold,
     ESP = toggleESP,
     Tracers = toggleTracers,
+    BedESP = toggleBedESP,
+    NameTags = toggleNameTags,
     AutoToxic = function(enabled) autoToxicEnabled = enabled end,
+    NoClickDelay = toggleNoClickDelay,
     AntiDeath = toggleAntiDeath,
     AntiHit = toggleAntiHit,
     NoFallDamage = toggleNoFallDamage,
     AntiVoid = toggleAntiVoid,
+    FastPickup = toggleFastPickup,
+    AutoLeave = toggleAutoLeave,
+    AntiCrash = toggleAntiCrash,
     InfiniteJump = toggleInfiniteJump,
     Nuker = toggleNuker,
     FastBreak = toggleFastBreak,
@@ -4872,12 +5149,15 @@ createRegisteredModule("Combat", "Aimbot", false, toggleAimbot, {
 createRegisteredModule("Combat", "AutoClicker", false, toggleAutoClicker, {
     {type = "slider", name = "CPS", min = 1, max = 20, settingName = "cps"}
 })
+createRegisteredModule("Combat", "Sprint", false, toggleSprint, {})
 createRegisteredModule("Combat", "Velocity", false, toggleVelocity, {
     {type = "slider", name = "Horizontal %", min = 0, max = 100, settingName = "horizontalReduction"},
     {type = "slider", name = "Vertical %", min = 0, max = 100, settingName = "verticalReduction"}
 })
+createRegisteredModule("Combat", "NoClickDelay", false, toggleNoClickDelay, {})
 createRegisteredModule("Blatant", "Speed", false, toggleSpeed, {
-    {type = "slider", name = "Speed", min = 16, max = 50, settingName = "speed"}
+    {type = "slider", name = "Speed", min = 16, max = 50, settingName = "speed"},
+    {type = "toggle", name = "Auto Jump", settingName = "autoJump"}
 })
 createRegisteredModule("Blatant", "Step", false, toggleStep, {
     {type = "slider", name = "Max Height", min = 2, max = 14, settingName = "maxHeight"},
@@ -4909,6 +5189,7 @@ createRegisteredModule("Blatant", "LongJump", false, toggleLongJump, {
     {type = "slider", name = "Duration", min = 0.1, max = 3, settingName = "duration"},
     {type = "slider", name = "Cooldown", min = 0.1, max = 2, settingName = "cooldown"}
 })
+createRegisteredModule("Blatant", "Blink", false, toggleBlink, {})
 createRegisteredModule("Blatant", "Scaffold", false, toggleScaffold, {
     {type = "toggle", name = "Allow Towering", settingName = "allowTowering"},
     {type = "slider", name = "Place Ahead", min = 0, max = 2, settingName = "placeAhead"}
@@ -4917,13 +5198,18 @@ createRegisteredModule("Render", "ESP", false, toggleESP, {})
 createRegisteredModule("Render", "Tracers", false, toggleTracers, {
     {type = "slider", name = "Transparency", min = 0, max = 1, settingName = "transparency"}
 })
+createRegisteredModule("Render", "BedESP", false, toggleBedESP, {})
+createRegisteredModule("Render", "NameTags", false, toggleNameTags, {})
 createRegisteredModule("Utility", "AutoToxic", false, nil, {
     {type = "toggle", name = "Final Kill Message", settingName = "enabledFinalKill"},
     {type = "textbox", name = "Final Kill Text", settingName = "finalKillMessage"},
     {type = "toggle", name = "Bed Break Message", settingName = "enabledBedBreak"},
     {type = "textbox", name = "Bed Break Text", settingName = "bedBreakMessage"},
     {type = "toggle", name = "Game Win Message", settingName = "enabledGameWin"},
-    {type = "textbox", name = "Game Win Text", settingName = "gameWinMessage"}
+    {type = "textbox", name = "Game Win Text", settingName = "gameWinMessage"},
+    {type = "toggle", name = "Auto GG", settingName = "autoGG"},
+    {type = "toggle", name = "Sponsor Mode", settingName = "sponsorMode"},
+    {type = "textbox", name = "Custom Phrases (|)", settingName = "customPhrases"}
 })
 createRegisteredModule("Utility", "NoFallDamage", false, toggleNoFallDamage, {
     {type = "dropdown", name = "Method", options = {"Landing", "NegateVelocity", "Teleport", "DaoExploit"}, settingName = "method"}
@@ -4944,6 +5230,14 @@ createRegisteredModule("Utility", "AntiVoid", false, toggleAntiVoid, {
     {type = "dropdown", name = "Method", options = {"Normal", "Bounce"}, settingName = "method"},
     {type = "slider", name = "Bounce Power", min = 50, max = 200, settingName = "bouncePower"}
 })
+createRegisteredModule("Utility", "FastPickup", false, toggleFastPickup, {
+    {type = "slider", name = "Range", min = 4, max = 30, settingName = "range"}
+})
+createRegisteredModule("Utility", "AutoLeave", false, toggleAutoLeave, {
+    {type = "toggle", name = "Staff Only", settingName = "staffOnly"},
+    {type = "toggle", name = "Leave On Match End", settingName = "leaveOnMatchEnd"}
+})
+createRegisteredModule("Utility", "AntiCrash", false, toggleAntiCrash, {})
 createRegisteredModule("Utility", "InfiniteJump", false, toggleInfiniteJump, {})
 createRegisteredModule("Utility", "AutoVoidDrop", false, toggleAutoVoidDrop, {
     {type = "slider", name = "Void Trigger Offset", min = 4, max = 60, settingName = "triggerOffset"},
