@@ -4102,47 +4102,224 @@ local function loadClientSettings()
 end
 loadClientSettings()
 
+--// AetherCore Vape V4-inspired GUI replacement
+--// Replace everything from:
+--//     local function createCategoryColumn(categoryName, index)
+--// down to just BEFORE:
+--//     local function createRegisteredModule(category, name, defaultEnabled, toggleCallback, settingsDefinition)
+--// This keeps your existing module handlers, moduleSettings, saving, keybinds, and toggle callbacks intact.
+
+local vapePalette = {
+    bg = Color3.fromRGB(18, 18, 18),
+    bg2 = Color3.fromRGB(22, 22, 22),
+    window = Color3.fromRGB(28, 28, 28),
+    window2 = Color3.fromRGB(34, 34, 34),
+    row = Color3.fromRGB(38, 38, 38),
+    rowHover = Color3.fromRGB(47, 47, 47),
+    rowOn = Color3.fromRGB(134, 72, 214),
+    rowOn2 = Color3.fromRGB(103, 53, 174),
+    accent = palette.accent or Color3.fromRGB(164, 94, 233),
+    text = Color3.fromRGB(245, 245, 245),
+    muted = Color3.fromRGB(175, 175, 175),
+    darkText = Color3.fromRGB(125, 125, 125),
+    stroke = Color3.fromRGB(52, 52, 52),
+    danger = palette.danger or Color3.fromRGB(180, 65, 65)
+}
+
+local function clearChildrenExceptLayout(parent)
+    for _, child in ipairs(parent:GetChildren()) do
+        if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
+            child:Destroy()
+        end
+    end
+end
+
+local function addStroke(target, color, transparency, thickness)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = color or vapePalette.stroke
+    stroke.Transparency = transparency or 0.35
+    stroke.Thickness = thickness or 1
+    stroke.Parent = target
+    return stroke
+end
+
+local function addGradient(target, colorA, colorB, rotation)
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, colorA),
+        ColorSequenceKeypoint.new(1, colorB)
+    })
+    gradient.Rotation = rotation or 90
+    gradient.Parent = target
+    return gradient
+end
+
+local function styleVapeWindow(frame)
+    frame.BackgroundColor3 = vapePalette.window
+    frame.BorderSizePixel = 0
+    addCorner(frame, 4)
+    addStroke(frame, vapePalette.stroke, 0.25, 1)
+end
+
+local function styleVapeHeader(frame)
+    frame.BackgroundColor3 = vapePalette.bg
+    frame.BorderSizePixel = 0
+    addCorner(frame, 4)
+    addGradient(frame, Color3.fromRGB(31, 31, 31), Color3.fromRGB(18, 18, 18), 90)
+end
+
+local function setButtonState(button, active)
+    button.BackgroundColor3 = active and vapePalette.rowOn or vapePalette.row
+    button.TextColor3 = active and vapePalette.text or vapePalette.muted
+end
+
+local function createVapeSidebarButton(parent, label, icon, active)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 0, 34)
+    button.BackgroundColor3 = active and vapePalette.rowOn or vapePalette.row
+    button.BorderSizePixel = 0
+    button.AutoButtonColor = false
+    button.Text = string.format("  %s  %s", icon or "", label)
+    button.TextColor3 = active and vapePalette.text or vapePalette.muted
+    button.Font = Enum.Font.SourceSans
+    button.TextSize = 18
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.Parent = parent
+    addCorner(button, 3)
+
+    button.MouseEnter:Connect(function()
+        if button.BackgroundColor3 ~= vapePalette.rowOn then
+            button.BackgroundColor3 = vapePalette.rowHover
+        end
+    end)
+    button.MouseLeave:Connect(function()
+        if button.BackgroundColor3 ~= vapePalette.rowOn then
+            button.BackgroundColor3 = vapePalette.row
+        end
+    end)
+
+    return button
+end
+
+-- Main sidebar restyle: more Vape-like, less dashboard-y.
+mainPanel.Size = UDim2.new(0, 205, 0, 455)
+mainPanel.Position = UDim2.new(0, 75, 0, 105)
+styleVapeWindow(mainPanel)
+
+mainTop.Size = UDim2.new(1, 0, 0, 42)
+styleVapeHeader(mainTop)
+
+mainTitle.Text = "AetherCore"
+mainTitle.Font = Enum.Font.SourceSansBold
+mainTitle.TextSize = 24
+mainTitle.TextColor3 = vapePalette.text
+mainTitle.Position = UDim2.new(0, 12, 0, 0)
+mainTitle.Size = UDim2.new(1, -24, 1, 0)
+
+local mainAccentLine = Instance.new("Frame")
+mainAccentLine.Size = UDim2.new(1, 0, 0, 2)
+mainAccentLine.Position = UDim2.new(0, 0, 1, -2)
+mainAccentLine.BackgroundColor3 = vapePalette.accent
+mainAccentLine.BorderSizePixel = 0
+mainAccentLine.Parent = mainTop
+
+mainList.Size = UDim2.new(1, -14, 1, -58)
+mainList.Position = UDim2.new(0, 7, 0, 50)
+mainList.BackgroundTransparency = 1
+mainListLayout.Padding = UDim.new(0, 5)
+
+-- Top bar restyle to match Vape's simple utility strip.
+topBar.Size = UDim2.new(0, 370, 0, 38)
+topBar.Position = UDim2.new(0, 295, 0, 105)
+styleVapeWindow(topBar)
+
+searchBox.Size = UDim2.new(1, -130, 0, 24)
+searchBox.Position = UDim2.new(0, 8, 0, 7)
+searchBox.BackgroundColor3 = vapePalette.row
+searchBox.TextColor3 = vapePalette.text
+searchBox.PlaceholderColor3 = vapePalette.darkText
+searchBox.Font = Enum.Font.SourceSans
+searchBox.TextSize = 16
+
+closeButton.Size = UDim2.new(0, 112, 0, 24)
+closeButton.Position = UDim2.new(1, -120, 0, 7)
+closeButton.BackgroundColor3 = vapePalette.danger
+closeButton.Font = Enum.Font.SourceSansBold
+closeButton.TextSize = 15
+closeButton.Text = "Self Destruct"
+
+statusPanel.Size = UDim2.new(0, 275, 0, 25)
+statusPanel.Position = UDim2.new(0, 75, 0, 570)
+styleVapeWindow(statusPanel)
+statusDiscord.Font = Enum.Font.SourceSans
+statusDiscord.TextSize = 14
+statusTime.Font = Enum.Font.SourceSans
+statusTime.TextSize = 14
+
 local function createCategoryColumn(categoryName, index)
-    local panel = createPanel(categoryName .. "Column", UDim2.new(0, 240, 0, 530), UDim2.new(0, 285 + ((index - 1) * 246), 0, 170))
+    local panel = createPanel(categoryName .. "Column", UDim2.new(0, 220, 0, 520), UDim2.new(0, 295 + ((index - 1) * 228), 0, 155))
     panel.Visible = false
+    styleVapeWindow(panel)
 
     local top = Instance.new("Frame")
-    top.Size = UDim2.new(1, 0, 0, 34)
-    top.BackgroundColor3 = palette.deep
+    top.Size = UDim2.new(1, 0, 0, 36)
+    top.BackgroundColor3 = vapePalette.bg
     top.BorderSizePixel = 0
     top.Parent = panel
-    addCorner(top, 8)
+    styleVapeHeader(top)
 
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -12, 1, 0)
-    title.Position = UDim2.new(0, 8, 0, 0)
+    title.Size = UDim2.new(1, -42, 1, 0)
+    title.Position = UDim2.new(0, 10, 0, 0)
     title.BackgroundTransparency = 1
     title.Text = categoryName
     title.TextXAlignment = Enum.TextXAlignment.Left
-    title.TextColor3 = palette.text
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 14
+    title.TextColor3 = vapePalette.text
+    title.Font = Enum.Font.SourceSansBold
+    title.TextSize = 20
     title.Parent = top
+
+    local countTag = Instance.new("TextLabel")
+    countTag.Name = "CountTag"
+    countTag.Size = UDim2.new(0, 30, 0, 20)
+    countTag.Position = UDim2.new(1, -36, 0, 8)
+    countTag.BackgroundColor3 = vapePalette.row
+    countTag.BorderSizePixel = 0
+    countTag.Text = "0"
+    countTag.TextColor3 = vapePalette.muted
+    countTag.Font = Enum.Font.SourceSansBold
+    countTag.TextSize = 14
+    countTag.Parent = top
+    addCorner(countTag, 3)
+
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(1, 0, 0, 2)
+    line.Position = UDim2.new(0, 0, 1, -2)
+    line.BorderSizePixel = 0
+    line.BackgroundColor3 = vapePalette.accent
+    line.Parent = top
 
     local list = Instance.new("ScrollingFrame")
     list.Name = "ModuleList"
-    list.Size = UDim2.new(1, -10, 1, -44)
-    list.Position = UDim2.new(0, 5, 0, 39)
+    list.Size = UDim2.new(1, -10, 1, -46)
+    list.Position = UDim2.new(0, 5, 0, 41)
     list.BackgroundTransparency = 1
     list.BorderSizePixel = 0
     list.AutomaticCanvasSize = Enum.AutomaticSize.Y
     list.CanvasSize = UDim2.new(0, 0, 0, 0)
-    list.ScrollBarThickness = 4
+    list.ScrollBarThickness = 3
+    list.ScrollBarImageColor3 = vapePalette.accent
     list.Parent = panel
 
     local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 6)
+    layout.Padding = UDim.new(0, 4)
     layout.Parent = list
 
     local savedPos = loadedCategoryPositions[categoryName]
     if type(savedPos) == "table" then
         panel.Position = UDim2.new(0, tonumber(savedPos.x) or panel.Position.X.Offset, 0, tonumber(savedPos.y) or panel.Position.Y.Offset)
     end
+
     local cameraInstance = Workspace.CurrentCamera
     if cameraInstance then
         local viewport = cameraInstance.ViewportSize
@@ -4165,40 +4342,18 @@ for i, name in ipairs(categoryOrder) do
 end
 
 local categoryData = {
-    {name = "Combat", icon = "⚔️"},
-    {name = "Blatant", icon = "🚀"},
-    {name = "Render", icon = "👁️"},
-    {name = "Utility", icon = "🛠️"},
-    {name = "World", icon = "🌍"},
-    {name = "Legend", icon = "📜"}
+    {name = "Combat", icon = "⚔"},
+    {name = "Blatant", icon = "◆"},
+    {name = "Render", icon = "◉"},
+    {name = "Utility", icon = "◈"},
+    {name = "World", icon = "◇"},
+    {name = "Legend", icon = "★"}
 }
 
-homeTabButton = Instance.new("TextButton")
-homeTabButton.Size = UDim2.new(1, 0, 0, 32)
-homeTabButton.BackgroundColor3 = palette.active
-homeTabButton.BorderSizePixel = 0
-homeTabButton.AutoButtonColor = false
-homeTabButton.Text = "  🏠  Home"
-homeTabButton.TextColor3 = palette.text
-homeTabButton.Font = Enum.Font.GothamSemibold
-homeTabButton.TextSize = 12
-homeTabButton.TextXAlignment = Enum.TextXAlignment.Left
-homeTabButton.Parent = mainList
-addCorner(homeTabButton, 6)
+homeTabButton = createVapeSidebarButton(mainList, "Home", "⌂", true)
 
 for _, category in ipairs(categoryData) do
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 0, 32)
-    button.BackgroundColor3 = palette.panel
-    button.BorderSizePixel = 0
-    button.AutoButtonColor = false
-    button.Text = string.format("  %s  %s", category.icon, category.name)
-    button.TextColor3 = palette.text
-    button.Font = Enum.Font.GothamSemibold
-    button.TextSize = 12
-    button.TextXAlignment = Enum.TextXAlignment.Left
-    button.Parent = mainList
-    addCorner(button, 6)
+    local button = createVapeSidebarButton(mainList, category.name, category.icon, false)
     categoryToggleButtons[category.name] = button
 
     button.MouseButton1Click:Connect(function()
@@ -4206,7 +4361,8 @@ for _, category in ipairs(categoryData) do
         local newVisibility = not panel.Visible
         panel.Visible = newVisibility
         categoryManualVisibility[category.name] = newVisibility
-        button.BackgroundColor3 = panel.Visible and palette.active or palette.panel
+        setButtonState(button, panel.Visible)
+
         if panel.Visible then
             local cameraInstance = Workspace.CurrentCamera
             if cameraInstance then
@@ -4225,92 +4381,71 @@ for _, category in ipairs(categoryData) do
                 panel.Position = UDim2.new(0, math.clamp(preferredX, 10, maxX), 0, math.clamp(preferredY, 10, maxY))
             end
         end
+
         saveClientSettings()
     end)
 end
 
 local settingsTabSeparator = Instance.new("Frame")
-settingsTabSeparator.Size = UDim2.new(1, 0, 0, 12)
+settingsTabSeparator.Size = UDim2.new(1, 0, 0, 10)
 settingsTabSeparator.BackgroundTransparency = 1
 settingsTabSeparator.Parent = mainList
 
-settingsTabButton = Instance.new("TextButton")
-settingsTabButton.Size = UDim2.new(1, 0, 0, 32)
-settingsTabButton.BackgroundColor3 = palette.panel
-settingsTabButton.BorderSizePixel = 0
-settingsTabButton.AutoButtonColor = false
-settingsTabButton.Text = "  ⚙️  Settings"
-settingsTabButton.TextColor3 = palette.text
-settingsTabButton.Font = Enum.Font.GothamSemibold
-settingsTabButton.TextSize = 12
-settingsTabButton.TextXAlignment = Enum.TextXAlignment.Left
-settingsTabButton.Parent = mainList
-addCorner(settingsTabButton, 6)
-
-scriptHubTabButton = Instance.new("TextButton")
-scriptHubTabButton.Size = UDim2.new(1, 0, 0, 32)
-scriptHubTabButton.BackgroundColor3 = palette.panel
-scriptHubTabButton.BorderSizePixel = 0
-scriptHubTabButton.AutoButtonColor = false
-scriptHubTabButton.Text = "  🤖  ScriptHub"
-scriptHubTabButton.TextColor3 = palette.text
-scriptHubTabButton.Font = Enum.Font.GothamSemibold
-scriptHubTabButton.TextSize = 12
-scriptHubTabButton.TextXAlignment = Enum.TextXAlignment.Left
-scriptHubTabButton.Parent = mainList
-addCorner(scriptHubTabButton, 6)
+settingsTabButton = createVapeSidebarButton(mainList, "Settings", "⚙", false)
+scriptHubTabButton = createVapeSidebarButton(mainList, "ScriptHub", "✦", false)
 
 local function uiCreateSlider(parent, name, min, max, default, callback, options)
     options = options or {}
+
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 38)
+    frame.Size = UDim2.new(1, 0, 0, 42)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(0.65, 0, 0, 16)
+    label.Size = UDim2.new(0.65, 0, 0, 18)
     label.BackgroundTransparency = 1
     label.Text = name
-    label.TextColor3 = palette.secondary
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 12
+    label.TextColor3 = vapePalette.muted
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 15
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.Parent = frame
 
     local valueButton = Instance.new("TextButton")
-    valueButton.Size = UDim2.new(0.35, -4, 0, 16)
+    valueButton.Size = UDim2.new(0.35, -4, 0, 18)
     valueButton.Position = UDim2.new(0.65, 4, 0, 0)
-    valueButton.BackgroundColor3 = palette.hover
-    valueButton.TextColor3 = palette.text
-    valueButton.Font = Enum.Font.Gotham
-    valueButton.TextSize = 11
+    valueButton.BackgroundColor3 = vapePalette.row
+    valueButton.BorderSizePixel = 0
+    valueButton.TextColor3 = vapePalette.text
+    valueButton.Font = Enum.Font.SourceSans
+    valueButton.TextSize = 14
     valueButton.Parent = frame
-    addCorner(valueButton, 5)
+    addCorner(valueButton, 3)
 
     local slider = Instance.new("Frame")
-    slider.Size = UDim2.new(1, 0, 0, 8)
-    slider.Position = UDim2.new(0, 0, 0, 22)
-    slider.BackgroundColor3 = palette.hover
+    slider.Size = UDim2.new(1, 0, 0, 7)
+    slider.Position = UDim2.new(0, 0, 0, 27)
+    slider.BackgroundColor3 = vapePalette.row
+    slider.BorderSizePixel = 0
     slider.Parent = frame
-    addCorner(slider, 5)
+    addCorner(slider, 3)
 
     local fill = Instance.new("Frame")
-    fill.BackgroundColor3 = palette.accent
+    fill.BackgroundColor3 = vapePalette.accent
+    fill.BorderSizePixel = 0
     fill.Parent = slider
-    addCorner(fill, 5)
+    addCorner(fill, 3)
 
     local dragging = false
     local range = max - min
+
     local function apply(v, fromTextEntry)
         local numeric = tonumber(v)
-        if not numeric then
-            return
-        end
-
+        if not numeric then return end
         local allowBeyondMax = fromTextEntry and options.allowTextInputBeyondMax
         local appliedValue = allowBeyondMax and math.max(numeric, min) or math.clamp(numeric, min, max)
         local visualValue = math.clamp(appliedValue, min, max)
-
         fill.Size = UDim2.new((visualValue - min) / range, 0, 1, 0)
         valueButton.Text = tostring(math.floor(appliedValue * 100) / 100)
         callback(appliedValue)
@@ -4343,23 +4478,18 @@ local function uiCreateSlider(parent, name, min, max, default, callback, options
         local box = Instance.new("TextBox")
         box.Size = valueButton.Size
         box.Position = valueButton.Position
-        box.BackgroundColor3 = palette.module
-        box.TextColor3 = palette.text
-        box.Font = Enum.Font.Gotham
-        box.TextSize = 11
+        box.BackgroundColor3 = vapePalette.bg2
+        box.BorderSizePixel = 0
+        box.TextColor3 = vapePalette.text
+        box.Font = Enum.Font.SourceSans
+        box.TextSize = 14
         box.ClearTextOnFocus = false
         box.Text = valueButton.Text
         box.Parent = frame
-        addCorner(box, 5)
+        addCorner(box, 3)
         box:CaptureFocus()
-
-        box.FocusLost:Connect(function(enterPressed)
-            if enterPressed then
-                local typed = tonumber(box.Text)
-                if typed then
-                    apply(typed, true)
-                end
-            end
+        box.FocusLost:Connect(function()
+            apply(box.Text, true)
             box:Destroy()
         end)
     end)
@@ -4367,41 +4497,50 @@ end
 
 local function uiCreateToggle(parent, name, default, callback)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 0, 24)
-    button.BackgroundColor3 = default and palette.active or palette.module
-    button.TextColor3 = palette.text
-    button.Font = Enum.Font.Gotham
-    button.TextSize = 12
+    button.Size = UDim2.new(1, 0, 0, 28)
+    button.BackgroundColor3 = default and vapePalette.rowOn or vapePalette.row
+    button.BorderSizePixel = 0
+    button.TextColor3 = vapePalette.text
+    button.Font = Enum.Font.SourceSans
+    button.TextSize = 15
     button.TextXAlignment = Enum.TextXAlignment.Left
-    button.Text = "  " .. name .. (default and ": ON" or ": OFF")
+    button.AutoButtonColor = false
     button.Parent = parent
-    addCorner(button, 6)
+    addCorner(button, 3)
 
-    local state = default
+    local state = default == true
+    local function refresh()
+        button.BackgroundColor3 = state and vapePalette.rowOn or vapePalette.row
+        button.Text = "  " .. name .. (state and "  ON" or "  OFF")
+    end
+    refresh()
+
     button.MouseButton1Click:Connect(function()
         state = not state
-        button.BackgroundColor3 = state and palette.active or palette.module
-        button.Text = "  " .. name .. (state and ": ON" or ": OFF")
+        refresh()
         callback(state)
     end)
 end
 
 local function uiCreateDropdown(parent, name, options, default, callback)
     local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 0, 24)
-    button.BackgroundColor3 = palette.module
-    button.TextColor3 = palette.text
-    button.Font = Enum.Font.Gotham
-    button.TextSize = 12
+    button.Size = UDim2.new(1, 0, 0, 28)
+    button.BackgroundColor3 = vapePalette.row
+    button.BorderSizePixel = 0
+    button.TextColor3 = vapePalette.text
+    button.Font = Enum.Font.SourceSans
+    button.TextSize = 15
     button.TextXAlignment = Enum.TextXAlignment.Left
+    button.AutoButtonColor = false
     button.Parent = parent
-    addCorner(button, 6)
+    addCorner(button, 3)
 
     local selected = default
     local function refreshText()
         button.Text = string.format("  %s: %s", name, tostring(selected))
     end
     refreshText()
+
     button.MouseButton1Click:Connect(function()
         local idx = table.find(options, selected) or 1
         idx = (idx % #options) + 1
@@ -4413,32 +4552,34 @@ end
 
 local function uiCreateTextBox(parent, name, default, callback)
     local holder = Instance.new("Frame")
-    holder.Size = UDim2.new(1, 0, 0, 24)
-    holder.BackgroundColor3 = palette.module
+    holder.Size = UDim2.new(1, 0, 0, 30)
+    holder.BackgroundColor3 = vapePalette.row
+    holder.BorderSizePixel = 0
     holder.Parent = parent
-    addCorner(holder, 6)
+    addCorner(holder, 3)
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(0.45, 0, 1, 0)
     label.BackgroundTransparency = 1
     label.Text = "  " .. name
     label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextColor3 = palette.text
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 11
+    label.TextColor3 = vapePalette.text
+    label.Font = Enum.Font.SourceSans
+    label.TextSize = 15
     label.Parent = holder
 
     local box = Instance.new("TextBox")
-    box.Size = UDim2.new(0.55, -6, 1, -6)
-    box.Position = UDim2.new(0.45, 3, 0, 3)
-    box.BackgroundColor3 = palette.hover
+    box.Size = UDim2.new(0.55, -6, 1, -8)
+    box.Position = UDim2.new(0.45, 3, 0, 4)
+    box.BackgroundColor3 = vapePalette.bg2
+    box.BorderSizePixel = 0
     box.Text = tostring(default)
-    box.TextColor3 = palette.text
+    box.TextColor3 = vapePalette.text
     box.ClearTextOnFocus = false
-    box.Font = Enum.Font.Gotham
-    box.TextSize = 11
+    box.Font = Enum.Font.SourceSans
+    box.TextSize = 14
     box.Parent = holder
-    addCorner(box, 5)
+    addCorner(box, 3)
 
     box.FocusLost:Connect(function()
         callback(box.Text)
@@ -4449,13 +4590,13 @@ local function createSettingsContent(parent, moduleName)
     local defs = moduleDefinitions[moduleName] or {}
     if #defs == 0 then
         local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, 0, 0, 22)
+        label.Size = UDim2.new(1, 0, 0, 24)
         label.BackgroundTransparency = 1
         label.Text = "No configurable settings"
         label.TextXAlignment = Enum.TextXAlignment.Left
-        label.TextColor3 = palette.secondary
-        label.Font = Enum.Font.Gotham
-        label.TextSize = 11
+        label.TextColor3 = vapePalette.darkText
+        label.Font = Enum.Font.SourceSans
+        label.TextSize = 15
         label.Parent = parent
         return
     end
@@ -4465,9 +4606,7 @@ local function createSettingsContent(parent, moduleName)
             uiCreateSlider(parent, setting.name, setting.min, setting.max, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
                 saveClientSettings()
-            end, {
-                allowTextInputBeyondMax = setting.allowTextInputBeyondMax == true
-            })
+            end, { allowTextInputBeyondMax = setting.allowTextInputBeyondMax == true })
         elseif setting.type == "toggle" then
             uiCreateToggle(parent, setting.name, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
@@ -4489,55 +4628,78 @@ end
 
 local function createModule(category, moduleName, defaultEnabled, toggleCallback)
     local list = categoryLists[category]
+    if not list then return end
+
     local card = Instance.new("Frame")
-    card.Size = UDim2.new(1, -4, 0, 42)
-    card.BackgroundColor3 = palette.module
+    card.Size = UDim2.new(1, -2, 0, 34)
+    card.BackgroundColor3 = vapePalette.row
     card.BorderSizePixel = 0
+    card.ClipsDescendants = true
     card.Parent = list
-    addCorner(card, 6)
+    addCorner(card, 3)
+
+    local toggleArea = Instance.new("TextButton")
+    toggleArea.Size = UDim2.new(1, -64, 0, 34)
+    toggleArea.Position = UDim2.new(0, 0, 0, 0)
+    toggleArea.BackgroundTransparency = 1
+    toggleArea.AutoButtonColor = false
+    toggleArea.Text = ""
+    toggleArea.Parent = card
+
+    local accentBar = Instance.new("Frame")
+    accentBar.Size = UDim2.new(0, 3, 1, 0)
+    accentBar.Position = UDim2.new(0, 0, 0, 0)
+    accentBar.BackgroundColor3 = vapePalette.accent
+    accentBar.BorderSizePixel = 0
+    accentBar.Visible = false
+    accentBar.Parent = card
 
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(0.55, 0, 0, 22)
-    title.Position = UDim2.new(0, 10, 0, 10)
+    title.Size = UDim2.new(1, -82, 0, 34)
+    title.Position = UDim2.new(0, 10, 0, 0)
     title.BackgroundTransparency = 1
     title.Text = moduleName
     title.TextXAlignment = Enum.TextXAlignment.Left
-    title.TextColor3 = palette.text
-    title.Font = Enum.Font.GothamSemibold
-    title.TextSize = 13
+    title.TextColor3 = vapePalette.muted
+    title.Font = Enum.Font.SourceSans
+    title.TextSize = 18
     title.Parent = card
 
-    local keybindBtn = Instance.new("TextButton")
-    keybindBtn.Size = UDim2.new(0, 48, 0, 20)
-    keybindBtn.Position = UDim2.new(1, -112, 0, 11)
-    keybindBtn.BackgroundColor3 = palette.hover
-    keybindBtn.TextColor3 = palette.text
-    keybindBtn.Text = moduleKeybinds[moduleName] and moduleKeybinds[moduleName].Name or "NONE"
-    keybindBtn.Font = Enum.Font.Gotham
-    keybindBtn.TextSize = 10
-    keybindBtn.Parent = card
-    addCorner(keybindBtn, 6)
-
     local settingsBtn = Instance.new("TextButton")
-    settingsBtn.Size = UDim2.new(0, 24, 0, 20)
-    settingsBtn.Position = UDim2.new(1, -56, 0, 11)
-    settingsBtn.BackgroundColor3 = palette.hover
-    settingsBtn.Text = "⚙"
-    settingsBtn.TextColor3 = palette.text
-    settingsBtn.Font = Enum.Font.GothamBold
-    settingsBtn.TextSize = 12
+    settingsBtn.Size = UDim2.new(0, 25, 0, 24)
+    settingsBtn.Position = UDim2.new(1, -58, 0, 5)
+    settingsBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    settingsBtn.BackgroundTransparency = 0.1
+    settingsBtn.BorderSizePixel = 0
+    settingsBtn.Text = "…"
+    settingsBtn.TextColor3 = vapePalette.muted
+    settingsBtn.Font = Enum.Font.SourceSansBold
+    settingsBtn.TextSize = 18
     settingsBtn.Parent = card
-    addCorner(settingsBtn, 6)
+    addCorner(settingsBtn, 3)
+
+    local keybindBtn = Instance.new("TextButton")
+    keybindBtn.Size = UDim2.new(0, 28, 0, 24)
+    keybindBtn.Position = UDim2.new(1, -30, 0, 5)
+    keybindBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    keybindBtn.BackgroundTransparency = 0.1
+    keybindBtn.BorderSizePixel = 0
+    keybindBtn.TextColor3 = vapePalette.muted
+    keybindBtn.Text = moduleKeybinds[moduleName] and moduleKeybinds[moduleName].Name or "-"
+    keybindBtn.Font = Enum.Font.SourceSans
+    keybindBtn.TextSize = 14
+    keybindBtn.Parent = card
+    addCorner(keybindBtn, 3)
 
     local settingsHolder = Instance.new("Frame")
     settingsHolder.Size = UDim2.new(1, -14, 0, 0)
-    settingsHolder.Position = UDim2.new(0, 7, 0, 40)
+    settingsHolder.Position = UDim2.new(0, 7, 0, 38)
     settingsHolder.BackgroundTransparency = 1
     settingsHolder.ClipsDescendants = true
     settingsHolder.Parent = card
 
     local settingsLayout = Instance.new("UIListLayout")
-    settingsLayout.Padding = UDim.new(0, 4)
+    settingsLayout.Padding = UDim.new(0, 5)
     settingsLayout.Parent = settingsHolder
 
     local enabled = defaultEnabled
@@ -4550,43 +4712,57 @@ local function createModule(category, moduleName, defaultEnabled, toggleCallback
     end
 
     local function updateCardVisual()
-        card.BackgroundColor3 = enabled and palette.active or palette.module
+        card.BackgroundColor3 = enabled and vapePalette.rowOn2 or vapePalette.row
+        title.TextColor3 = enabled and vapePalette.text or vapePalette.muted
+        accentBar.Visible = enabled
     end
 
-    card.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            enabled = not enabled
-            if enabled then
-                disableConflictingModules(moduleName)
-            end
-            moduleStates[moduleName] = enabled
-            if moduleName == "AutoToxic" then
-                autoToxicEnabled = enabled
-            end
-            if toggleCallback then
-                safeCall(moduleName .. "Toggle", toggleCallback, enabled)
-            end
-            updateCardVisual()
-            saveClientSettings()
+    local function toggleModule()
+        enabled = not enabled
+        if enabled then
+            disableConflictingModules(moduleName)
         end
+        moduleStates[moduleName] = enabled
+        if moduleName == "AutoToxic" then
+            autoToxicEnabled = enabled
+        end
+        if toggleCallback then
+            safeCall(moduleName .. "Toggle", toggleCallback, enabled)
+        end
+        updateCardVisual()
+        saveClientSettings()
+    end
+
+    toggleArea.MouseButton1Click:Connect(toggleModule)
+
+    toggleArea.MouseEnter:Connect(function()
+        if not enabled then card.BackgroundColor3 = vapePalette.rowHover end
+    end)
+    toggleArea.MouseLeave:Connect(function()
+        if not enabled then card.BackgroundColor3 = vapePalette.row end
     end)
 
     settingsBtn.MouseButton1Click:Connect(function()
         settingsOpenByModule[moduleName] = not settingsOpenByModule[moduleName]
-        for _, child in ipairs(settingsHolder:GetChildren()) do
-            if not child:IsA("UIListLayout") then
-                child:Destroy()
-            end
-        end
+        clearChildrenExceptLayout(settingsHolder)
+
         if settingsOpenByModule[moduleName] then
             createSettingsContent(settingsHolder, moduleName)
             task.wait()
             local openSize = settingsLayout.AbsoluteContentSize.Y
-            TweenService:Create(settingsHolder, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(1, -14, 0, openSize)}):Play()
-            TweenService:Create(card, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(1, -4, 0, 46 + openSize)}):Play()
+            TweenService:Create(settingsHolder, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1, -14, 0, openSize)
+            }):Play()
+            TweenService:Create(card, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1, -2, 0, 44 + openSize)
+            }):Play()
         else
-            TweenService:Create(settingsHolder, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(1, -14, 0, 0)}):Play()
-            TweenService:Create(card, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(1, -4, 0, 42)}):Play()
+            TweenService:Create(settingsHolder, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1, -14, 0, 0)
+            }):Play()
+            TweenService:Create(card, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1, -2, 0, 34)
+            }):Play()
         end
     end)
 
@@ -4603,13 +4779,13 @@ local function createModule(category, moduleName, defaultEnabled, toggleCallback
                     if existingModule ~= moduleName and existingKey == key then
                         moduleKeybinds[existingModule] = nil
                         if moduleUi[existingModule] then
-                            moduleUi[existingModule].setKeyText("NONE")
+                            moduleUi[existingModule].setKeyText("-")
                         end
                     end
                 end
                 if moduleKeybinds[moduleName] == key then
                     moduleKeybinds[moduleName] = nil
-                    keybindBtn.Text = "NONE"
+                    keybindBtn.Text = "-"
                 else
                     moduleKeybinds[moduleName] = key
                     keybindBtn.Text = key.Name
@@ -4631,7 +4807,7 @@ local function createModule(category, moduleName, defaultEnabled, toggleCallback
             updateCardVisual()
         end,
         setKeyText = function(text)
-            keybindBtn.Text = text
+            keybindBtn.Text = text == "NONE" and "-" or text
         end,
         setVisible = function(visible)
             card.Visible = visible
@@ -4640,11 +4816,22 @@ local function createModule(category, moduleName, defaultEnabled, toggleCallback
         name = moduleName
     }
 
+    local header = categoryPanels[category] and categoryPanels[category]:FindFirstChildWhichIsA("Frame")
+    local countTag = header and header:FindFirstChild("CountTag")
+    if countTag then
+        local count = 0
+        for _, child in ipairs(list:GetChildren()) do
+            if child:IsA("Frame") then count += 1 end
+        end
+        countTag.Text = tostring(count)
+    end
+
     updateCardVisual()
     if enabled and toggleCallback then
         safeCall(moduleName .. "InitialToggle", toggleCallback, true)
     end
 end
+
 
 local function createRegisteredModule(category, name, defaultEnabled, toggleCallback, settingsDefinition)
     moduleDefinitions[name] = settingsDefinition or {}
