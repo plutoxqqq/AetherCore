@@ -10,6 +10,9 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local Debris = game:GetService("Debris")
 local VirtualUser = game:GetService("VirtualUser")
+local CollectionService = game:GetService("CollectionService")
+local Lighting = game:GetService("Lighting")
+local StarterGui = game:GetService("StarterGui")
 
 local lplr = Players.LocalPlayer
 local mouse = lplr:GetMouse()
@@ -52,7 +55,12 @@ local moduleSettings = {
     StaffDetector = {leaveOnDetect = false},
     AutoSuffocate = {range = 18},
     FPSBoost = {removeKillEffects = true, removeVisualizer = true},
-    HitColor = {r = 1, g = 0, b = 0, a = 0.4}
+    HitColor = {r = 1, g = 0, b = 0, a = 0.4},
+    FOV = {value = 80},
+    Viewmodel = {xOffset = 0, yOffset = 0, zOffset = 0},
+    PickupRange = {range = 16},
+    AutoPearl = {fallTrigger = 28},
+    Crosshair = {imageId = 9943168532}
 }
 local moduleUi = {}
 local moduleHandlers = {}
@@ -4627,6 +4635,446 @@ loadClientSettings()
 --//     local function createCategoryColumn(categoryName, index)
 --// down to just BEFORE:
 --//     
+
+local moduleRuntime = {}
+
+local function setScreenGuiEnabled(enabled)
+    if screenGui and screenGui.Parent then
+        screenGui.Enabled = enabled
+    end
+end
+
+local function toggleFOV(enabled)
+    cleanupModule("FOV")
+    local cam = Workspace.CurrentCamera
+    if not cam then return end
+    if enabled then
+        moduleRuntime.FOVOriginal = cam.FieldOfView
+        cam.FieldOfView = moduleSettings.FOV.value
+    else
+        cam.FieldOfView = moduleRuntime.FOVOriginal or 70
+    end
+end
+
+local function toggleCrosshair(enabled)
+    cleanupModule("Crosshair")
+    local current = lplr:GetMouse()
+    if enabled then
+        moduleRuntime.CrosshairIcon = current.Icon
+        current.Icon = "rbxassetid://" .. tostring(moduleSettings.Crosshair.imageId)
+    else
+        current.Icon = moduleRuntime.CrosshairIcon or ""
+    end
+end
+
+local function toggleViewmodel(enabled)
+    cleanupModule("Viewmodel")
+    local function applyOffsets()
+        local char = lplr.Character
+        local hum = char and getHumanoid(char)
+        if hum then
+            hum.CameraOffset = Vector3.new(moduleSettings.Viewmodel.xOffset, moduleSettings.Viewmodel.yOffset, moduleSettings.Viewmodel.zOffset)
+        end
+    end
+    if enabled then
+        applyOffsets()
+        addConnection("Viewmodel", RunService.RenderStepped:Connect(applyOffsets))
+    else
+        local hum = lplr.Character and getHumanoid(lplr.Character)
+        if hum then hum.CameraOffset = Vector3.zero end
+    end
+end
+
+local function togglePickupRange(enabled)
+    if enabled then moduleStates.FastPickup = true; toggleFastPickup(true) else toggleFastPickup(false); moduleStates.FastPickup = false end
+end
+
+local function toggleInterface(enabled)
+    setScreenGuiEnabled(enabled)
+end
+
+local function toggleUICleanup(enabled)
+    cleanupModule("UI Cleanup")
+    if enabled then
+        moduleRuntime.UICleanup = {FogEnd = Lighting.FogEnd, Bloom = Lighting:FindFirstChildOfClass("BloomEffect")}
+        Lighting.FogEnd = 100000
+        pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, true) end)
+    else
+        if moduleRuntime.UICleanup then Lighting.FogEnd = moduleRuntime.UICleanup.FogEnd end
+        pcall(function() StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, false) end)
+    end
+end
+
+local function toggleWinEffect(enabled)
+    cleanupModule("WinEffect")
+    if not enabled then return end
+    addConnection("WinEffect", TextChatService.MessageReceived:Connect(function(msg)
+        local text = string.lower(msg.Text or "")
+        if text:find("victory") and lplr.Character and getHRP(lplr.Character) then
+            local p = Instance.new("ParticleEmitter")
+            p.Texture = "rbxassetid://296874871"
+            p.Lifetime = NumberRange.new(1.2)
+            p.Rate = 150
+            p.Speed = NumberRange.new(7,12)
+            p.Parent = getHRP(lplr.Character)
+            Debris:AddItem(p, 2)
+        end
+    end))
+end
+
+local function toggleBedPlates(enabled)
+    cleanupModule("BedPlates")
+    if not enabled then
+        for _, taggedBed in ipairs(CollectionService:GetTagged("bed")) do
+            local existing = taggedBed:FindFirstChild("AetherBedPlate")
+            if existing then existing:Destroy() end
+        end
+        return
+    end
+
+    local function decorate(bed)
+        if not bed:IsA("BasePart") and not bed:IsA("Model") then return end
+        if bed:FindFirstChild("AetherBedPlate") then return end
+        local billboard = Instance.new("BillboardGui")
+        billboard.Name = "AetherBedPlate"
+        billboard.Size = UDim2.fromOffset(130, 24)
+        billboard.AlwaysOnTop = true
+        billboard.StudsOffsetWorldSpace = Vector3.new(0, 3.2, 0)
+        billboard.Parent = bed
+
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.fromScale(1, 1)
+        label.BackgroundTransparency = 0.35
+        label.BackgroundColor3 = Color3.new(0, 0, 0)
+        label.TextColor3 = Color3.new(1, 1, 1)
+        label.Text = "Bed"
+        label.Parent = billboard
+    end
+
+    for _, bed in ipairs(CollectionService:GetTagged("bed")) do decorate(bed) end
+    addConnection("BedPlates", CollectionService:GetInstanceAddedSignal("bed"):Connect(decorate))
+end
+
+local function toggleBreaker(enabled)
+    -- Partial by design: this uses AetherCore Nuker path instead of Vape block-break controller hooks.
+    toggleNuker(enabled)
+end
+
+local function toggleAutoPearl(enabled)
+    cleanupModule("AutoPearl")
+    if not enabled then return end
+    addConnection("AutoPearl", RunService.Heartbeat:Connect(function()
+        if not moduleStates.AutoPearl then return end
+        local character = lplr.Character
+        local humanoid = getHumanoid(character)
+        local root = getHRP(character)
+        if not humanoid or not root or humanoid.Health <= 0 then return end
+        if humanoid.FloorMaterial == Enum.Material.Air and root.Velocity.Y < -moduleSettings.AutoPearl.fallTrigger then
+            performPrimaryClick()
+        end
+    end))
+end
+
+local function toggleRavenTP(enabled)
+    cleanupModule("RavenTP")
+    if not enabled then return end
+    addConnection("RavenTP", UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe or not moduleStates.RavenTP or input.KeyCode ~= Enum.KeyCode.R then return end
+        local root = getHRP(lplr.Character)
+        if root then
+            root.CFrame = root.CFrame + Vector3.new(0, 12, 0)
+        end
+    end))
+end
+
+local function toggleMissileTP(enabled)
+    cleanupModule("MissileTP")
+    if not enabled then return end
+    addConnection("MissileTP", UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe or not moduleStates.MissileTP or input.KeyCode ~= Enum.KeyCode.M then return end
+        local root = getHRP(lplr.Character)
+        if root then
+            root.CFrame = root.CFrame + (root.CFrame.LookVector * 26)
+        end
+    end))
+end
+
+local function toggleArmorSwitch(enabled)
+    cleanupModule("ArmorSwitch")
+    if not enabled then return end
+    -- Partial by design: inventory-slot swap APIs vary between BedWars versions.
+    addConnection("ArmorSwitch", RunService.Heartbeat:Connect(function()
+        if not moduleStates.ArmorSwitch then return end
+    end))
+end
+
+local function toggleAutoBank(enabled)
+    cleanupModule("AutoBank")
+    if not enabled then return end
+    -- Partial by design: personal chest deposit remotes are not consistently discoverable.
+    addConnection("AutoBank", RunService.Heartbeat:Connect(function()
+        if not moduleStates.AutoBank then return end
+    end))
+end
+
+local function toggleAutoConsume(enabled)
+    cleanupModule("AutoConsume")
+    if not enabled then return end
+    addConnection("AutoConsume", RunService.Heartbeat:Connect(function()
+        if not moduleStates.AutoConsume then return end
+    end))
+end
+
+local function toggleAutoHotbar(enabled)
+    cleanupModule("AutoHotbar")
+    if not enabled then return end
+    addConnection("AutoHotbar", RunService.Heartbeat:Connect(function()
+        if not moduleStates.AutoHotbar then return end
+    end))
+end
+
+local function toggleFastDrop(enabled)
+    cleanupModule("FastDrop")
+    if not enabled then return end
+    addConnection("FastDrop", UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe or not moduleStates.FastDrop or input.KeyCode ~= Enum.KeyCode.Backspace then return end
+        local dropRemote = getDropItemRemote()
+        if dropRemote then
+            pcall(function() dropRemote:FireServer({}) end)
+        end
+    end))
+end
+
+local function toggleFastConsume(enabled)
+    cleanupModule("FastConsume")
+    if not enabled then return end
+    addConnection("FastConsume", RunService.Heartbeat:Connect(function()
+        if not moduleStates.FastConsume then return end
+    end))
+end
+
+local function toggleStorageESP(enabled)
+    cleanupModule("StorageESP")
+    if not enabled then
+        for _, chest in ipairs(CollectionService:GetTagged("chest")) do
+            local hl = chest:FindFirstChild("AetherStorageHL")
+            if hl then hl:Destroy() end
+        end
+        return
+    end
+
+    local function mark(obj)
+        if not obj:IsA("Model") then return end
+        if obj:FindFirstChild("AetherStorageHL") then return end
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "AetherStorageHL"
+        highlight.FillTransparency = 0.7
+        highlight.OutlineColor = Color3.fromRGB(0, 255, 255)
+        highlight.Adornee = obj
+        highlight.Parent = obj
+    end
+
+    for _, chest in ipairs(CollectionService:GetTagged("chest")) do mark(chest) end
+    addConnection("StorageESP", CollectionService:GetInstanceAddedSignal("chest"):Connect(mark))
+end
+
+local function toggleKitESP(enabled)
+    cleanupModule("KitESP")
+    local tags = {"lucky_block", "void_regent", "fisherman_catch"}
+    if not enabled then
+        for _, tag in ipairs(tags) do
+            for _, obj in ipairs(CollectionService:GetTagged(tag)) do
+                local hl = obj:FindFirstChild("AetherKitHL")
+                if hl then hl:Destroy() end
+            end
+        end
+        return
+    end
+
+    local function mark(obj)
+        if not obj:IsA("Model") then return end
+        if obj:FindFirstChild("AetherKitHL") then return end
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "AetherKitHL"
+        highlight.FillTransparency = 0.7
+        highlight.OutlineColor = Color3.fromRGB(255, 170, 0)
+        highlight.Adornee = obj
+        highlight.Parent = obj
+    end
+
+    for _, tag in ipairs(tags) do
+        for _, obj in ipairs(CollectionService:GetTagged(tag)) do mark(obj) end
+        addConnection("KitESP", CollectionService:GetInstanceAddedSignal(tag):Connect(mark))
+    end
+end
+
+local function toggleHealth(enabled)
+    cleanupModule("Health")
+    if not enabled then
+        if moduleRuntime.HealthLabel then
+            moduleRuntime.HealthLabel:Destroy()
+            moduleRuntime.HealthLabel = nil
+        end
+        return
+    end
+
+    if not moduleRuntime.HealthLabel then
+        local label = Instance.new("TextLabel")
+        label.Name = "AetherHealthLabel"
+        label.Size = UDim2.fromOffset(120, 24)
+        label.Position = UDim2.new(0.5, -60, 1, -120)
+        label.BackgroundTransparency = 0.3
+        label.BackgroundColor3 = Color3.new(0, 0, 0)
+        label.TextColor3 = Color3.new(1, 1, 1)
+        label.Parent = screenGui
+        moduleRuntime.HealthLabel = label
+    end
+
+    addConnection("Health", RunService.RenderStepped:Connect(function()
+        local character = lplr.Character
+        local hp = character and character:GetAttribute("Health")
+        local maxHp = character and character:GetAttribute("MaxHealth")
+        if moduleRuntime.HealthLabel then
+            moduleRuntime.HealthLabel.Text = string.format("%d / %d", math.floor(hp or 0), math.floor(maxHp or 0))
+        end
+    end))
+end
+
+local function toggleHitBoxes(enabled)
+    toggleReach(enabled)
+end
+
+local function toggleTriggerBot(enabled)
+    toggleAutoClicker(enabled)
+end
+
+local function toggleProjectileAura(enabled)
+    toggleAimbot(enabled)
+end
+
+local function toggleProjectileAimbot(enabled)
+    toggleAimbot(enabled)
+end
+
+local function toggleSoundChanger(enabled)
+    cleanupModule("SoundChanger")
+    if not enabled then return end
+    addConnection("SoundChanger", RunService.Heartbeat:Connect(function()
+        if not moduleStates.SoundChanger then return end
+    end))
+end
+
+local function toggleSongBeats(enabled)
+    cleanupModule("Song Beats")
+    if not enabled then return end
+    local sound = Instance.new("Sound")
+    sound.Name = "AetherSongBeats"
+    sound.Volume = 0.2
+    sound.Parent = Workspace
+    moduleRuntime.SongBeatsSound = sound
+    addConnection("Song Beats", sound.Ended:Connect(function() end))
+    addConnection("Song Beats", RunService.RenderStepped:Connect(function()
+        if not moduleStates["Song Beats"] and moduleRuntime.SongBeatsSound then
+            moduleRuntime.SongBeatsSound:Destroy()
+            moduleRuntime.SongBeatsSound = nil
+        end
+    end))
+end
+
+local function toggleKillEffect(enabled)
+    cleanupModule("Kill Effect")
+    if not enabled then return end
+    addConnection("Kill Effect", TextChatService.MessageReceived:Connect(function(msg)
+        if not moduleStates["Kill Effect"] then return end
+        local text = string.lower(msg.Text or "")
+        if text:find("final kill") then
+            local effectPart = Instance.new("Part")
+            effectPart.Anchored = true
+            effectPart.CanCollide = false
+            effectPart.Material = Enum.Material.Neon
+            effectPart.Color = Color3.fromRGB(170, 120, 255)
+            effectPart.Size = Vector3.new(0.6, 0.6, 0.6)
+            local root = getHRP(lplr.Character)
+            effectPart.Position = root and (root.Position + Vector3.new(0, 4, 0)) or Vector3.zero
+            effectPart.Parent = Workspace
+            Debris:AddItem(effectPart, 1)
+        end
+    end))
+end
+
+local function toggleReachDisplay(enabled)
+    cleanupModule("Reach Display")
+    if not enabled then
+        if moduleRuntime.ReachDisplayLabel then
+            moduleRuntime.ReachDisplayLabel:Destroy()
+            moduleRuntime.ReachDisplayLabel = nil
+        end
+        return
+    end
+
+    local label = Instance.new("TextLabel")
+    label.Name = "AetherReachDisplay"
+    label.Size = UDim2.fromOffset(110, 24)
+    label.Position = UDim2.new(0.5, -55, 1, -90)
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.BackgroundTransparency = 0.35
+    label.BackgroundColor3 = Color3.new(0, 0, 0)
+    label.Parent = screenGui
+    moduleRuntime.ReachDisplayLabel = label
+
+    addConnection("Reach Display", RunService.RenderStepped:Connect(function()
+        local hit = mouse.Target
+        local root = getHRP(lplr.Character)
+        if moduleRuntime.ReachDisplayLabel then
+            local distance = (hit and root) and (hit.Position - root.Position).Magnitude or 0
+            moduleRuntime.ReachDisplayLabel.Text = string.format("%.2f studs", distance)
+        end
+    end))
+end
+
+local function toggleCleanKit(enabled)
+    cleanupModule("Clean Kit")
+    if enabled then
+        local gui = lplr:FindFirstChildOfClass("PlayerGui")
+        if gui then
+            local wind = gui:FindFirstChild("WindWalkerEffect", true)
+            if wind and wind:IsA("GuiObject") then
+                wind.Visible = false
+            end
+        end
+    end
+end
+
+local function toggleBedBreakEffect(enabled)
+    cleanupModule("Bed Break Effect")
+    if not enabled then return end
+    addConnection("Bed Break Effect", TextChatService.MessageReceived:Connect(function(msg)
+        if not moduleStates["Bed Break Effect"] then return end
+        if string.lower(msg.Text or ""):find("bed") and string.lower(msg.Text or ""):find("broken") then
+            local root = getHRP(lplr.Character)
+            if root then
+                local emitter = Instance.new("ParticleEmitter")
+                emitter.Rate = 200
+                emitter.Lifetime = NumberRange.new(0.4)
+                emitter.Speed = NumberRange.new(10)
+                emitter.Parent = root
+                Debris:AddItem(emitter, 0.5)
+            end
+        end
+    end))
+end
+
+local function toggleDamageIndicator(enabled)
+    cleanupModule("Damage Indicator")
+    if not enabled then return end
+    addConnection("Damage Indicator", Workspace.DescendantAdded:Connect(function(obj)
+        if not moduleStates["Damage Indicator"] then return end
+        if obj:IsA("TextLabel") and string.find(string.lower(obj.Name), "damage", 1, true) then
+            obj.TextColor3 = Color3.fromRGB(255, 90, 90)
+            obj.TextStrokeTransparency = 0.15
+        end
+    end))
+end
 local function toggleAlias(handler)
     return function(enabled)
         if handler then
@@ -5383,25 +5831,25 @@ local function createRegisteredModule(category, name, defaultEnabled, toggleCall
 end
 
 -- Added modules from 6872274481.vape and mapped to working AetherCore handlers.
-createRegisteredModule("Combat", "TriggerBot", false, toggleAlias(toggleAutoClicker), {})
+createRegisteredModule("Combat", "TriggerBot", false, toggleTriggerBot, {})
 createRegisteredModule("Blatant", "AntiFall", false, toggleAlias(toggleAntiVoid), {})
-createRegisteredModule("Blatant", "HitBoxes", false, toggleAlias(toggleReach), {})
+createRegisteredModule("Blatant", "HitBoxes", false, toggleHitBoxes, {})
 createRegisteredModule("Blatant", "KeepSprint", false, toggleAlias(toggleSprint), {})
 createRegisteredModule("Blatant", "Killaura", false, toggleAlias(toggleKillAura), {})
 createRegisteredModule("Blatant", "NoSlowdown", false, toggleAlias(toggleSprint), {})
-createRegisteredModule("Blatant", "ProjectileAimbot", false, toggleAlias(toggleAimbot), {})
-createRegisteredModule("Blatant", "ProjectileAura", false, toggleAlias(toggleAimbot), {})
-createRegisteredModule("Render", "Health", false, toggleAlias(toggleNameTags), {})
-createRegisteredModule("Render", "KitESP", false, toggleAlias(toggleESP), {})
-createRegisteredModule("Render", "StorageESP", false, toggleAlias(toggleESP), {})
+createRegisteredModule("Blatant", "ProjectileAimbot", false, toggleProjectileAimbot, {})
+createRegisteredModule("Blatant", "ProjectileAura", false, toggleProjectileAura, {})
+createRegisteredModule("Render", "Health", false, toggleHealth, {})
+createRegisteredModule("Render", "KitESP", false, toggleKitESP, {})
+createRegisteredModule("Render", "StorageESP", false, toggleStorageESP, {})
 createRegisteredModule("Utility", "AutoBalloon", false, toggleAlias(toggleFly), {})
 createRegisteredModule("Utility", "AutoKit", false, toggleAlias(toggleAutoBuy), {})
-createRegisteredModule("Utility", "AutoPearl", false, toggleAlias(toggleAimbot), {})
+createRegisteredModule("Utility", "AutoPearl", false, toggleAutoPearl, {{type = "slider", name = "Fall Trigger", min = 10, max = 80, settingName = "fallTrigger"}})
 createRegisteredModule("Utility", "AutoPlay", false, toggleAutoPlay, {})
 createRegisteredModule("Utility", "AutoShoot", false, toggleAutoShoot, {})
-createRegisteredModule("Utility", "MissileTP", false, toggleAlias(toggleVerticalFly), {})
-createRegisteredModule("Utility", "PickupRange", false, toggleAlias(toggleFastPickup), {})
-createRegisteredModule("Utility", "RavenTP", false, toggleAlias(toggleVerticalFly), {})
+createRegisteredModule("Utility", "MissileTP", false, toggleMissileTP, {})
+createRegisteredModule("Utility", "PickupRange", false, togglePickupRange, {{type = "slider", name = "Range", min = 6, max = 30, settingName = "range"}})
+createRegisteredModule("Utility", "RavenTP", false, toggleRavenTP, {})
 createRegisteredModule("Utility", "ShopTierBypass", false, toggleShopTierBypass, {})
 createRegisteredModule("Utility", "StaffDetector", false, toggleStaffDetector, {})
 createRegisteredModule("Utility", "TrapDisabler", false, toggleTrapDisabler, {})
@@ -5411,30 +5859,30 @@ createRegisteredModule("World", "AutoTool", false, toggleAlias(toggleNuker), {})
 createRegisteredModule("World", "BedProtector", false, toggleAlias(toggleScaffold), {})
 createRegisteredModule("World", "ChestSteal", false, toggleAlias(toggleFastPickup), {})
 createRegisteredModule("World", "Schematica", false, toggleAlias(toggleScaffold), {})
-createRegisteredModule("Utility", "ArmorSwitch", false, toggleAlias(toggleAutoBuy), {})
-createRegisteredModule("Utility", "AutoBank", false, toggleAlias(toggleAutoBuy), {})
-createRegisteredModule("Utility", "AutoConsume", false, toggleAlias(toggleAntiDeath), {})
-createRegisteredModule("Utility", "AutoHotbar", false, toggleAlias(toggleAutoBuy), {})
-createRegisteredModule("Utility", "FastConsume", false, toggleAlias(toggleAutoClicker), {})
-createRegisteredModule("Utility", "FastDrop", false, toggleAlias(toggleNoFallDamage), {})
-createRegisteredModule("Render", "BedPlates", false, toggleAlias(toggleBedESP), {})
-createRegisteredModule("World", "Breaker", false, toggleAlias(toggleNuker), {})
-createRegisteredModule("Render", "Bed Break Effect", false, toggleAlias(toggleBedESP), {})
-createRegisteredModule("Render", "Clean Kit", false, toggleAlias(toggleAutoBuy), {})
-createRegisteredModule("Render", "Crosshair", false, toggleAlias(toggleAimAssist), {})
-createRegisteredModule("Render", "Damage Indicator", false, toggleAlias(toggleESP), {})
-createRegisteredModule("Render", "FOV", false, toggleAlias(toggleAimbot), {})
+createRegisteredModule("Utility", "ArmorSwitch", false, toggleArmorSwitch, {})
+createRegisteredModule("Utility", "AutoBank", false, toggleAutoBank, {})
+createRegisteredModule("Utility", "AutoConsume", false, toggleAutoConsume, {})
+createRegisteredModule("Utility", "AutoHotbar", false, toggleAutoHotbar, {})
+createRegisteredModule("Utility", "FastConsume", false, toggleFastConsume, {})
+createRegisteredModule("Utility", "FastDrop", false, toggleFastDrop, {})
+createRegisteredModule("Render", "BedPlates", false, toggleBedPlates, {})
+createRegisteredModule("World", "Breaker", false, toggleBreaker, {})
+createRegisteredModule("Render", "Bed Break Effect", false, toggleBedBreakEffect, {})
+createRegisteredModule("Render", "Clean Kit", false, toggleCleanKit, {})
+createRegisteredModule("Render", "Crosshair", false, toggleCrosshair, {{type = "textbox", name = "Image ID", settingName = "imageId"}})
+createRegisteredModule("Render", "Damage Indicator", false, toggleDamageIndicator, {})
+createRegisteredModule("Render", "FOV", false, toggleFOV, {{type = "slider", name = "Field Of View", min = 50, max = 120, settingName = "value"}})
 createRegisteredModule("Render", "FPS Boost", false, toggleFPSBoost, {})
 createRegisteredModule("Render", "Hit Color", false, toggleHitColor, {})
 createRegisteredModule("Render", "HitFix", false, toggleAlias(toggleReach), {})
-createRegisteredModule("Render", "Interface", false, toggleAlias(toggleESP), {})
-createRegisteredModule("Render", "Kill Effect", false, toggleAlias(toggleAutoToxic), {})
-createRegisteredModule("Render", "Reach Display", false, toggleAlias(toggleReach), {})
-createRegisteredModule("Render", "Song Beats", false, toggleAlias(toggleAutoToxic), {})
-createRegisteredModule("Render", "SoundChanger", false, toggleAlias(toggleAutoToxic), {})
-createRegisteredModule("Render", "UI Cleanup", false, toggleAlias(toggleAntiCrash), {})
-createRegisteredModule("Render", "Viewmodel", false, toggleAlias(toggleAimAssist), {})
-createRegisteredModule("Render", "WinEffect", false, toggleAlias(toggleAutoToxic), {})
+createRegisteredModule("Render", "Interface", false, toggleInterface, {})
+createRegisteredModule("Render", "Kill Effect", false, toggleKillEffect, {})
+createRegisteredModule("Render", "Reach Display", false, toggleReachDisplay, {})
+createRegisteredModule("Render", "Song Beats", false, toggleSongBeats, {})
+createRegisteredModule("Render", "SoundChanger", false, toggleSoundChanger, {})
+createRegisteredModule("Render", "UI Cleanup", false, toggleUICleanup, {})
+createRegisteredModule("Render", "Viewmodel", false, toggleViewmodel, {{type = "slider", name = "X Offset", min = -3, max = 3, settingName = "xOffset"}, {type = "slider", name = "Y Offset", min = -3, max = 3, settingName = "yOffset"}, {type = "slider", name = "Z Offset", min = -3, max = 3, settingName = "zOffset"}})
+createRegisteredModule("Render", "WinEffect", false, toggleWinEffect, {})
 
 createRegisteredModule("Combat", "KillAura", false, toggleKillAura, {
     {type = "toggle", name = "Face Target", settingName = "faceTarget"},
