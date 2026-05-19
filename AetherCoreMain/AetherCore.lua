@@ -4227,7 +4227,7 @@ do
     scriptHubTitle.Size = UDim2.new(1, -30, 0, 34)
     scriptHubTitle.Position = UDim2.new(0, 15, 0, 12)
     scriptHubTitle.BackgroundTransparency = 1
-    scriptHubTitle.Text = "ScriptHub AI Assistant"
+    scriptHubTitle.Text = "AetherCore Assistant"
     scriptHubTitle.TextXAlignment = Enum.TextXAlignment.Left
     scriptHubTitle.TextColor3 = palette.text
     scriptHubTitle.Font = Enum.Font.GothamBold
@@ -4238,7 +4238,7 @@ do
     scriptHubSubtitle.Size = UDim2.new(1, -30, 0, 24)
     scriptHubSubtitle.Position = UDim2.new(0, 15, 0, 48)
     scriptHubSubtitle.BackgroundTransparency = 1
-    scriptHubSubtitle.Text = "Ask about Roblox executors and exploit scripting guidance."
+    scriptHubSubtitle.Text = "Ask what a module does, how it works, or how to use AetherCore."
     scriptHubSubtitle.TextXAlignment = Enum.TextXAlignment.Left
     scriptHubSubtitle.TextColor3 = palette.secondary
     scriptHubSubtitle.Font = Enum.Font.Gotham
@@ -4270,7 +4270,7 @@ do
     chatInput.Position = UDim2.new(0, 12, 1, -56)
     chatInput.BackgroundColor3 = Color3.fromRGB(21, 21, 33)
     chatInput.BorderSizePixel = 0
-    chatInput.PlaceholderText = "Ask about Solara, Wave, Delta, Hydrogen, Arceus X, Codex, Fluxus, and more..."
+    chatInput.PlaceholderText = "Ask: what does KillAura do? how does Scaffold work? what is AutoPearl?"
     chatInput.Text = ""
     chatInput.TextColor3 = palette.text
     chatInput.PlaceholderColor3 = palette.secondary
@@ -4293,18 +4293,141 @@ do
     sendButton.Parent = chatCard
     addCorner(sendButton, 8)
 
-    local executorKnowledge = {
-        ["solara"] = "Solara is a Windows-oriented Roblox executor. Always verify authenticity from trusted community channels and avoid unofficial downloads.",
-        ["wave"] = "Wave commonly refers to a modern Windows executor toolchain with script execution and UI support.",
-        ["delta"] = "Delta is known as a mobile-friendly executor with broad script compatibility and a beginner-focused interface.",
-        ["hydrogen"] = "Hydrogen is commonly discussed for Android support and streamlined execution workflows.",
-        ["arceus x"] = "Arceus X is known in mobile exploit communities and is usually paired with a built-in script browser.",
-        ["codex"] = "Codex is widely referenced as a mobile executor option with script injection and utility menus.",
-        ["fluxus"] = "Fluxus is a long-standing executor brand frequently associated with script hub usage.",
-        ["krnl"] = "KRNL is a legacy Windows executor name that remains frequently referenced in scripts and tutorials.",
-        ["synapse"] = "Synapse is historically one of the most referenced premium executor families in Roblox exploitation.",
-        ["evon"] = "Evon is mentioned in community lists as an executor with broad script support; always validate safety before use."
+    local moduleKnowledge = {
+        ["killaura"] = "KillAura automatically attacks nearby valid targets while active.",
+        ["autoclicker"] = "AutoClicker repeatedly performs clicks at the configured rate.",
+        ["aimbot"] = "Aimbot adjusts aim toward a selected target while aiming.",
+        ["reach"] = "Reach extends hit registration distance within this script's limits.",
+        ["antihit"] = "AntiHit reduces how easily enemies can land hits on you.",
+        ["antideath"] = "AntiDeath attempts to prevent death using this script's safety checks.",
+        ["speed"] = "Speed increases movement speed while the module is enabled.",
+        ["step"] = "Step lets your character climb higher ledges without jumping.",
+        ["safewalk"] = "SafeWalk helps prevent accidental edge walk-offs.",
+        ["highjump"] = "HighJump boosts jump height above normal movement.",
+        ["verticalfly"] = "VerticalFly gives controlled vertical movement while active.",
+        ["scaffold"] = "Scaffold places blocks under or ahead of you while moving.",
+        ["fov"] = "FOV changes your field-of-view camera setting.",
+        ["crosshair"] = "Crosshair customizes or overlays the on-screen crosshair.",
+        ["viewmodel"] = "Viewmodel adjusts first-person hand or item view positioning.",
+        ["bedplates"] = "BedPlates displays bed-related markers or plate visuals.",
+        ["wineffect"] = "WinEffect plays a visual effect when a win condition is met.",
+        ["fastpickup"] = "FastPickup improves how quickly nearby drops are collected.",
+        ["fastbreak"] = "FastBreak reduces the time needed to break valid blocks.",
+        ["autotoxic"] = "AutoToxic sends preset chat taunts automatically based on events.",
+        ["interface"] = "Interface controls parts of the script UI presentation.",
+        ["ui cleanup"] = "UI Cleanup removes or hides unnecessary on-screen UI clutter.",
+        ["breaker"] = "Breaker automatically targets and breaks specific nearby objectives.",
+        ["nuker"] = "Nuker rapidly breaks multiple valid nearby blocks.",
+        ["autovoiddrop"] = "AutoVoidDrop automatically drops selected items into the void.",
+        ["autopearl"] = "AutoPearl automatically uses a pearl in supported situations.",
+        ["autobank"] = "AutoBank automatically deposits or stores resources when possible.",
+        ["raventp"] = "RavenTP teleports using the script's RavenTP routine.",
+        ["missiletp"] = "MissileTP teleports using the script's missile-based teleport routine.",
+        ["armorswitch"] = "ArmorSwitch swaps armor sets based on module logic or conditions."
     }
+
+    local moduleAliases = {
+        ["kill aura"] = "killaura",
+        ["ka"] = "killaura",
+        ["scafold"] = "scaffold",
+        ["auto pearl"] = "autopearl",
+        ["autoperal"] = "autopearl",
+        ["missle tp"] = "missiletp",
+        ["missile tp"] = "missiletp",
+        ["raven tp"] = "raventp",
+        ["bed plates"] = "bedplates",
+        ["ui cleanup"] = "ui cleanup",
+        ["uicleanup"] = "ui cleanup",
+        ["auto void drop"] = "autovoiddrop",
+        ["fast break"] = "fastbreak",
+        ["fast pickup"] = "fastpickup",
+        ["auto toxic"] = "autotoxic",
+        ["vertical fly"] = "verticalfly",
+        ["high jump"] = "highjump",
+        ["win effect"] = "wineffect"
+    }
+
+    local moduleCategoriesReply = "Combat: KillAura, AutoClicker, Aimbot, Reach, AntiHit, AntiDeath\nBlatant: Speed, Step, SafeWalk, HighJump, VerticalFly, Scaffold\nRender: FOV, Crosshair, Viewmodel, BedPlates, WinEffect\nUtility: FastPickup, FastBreak, AutoToxic, Interface, UI Cleanup\nWorld: Breaker, Nuker, AutoVoidDrop, AutoPearl, AutoBank\nLegend: RavenTP, MissileTP, ArmorSwitch"
+
+    local function normalizeText(text)
+        local value = (text or ""):lower()
+        return value:gsub("[%s%p_%-]+", "")
+    end
+
+    local function levenshtein(a, b)
+        local left = a or ""
+        local right = b or ""
+        local lenA = #left
+        local lenB = #right
+        if lenA == 0 then
+            return lenB
+        end
+        if lenB == 0 then
+            return lenA
+        end
+
+        local matrix = {}
+        for i = 0, lenA do
+            matrix[i] = {[0] = i}
+        end
+        for j = 0, lenB do
+            matrix[0][j] = j
+        end
+
+        for i = 1, lenA do
+            for j = 1, lenB do
+                local cost = left:sub(i, i) == right:sub(j, j) and 0 or 1
+                local deletion = matrix[i - 1][j] + 1
+                local insertion = matrix[i][j - 1] + 1
+                local substitution = matrix[i - 1][j - 1] + cost
+                matrix[i][j] = math.min(deletion, insertion, substitution)
+            end
+        end
+
+        return matrix[lenA][lenB]
+    end
+
+    local function findClosestModule(prompt)
+        local rawPrompt = (prompt or ""):lower()
+        local normalizedPrompt = normalizeText(rawPrompt)
+
+        for alias, canonical in pairs(moduleAliases) do
+            local aliasRaw = alias:lower()
+            local aliasNormalized = normalizeText(aliasRaw)
+            if rawPrompt:find(aliasRaw, 1, true) or normalizedPrompt:find(aliasNormalized, 1, true) then
+                return canonical
+            end
+        end
+
+        for moduleName in pairs(moduleKnowledge) do
+            local moduleNormalized = normalizeText(moduleName)
+            if normalizedPrompt:find(moduleNormalized, 1, true) then
+                return moduleName
+            end
+        end
+
+        local bestMatch, bestDistance
+        for moduleName in pairs(moduleKnowledge) do
+            local moduleNormalized = normalizeText(moduleName)
+            local distance = levenshtein(normalizedPrompt, moduleNormalized)
+            if normalizedPrompt:find(moduleNormalized, 1, true) then
+                distance = 0
+            elseif #normalizedPrompt > #moduleNormalized and normalizedPrompt:find(moduleNormalized:sub(1, math.max(1, #moduleNormalized - 2)), 1, true) then
+                distance = math.min(distance, 2)
+            end
+
+            if not bestDistance or distance < bestDistance then
+                bestDistance = distance
+                bestMatch = moduleName
+            end
+        end
+
+        if bestDistance and bestDistance <= 2 then
+            return bestMatch
+        end
+
+        return nil
+    end
 
     local function addChatBubble(message, isUser)
         local bubble = Instance.new("TextLabel")
@@ -4328,27 +4451,38 @@ do
     end
 
     local function buildAssistantReply(prompt)
-        local normalized = (prompt or ""):lower()
-        local responses = {}
-        for executorName, info in pairs(executorKnowledge) do
-            if normalized:find(executorName, 1, true) then
-                table.insert(responses, info)
+        local rawPrompt = (prompt or "")
+        local loweredPrompt = rawPrompt:lower()
+        local normalizedPrompt = normalizeText(rawPrompt)
+
+        local asksForList = loweredPrompt:find("list modules", 1, true)
+            or loweredPrompt:find("show modules", 1, true)
+            or loweredPrompt:find("what modules", 1, true)
+            or loweredPrompt:find("categories", 1, true)
+
+        if asksForList then
+            return moduleCategoriesReply
+        end
+
+        if loweredPrompt:find("help", 1, true) then
+            return "Try asking: what does KillAura do? how does Scaffold work? what is AutoPearl? explain FastBreak. You can also ask: list modules."
+        end
+
+        local questionWords = {"what", "how", "does", "do", "work", "explain", "describe", "is"}
+        local soundsLikeQuestion = false
+        for _, word in ipairs(questionWords) do
+            if loweredPrompt:find(word, 1, true) then
+                soundsLikeQuestion = true
+                break
             end
         end
 
-        if #responses == 0 then
-            if normalized:find("best", 1, true) then
-                return "There is no universal best executor. Compare stability, update speed, script compatibility, and safety reputation before choosing one."
-            elseif normalized:find("safe", 1, true) or normalized:find("virus", 1, true) then
-                return "Safety is critical: use trusted sources, scan files, avoid suspicious link shorteners, and never disable system protections for an executor."
-            elseif normalized:find("script", 1, true) then
-                return "For scripting quality, prioritize clear loadstring sources, readable code, and scripts that are maintained after Roblox patches."
-            else
-                return "I can help with executor comparisons, safety checks, script compatibility, and setup guidance. Mention an executor name for targeted details."
-            end
+        local moduleKey = findClosestModule(rawPrompt)
+        if moduleKey and soundsLikeQuestion then
+            return moduleKnowledge[moduleKey]
         end
 
-        return table.concat(responses, " ") .. " Keep in mind that executor availability changes frequently, so always re-verify current status."
+        return "I can help with AetherCore modules and script usage. Ask what a module does, how it works, or type 'list modules' to see categories."
     end
 
     local function submitChatPrompt()
@@ -4368,7 +4502,7 @@ do
         end
     end)
 
-    addChatBubble("Hello. I am your ScriptHub assistant. Ask me about Roblox executors, safety, or exploit script compatibility.", false)
+    addChatBubble("Hello. I am your AetherCore assistant. Ask me what a module does, how a module works, or how to use the script.", false)
 end
 
 do
