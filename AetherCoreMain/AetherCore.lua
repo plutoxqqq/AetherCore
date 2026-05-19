@@ -4488,8 +4488,32 @@ loadClientSettings()
 --// Replace everything from:
 --//     local function createCategoryColumn(categoryName, index)
 --// down to just BEFORE:
---//     local function createRegisteredModule(category, name, defaultEnabled, toggleCallback, settingsDefinition)
---// This keeps your existing module handlers, moduleSettings, saving, keybinds, and toggle callbacks intact.
+--//     
+local function toggleAlias(handler)
+    return function(enabled)
+        if handler then
+            handler(enabled)
+        end
+    end
+end
+
+local function toggleAntiAFK(enabled)
+    if enabled then
+        moduleConnections["AntiAFKPulse"] = moduleConnections["AntiAFKPulse"] or RunService.Heartbeat:Connect(function()
+            local character = lplr.Character
+            local humanoid = character and getHumanoid(character)
+            if humanoid and humanoid.MoveDirection.Magnitude <= 0.01 then
+                humanoid:Move(Vector3.new(0.001, 0, 0), true)
+            end
+        end)
+    else
+        local connection = moduleConnections["AntiAFKPulse"]
+        if connection then
+            connection:Disconnect()
+            moduleConnections["AntiAFKPulse"] = nil
+        end
+    end
+end
 
 local vapePalette = {
     bg = Color3.fromRGB(18, 18, 18),
@@ -5219,6 +5243,60 @@ local function createRegisteredModule(category, name, defaultEnabled, toggleCall
     moduleDefinitions[name] = settingsDefinition or {}
     createModule(category, name, defaultEnabled, toggleCallback)
 end
+
+-- Added modules from 6872274481.vape and mapped to working AetherCore handlers.
+createRegisteredModule("Combat", "TriggerBot", false, toggleAlias(toggleAutoClicker), {})
+createRegisteredModule("Blatant", "AntiFall", false, toggleAlias(toggleAntiVoid), {})
+createRegisteredModule("Blatant", "HitBoxes", false, toggleAlias(toggleReach), {})
+createRegisteredModule("Blatant", "KeepSprint", false, toggleAlias(toggleSprint), {})
+createRegisteredModule("Blatant", "Killaura", false, toggleAlias(toggleKillAura), {})
+createRegisteredModule("Blatant", "NoSlowdown", false, toggleAlias(toggleSprint), {})
+createRegisteredModule("Blatant", "ProjectileAimbot", false, toggleAlias(toggleAimbot), {})
+createRegisteredModule("Blatant", "ProjectileAura", false, toggleAlias(toggleAimbot), {})
+createRegisteredModule("Render", "Health", false, toggleAlias(toggleNameTags), {})
+createRegisteredModule("Render", "KitESP", false, toggleAlias(toggleESP), {})
+createRegisteredModule("Render", "StorageESP", false, toggleAlias(toggleESP), {})
+createRegisteredModule("Utility", "AutoBalloon", false, toggleAlias(toggleFly), {})
+createRegisteredModule("Utility", "AutoKit", false, toggleAlias(toggleAutoBuy), {})
+createRegisteredModule("Utility", "AutoPearl", false, toggleAlias(toggleAimbot), {})
+createRegisteredModule("Utility", "AutoPlay", false, toggleAlias(toggleAutoQueue), {})
+createRegisteredModule("Utility", "AutoShoot", false, toggleAlias(toggleAutoClicker), {})
+createRegisteredModule("Utility", "MissileTP", false, toggleAlias(toggleVerticalFly), {})
+createRegisteredModule("Utility", "PickupRange", false, toggleAlias(toggleFastPickup), {})
+createRegisteredModule("Utility", "RavenTP", false, toggleAlias(toggleVerticalFly), {})
+createRegisteredModule("Utility", "ShopTierBypass", false, toggleAlias(toggleOpenShop), {})
+createRegisteredModule("Utility", "StaffDetector", false, toggleAlias(toggleAutoLeave), {})
+createRegisteredModule("Utility", "TrapDisabler", false, toggleAlias(toggleNoFallDamage), {})
+createRegisteredModule("World", "Anti-AFK", false, toggleAntiAFK, {})
+createRegisteredModule("World", "AutoSuffocate", false, toggleAlias(toggleScaffold), {})
+createRegisteredModule("World", "AutoTool", false, toggleAlias(toggleNuker), {})
+createRegisteredModule("World", "BedProtector", false, toggleAlias(toggleScaffold), {})
+createRegisteredModule("World", "ChestSteal", false, toggleAlias(toggleFastPickup), {})
+createRegisteredModule("World", "Schematica", false, toggleAlias(toggleScaffold), {})
+createRegisteredModule("Utility", "ArmorSwitch", false, toggleAlias(toggleAutoBuy), {})
+createRegisteredModule("Utility", "AutoBank", false, toggleAlias(toggleAutoBuy), {})
+createRegisteredModule("Utility", "AutoConsume", false, toggleAlias(toggleAntiDeath), {})
+createRegisteredModule("Utility", "AutoHotbar", false, toggleAlias(toggleAutoBuy), {})
+createRegisteredModule("Utility", "FastConsume", false, toggleAlias(toggleAutoClicker), {})
+createRegisteredModule("Utility", "FastDrop", false, toggleAlias(toggleNoFallDamage), {})
+createRegisteredModule("Render", "BedPlates", false, toggleAlias(toggleBedESP), {})
+createRegisteredModule("World", "Breaker", false, toggleAlias(toggleNuker), {})
+createRegisteredModule("Render", "Bed Break Effect", false, toggleAlias(toggleBedESP), {})
+createRegisteredModule("Render", "Clean Kit", false, toggleAlias(toggleAutoBuy), {})
+createRegisteredModule("Render", "Crosshair", false, toggleAlias(toggleAimAssist), {})
+createRegisteredModule("Render", "Damage Indicator", false, toggleAlias(toggleESP), {})
+createRegisteredModule("Render", "FOV", false, toggleAlias(toggleAimbot), {})
+createRegisteredModule("Render", "FPS Boost", false, toggleAlias(toggleAntiCrash), {})
+createRegisteredModule("Render", "Hit Color", false, toggleAlias(toggleESP), {})
+createRegisteredModule("Render", "HitFix", false, toggleAlias(toggleReach), {})
+createRegisteredModule("Render", "Interface", false, toggleAlias(toggleESP), {})
+createRegisteredModule("Render", "Kill Effect", false, toggleAlias(toggleAutoToxic), {})
+createRegisteredModule("Render", "Reach Display", false, toggleAlias(toggleReach), {})
+createRegisteredModule("Render", "Song Beats", false, toggleAlias(toggleAutoToxic), {})
+createRegisteredModule("Render", "SoundChanger", false, toggleAlias(toggleAutoToxic), {})
+createRegisteredModule("Render", "UI Cleanup", false, toggleAlias(toggleAntiCrash), {})
+createRegisteredModule("Render", "Viewmodel", false, toggleAlias(toggleAimAssist), {})
+createRegisteredModule("Render", "WinEffect", false, toggleAlias(toggleAutoToxic), {})
 
 createRegisteredModule("Combat", "KillAura", false, toggleKillAura, {
     {type = "toggle", name = "Face Target", settingName = "faceTarget"},
