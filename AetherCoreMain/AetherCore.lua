@@ -46,7 +46,13 @@ local moduleSettings = {
     Blink = {pulseSeconds = 0},
     AutoQueue = {delay = 1},
     AutoBuy = {sword = true, armor = true, upgrades = true},
-    BedNuker = {range = 20}
+    BedNuker = {range = 20},
+    AutoPlay = {random = false},
+    AutoShoot = {enabled = true},
+    StaffDetector = {leaveOnDetect = false},
+    AutoSuffocate = {range = 18},
+    FPSBoost = {removeKillEffects = true, removeVisualizer = true},
+    HitColor = {r = 1, g = 0, b = 0, a = 0.4}
 }
 local moduleUi = {}
 local moduleHandlers = {}
@@ -2493,6 +2499,130 @@ local function setupAutoToxic()
 end
 setupAutoToxic()
 
+
+local function toggleAutoPlay(enabled)
+    cleanupModule("AutoPlay")
+    if not enabled then return end
+    addConnection("AutoPlay", task.spawn(function()
+        while moduleStates["AutoPlay"] do
+            task.wait(math.max(0.2, tonumber((moduleSettings["AutoQueue"] or {}).delay) or 1))
+            pcall(function()
+                local queueRemote = getNetManagedFolder() and getNetManagedFolder():FindFirstChild("JoinQueue")
+                if queueRemote then
+                    local queueType = "bedwars_test_squads"
+                    queueRemote:InvokeServer({queueType = queueType})
+                end
+            end)
+        end
+    end))
+end
+
+local function toggleAutoShoot(enabled)
+    cleanupModule("AutoShoot")
+    if not enabled then return end
+    addConnection("AutoShoot", UserInputService.InputBegan:Connect(function(input, gpe)
+        if gpe or not moduleStates["AutoShoot"] then return end
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            task.delay(0.05, performPrimaryClick)
+        end
+    end))
+end
+
+local function toggleStaffDetector(enabled)
+    cleanupModule("StaffDetector")
+    if not enabled then return end
+    addConnection("StaffDetector", Players.PlayerAdded:Connect(function(player)
+        if not moduleStates["StaffDetector"] or player == lplr then return end
+        local rank = 0
+        pcall(function() rank = player:GetRankInGroup(5774246) end)
+        if rank >= 100 then
+            warn("[AetherCore][StaffDetector] Staff detected: " .. player.Name .. " (" .. tostring(player.UserId) .. ")")
+            if (moduleSettings["StaffDetector"] or {}).leaveOnDetect then
+                pcall(function() lplr:Kick("AetherCore StaffDetector triggered.") end)
+            end
+        end
+    end))
+end
+
+local function toggleTrapDisabler(enabled)
+    moduleStates["TrapDisabler"] = enabled and true or false
+end
+
+local function toggleShopTierBypass(enabled)
+    cleanupModule("ShopTierBypass")
+    local state = rawget(_G, "AetherCoreShopTierBypassState") or {tiered = {}, nextTier = {}}
+    _G.AetherCoreShopTierBypassState = state
+    local shopItems = (((vapeFunctionTable or {}).ClientStore or {}).Shop and ((vapeFunctionTable or {}).ClientStore).Shop.ShopItems)
+    if not shopItems then return end
+    if enabled then
+        for _, item in pairs(shopItems) do
+            state.tiered[item] = item.tiered
+            state.nextTier[item] = item.nextTier
+            item.tiered = nil
+            item.nextTier = nil
+        end
+    else
+        for item, value in pairs(state.tiered) do item.tiered = value end
+        for item, value in pairs(state.nextTier) do item.nextTier = value end
+        state.tiered = {}
+        state.nextTier = {}
+    end
+end
+
+local function toggleAutoSuffocate(enabled)
+    cleanupModule("AutoSuffocate")
+    if not enabled then return end
+    addConnection("AutoSuffocate", task.spawn(function()
+        while moduleStates["AutoSuffocate"] do
+            task.wait(0.1)
+            if not moduleStates["Scaffold"] then
+                local char = getCharacter(lplr)
+                local hrp = getHRP(char)
+                if hrp then
+                    local range = math.clamp(tonumber((moduleSettings["AutoSuffocate"] or {}).range) or 18, 4, 24)
+                    for _, plr in ipairs(Players:GetPlayers()) do
+                        if plr ~= lplr and plr.Character and getHRP(plr.Character) then
+                            local ehrp = getHRP(plr.Character)
+                            if (ehrp.Position - hrp.Position).Magnitude <= range then
+                                local pos = ehrp.Position + Vector3.new(0, 3, 0)
+                                local damageBlockRemote = getDamageBlockRemote()
+                                if damageBlockRemote then pcall(function() damageBlockRemote:InvokeServer({blockRef = {blockPosition = pos}}) end) end
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end))
+end
+
+local function toggleFPSBoost(enabled)
+    cleanupModule("FPSBoost")
+    if enabled then
+        Workspace.GlobalShadows = false
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    else
+        Workspace.GlobalShadows = true
+    end
+end
+
+local function toggleHitColor(enabled)
+    cleanupModule("HitColor")
+    if not enabled then return end
+    addConnection("HitColor", RunService.Heartbeat:Connect(function()
+        if not moduleStates["Hit Color"] then return end
+        local settings = moduleSettings["HitColor"] or {}
+        local color = Color3.new(settings.r or 1, settings.g or 0, settings.b or 0)
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("Highlight") and obj.Name == "_DamageHighlight_" then
+                obj.FillColor = color
+                obj.FillTransparency = settings.a or 0.4
+            end
+        end
+    end))
+end
+
 local function toggleNoClickDelay(enabled)
     cleanupModule("NoClickDelay")
     if not enabled then
@@ -3738,6 +3868,14 @@ moduleHandlers = {
     AutoClicker = toggleAutoClicker,
     Sprint = toggleSprint,
     AutoQueue = toggleAutoQueue,
+    AutoPlay = toggleAutoPlay,
+    AutoShoot = toggleAutoShoot,
+    StaffDetector = toggleStaffDetector,
+    TrapDisabler = toggleTrapDisabler,
+    ShopTierBypass = toggleShopTierBypass,
+    AutoSuffocate = toggleAutoSuffocate,
+    ["FPS Boost"] = toggleFPSBoost,
+    ["Hit Color"] = toggleHitColor,
     Velocity = toggleVelocity,
     Speed = toggleSpeed,
     Step = toggleStep,
@@ -5259,16 +5397,16 @@ createRegisteredModule("Render", "StorageESP", false, toggleAlias(toggleESP), {}
 createRegisteredModule("Utility", "AutoBalloon", false, toggleAlias(toggleFly), {})
 createRegisteredModule("Utility", "AutoKit", false, toggleAlias(toggleAutoBuy), {})
 createRegisteredModule("Utility", "AutoPearl", false, toggleAlias(toggleAimbot), {})
-createRegisteredModule("Utility", "AutoPlay", false, toggleAlias(toggleAutoQueue), {})
-createRegisteredModule("Utility", "AutoShoot", false, toggleAlias(toggleAutoClicker), {})
+createRegisteredModule("Utility", "AutoPlay", false, toggleAutoPlay, {})
+createRegisteredModule("Utility", "AutoShoot", false, toggleAutoShoot, {})
 createRegisteredModule("Utility", "MissileTP", false, toggleAlias(toggleVerticalFly), {})
 createRegisteredModule("Utility", "PickupRange", false, toggleAlias(toggleFastPickup), {})
 createRegisteredModule("Utility", "RavenTP", false, toggleAlias(toggleVerticalFly), {})
-createRegisteredModule("Utility", "ShopTierBypass", false, toggleAlias(toggleOpenShop), {})
-createRegisteredModule("Utility", "StaffDetector", false, toggleAlias(toggleAutoLeave), {})
-createRegisteredModule("Utility", "TrapDisabler", false, toggleAlias(toggleNoFallDamage), {})
+createRegisteredModule("Utility", "ShopTierBypass", false, toggleShopTierBypass, {})
+createRegisteredModule("Utility", "StaffDetector", false, toggleStaffDetector, {})
+createRegisteredModule("Utility", "TrapDisabler", false, toggleTrapDisabler, {})
 createRegisteredModule("World", "Anti-AFK", false, toggleAntiAFK, {})
-createRegisteredModule("World", "AutoSuffocate", false, toggleAlias(toggleScaffold), {})
+createRegisteredModule("World", "AutoSuffocate", false, toggleAutoSuffocate, {})
 createRegisteredModule("World", "AutoTool", false, toggleAlias(toggleNuker), {})
 createRegisteredModule("World", "BedProtector", false, toggleAlias(toggleScaffold), {})
 createRegisteredModule("World", "ChestSteal", false, toggleAlias(toggleFastPickup), {})
@@ -5286,8 +5424,8 @@ createRegisteredModule("Render", "Clean Kit", false, toggleAlias(toggleAutoBuy),
 createRegisteredModule("Render", "Crosshair", false, toggleAlias(toggleAimAssist), {})
 createRegisteredModule("Render", "Damage Indicator", false, toggleAlias(toggleESP), {})
 createRegisteredModule("Render", "FOV", false, toggleAlias(toggleAimbot), {})
-createRegisteredModule("Render", "FPS Boost", false, toggleAlias(toggleAntiCrash), {})
-createRegisteredModule("Render", "Hit Color", false, toggleAlias(toggleESP), {})
+createRegisteredModule("Render", "FPS Boost", false, toggleFPSBoost, {})
+createRegisteredModule("Render", "Hit Color", false, toggleHitColor, {})
 createRegisteredModule("Render", "HitFix", false, toggleAlias(toggleReach), {})
 createRegisteredModule("Render", "Interface", false, toggleAlias(toggleESP), {})
 createRegisteredModule("Render", "Kill Effect", false, toggleAlias(toggleAutoToxic), {})
