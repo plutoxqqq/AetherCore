@@ -59,20 +59,8 @@ local mouseMoveRelative = type(mousemoverel) == "function" and mousemoverel or n
 local clipboardSetter = type(setclipboard) == "function" and setclipboard or nil
 local sharedEnvironmentGetter = type(getgenv) == "function" and getgenv or nil
 local autoToxicMessageConnection
-local moduleConflictMap = {
-    Speed = {"Fly", "VerticalFly", "LongJump"},
-    Sprint = {},
-    Fly = {"Speed", "VerticalFly", "LongJump", "AntiVoid"},
-    VerticalFly = {"Speed", "Fly", "LongJump", "AntiVoid"},
-    LongJump = {"Speed", "Fly", "VerticalFly", "Scaffold", "NoFallDamage"},
-    Scaffold = {"LongJump"},
-    AntiVoid = {"Fly", "VerticalFly"},
-    KillAura = {"AimAssist"},
-    AimAssist = {"KillAura", "Aimbot"},
-    Aimbot = {"KillAura", "AimAssist"},
-    AntiDeath = {"AntiHit"},
-    AntiHit = {"AntiDeath"},
-    Blink = {"LongJump"}
+local moduleConflictMap = { -- removed conflicts (creating a different system)
+    Speed = {}
 }
 
 local function logError(scope, err)
