@@ -23,10 +23,10 @@ local moduleSettings = {
     KillAura = {range = 14, swingSpeed = 18},
     AutoClicker = {cps = 10},
     Sprint = {omni = true},
-    Speed = {speed = 24},
+    Speed = {speed = 23},
     Step = {maxHeight = 6, forwardCheckDistance = 2.6},
     SafeWalk = {maxDrop = 4.5},
-    HighJump = {boost = 40},
+    HighJump = {boost = 80},
     Aimbot = {
         fov = 160,
         smoothness = 0.55,
@@ -35,18 +35,18 @@ local moduleSettings = {
         gravity = Workspace and Workspace.Gravity or 196.2,
         maxDistance = 260
     },
-    Reach = {hitRange = 12, mineRange = 12, placeRange = 12},
+    Reach = {hitRange = 13, mineRange = 18, placeRange = 18},
     VerticalFly = {horizontalSpeed = 28, verticalSpeed = 45, groundOffset = 3.2, hoverHeight = 3.2},
     AntiDeath = {healthThreshold = 25, belowDuration = 2, slowMode = 1.5, voidOffset = 130},
     AntiHit = {slowMode = 1, riseWindow = 0.14, voidOffset = 130, antiDamageJitter = 2.2},
-    FastBreak = {cooldown = 0.03, attemptsPerPulse = 2},
+    FastBreak = {cooldown = 0.21, attemptsPerPulse = 2},
     AutoVoidDrop = {triggerOffset = 18, dropInterval = 0.45},
     FastPickup = {range = 14},
     AutoLeave = {staffOnly = true, leaveOnMatchEnd = true},
     Blink = {pulseSeconds = 0},
     AutoQueue = {delay = 1},
     AutoBuy = {sword = true, armor = true, upgrades = true},
-    BedNuker = {range = 28}
+    BedNuker = {range = 20}
 }
 local moduleUi = {}
 local moduleHandlers = {}
