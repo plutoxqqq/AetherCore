@@ -1,1 +1,2 @@
 # AetherCore
+> Roblox Bedwars script
