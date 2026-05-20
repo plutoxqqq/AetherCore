@@ -255,6 +255,26 @@ local function getHRP(char)
     return char and char:FindFirstChild("HumanoidRootPart")
 end
 
+local function getHumanoidScale(humanoid, scaleName, defaultValue)
+    local fallback = defaultValue or 1
+    if not humanoid then
+        return fallback
+    end
+    local scale = humanoid:FindFirstChild(scaleName)
+    if scale and scale:IsA("NumberValue") then
+        return scale.Value
+    end
+    return fallback
+end
+
+local function getCharacterAndHumanoid(player)
+    local character = player and (player.Character or player.CharacterAdded:Wait())
+    if not character then
+        return nil, nil
+    end
+    return character, character:FindFirstChildOfClass("Humanoid")
+end
+
 
 --====================================================
 -- movement/raycast helpers
@@ -3342,8 +3362,11 @@ local function toggleVelocity(enabled)
     if not enabled then return end
 
     local function applyVelocity(char)
-        local hum = char:WaitForChild("Humanoid")
-        local root = char:WaitForChild("HumanoidRootPart")
+        local hum = getHumanoid(char)
+        local root = getHRP(char)
+        if not hum or not root then
+            return
+        end
         local recentlyDamagedUntil = 0
         local lastHealth = hum.Health
 
@@ -3731,7 +3754,10 @@ local function toggleNoFallDamage(enabled)
     if not enabled then return end
 
     local function applyNoFall(char)
-        local hum = char:WaitForChild("Humanoid")
+        local hum = getHumanoid(char)
+        if not hum then
+            return
+        end
         if moduleSettings["NoFallDamage"].method == "Landing" then
             local conn = hum.StateChanged:Connect(function(old, new)
                 if new == Enum.HumanoidStateType.Freefall then
