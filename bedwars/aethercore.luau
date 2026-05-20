@@ -1,5 +1,8 @@
 -- AetherCore :)
 
+console.log("Welcome to AetherCore");
+console.log("Script is loading...");
+
 --====================================================
 -- services and global references
 --====================================================
@@ -4966,12 +4969,6 @@ loadClientSettings()
 --====================================================
 -- windows and category creation
 --====================================================
-
---// AetherCore Vape V4-inspired GUI replacement
---// Replace everything from:
---//     local function createCategoryColumn(categoryName, index)
---// down to just BEFORE:
---//     
 
 local moduleRuntime = {}
 
