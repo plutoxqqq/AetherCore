@@ -3299,144 +3299,147 @@ end
 
 moduleSettings["LongJump"] = {
     speed = 37,
-    duration = 0.6,
-    cooldown = 0.45
+    cameraDirection = false
 }
 
 local function toggleLongJump(enabled)
     cleanupModule("LongJump")
-    if not enabled then
-        local char = getCharacter(lplr)
-        local hrp = getHRP(char)
-        if hrp then
-            local bv = hrp:FindFirstChild("LongJumpVelocity")
-            if bv then bv:Destroy() end
+
+    local Value = {Value = math.clamp(tonumber(moduleSettings["LongJump"].speed) or 37, 1, 37)}
+    local CameraDir = {Enabled = moduleSettings["LongJump"].cameraDirection == true}
+    local start
+    local JumpTick, JumpSpeed, Direction = tick(), 0, nil
+    local projectileRemote = {InvokeServer = function(self, ...) return false end}
+
+    local function flattenUnit(vec)
+        if not vec then return Vector3.new(0, 0, -1) end
+        local flat = Vector3.new(vec.X, 0, vec.Z)
+        return flat.Magnitude > 0 and flat.Unit or Vector3.new(0, 0, -1)
+    end
+
+    local function launchProjectile(item, pos, proj, speed, dir)
+        if not (item and pos and dir) then return end
+        if projectileRemote and projectileRemote.InvokeServer then
+            pcall(function()
+                projectileRemote:InvokeServer(item, proj, proj, pos, pos, dir * speed)
+            end)
         end
+    end
+
+    local LongJumpMethods = {
+        cannon = function(_, _, dir)
+            Direction = flattenUnit(dir)
+            JumpSpeed = 5.25 * Value.Value
+            JumpTick = tick() + 2.3
+        end,
+        catrewrite = function(_, _, dir)
+            Direction = flattenUnit(dir)
+            JumpSpeed = 4 * Value.Value
+            JumpTick = tick() + 2.5
+        end,
+        fireball = function(item, pos, dir)
+            launchProjectile(item, pos, "fireball", 60, dir)
+        end,
+        grappling_hook = function(item, pos, dir)
+            launchProjectile(item, pos, "grappling_hook_projectile", 140, dir)
+            Direction = flattenUnit(dir)
+            JumpSpeed = 2.5 * Value.Value
+            JumpTick = tick() + 2.5
+        end,
+        jade_hammer = function(_, _, dir)
+            Direction = flattenUnit(dir)
+            JumpSpeed = 1.4 * Value.Value
+            JumpTick = tick() + 2.5
+        end,
+        tnt = function(item, pos, dir)
+            if not (item and pos and dir and start) then return end
+            start = Vector3.new(pos.X, start.Y, pos.Z) + (dir * (item.Name == "pirate_gunpowder_barrel" and 2.6 or 0.2))
+        end,
+        wood_dao = function(_, _, dir)
+            Direction = flattenUnit(dir)
+            JumpSpeed = 4.5 * Value.Value
+            JumpTick = tick() + 2.4
+        end
+    }
+
+    for _, v in {"stone_dao", "iron_dao", "diamond_dao", "emerald_dao"} do
+        LongJumpMethods[v] = LongJumpMethods.wood_dao
+    end
+    LongJumpMethods.void_axe = LongJumpMethods.jade_hammer
+    LongJumpMethods.siege_tnt = LongJumpMethods.tnt
+    LongJumpMethods.pirate_gunpowder_barrel = LongJumpMethods.tnt
+
+    if not enabled then
+        JumpTick = tick()
+        Direction = nil
+        JumpSpeed = 0
         return
     end
 
-    local daoTierOrder = {
-        "emerald_dao", "diamond_dao", "iron_dao", "wood_dao", "stone_dao"
-    }
+    local char = getCharacter(lplr)
+    local hrp = getHRP(char)
+    local hum = getHumanoid(char)
+    if not (char and hrp and hum) then return end
 
-    local function getBestDao()
-        for _, daoName in ipairs(daoTierOrder) do
-            local found, tool = hasItem(daoName)
-            if found and tool then
-                return tool
-            end
-        end
+    start = hrp.Position
+
+    local function getLookVector()
+        local source = CameraDir.Enabled and camera or hrp
+        return flattenUnit(source.CFrame.LookVector)
+    end
+
+    local function getItemByName(name)
+        local has, tool = hasItem(name)
+        if has then return tool end
         return nil
     end
 
-    local hookedTool = nil
-    local activatedConnection = nil
-    local deactivatedConnection = nil
-    local lastBoostAt = 0
-
-    local function applyBoost()
-        local char = getCharacter(lplr)
-        local hrp = getHRP(char)
-        local hum = getHumanoid(char)
-        if not hrp or not hum then return end
-        local cooldown = math.clamp(moduleSettings["LongJump"].cooldown or 0.45, 0.1, 2)
-        if tick() - lastBoostAt < cooldown then
-            return
-        end
-        lastBoostAt = tick()
-
-        local direction
-        if hum.MoveDirection.Magnitude > 0.1 then
-            direction = Vector3.new(hum.MoveDirection.X, 0, hum.MoveDirection.Z).Unit
-        else
-            local camLook = camera.CFrame.LookVector
-            direction = Vector3.new(camLook.X, 0, camLook.Z)
-            if direction.Magnitude > 0 then
-                direction = direction.Unit
-            else
-                direction = Vector3.new(0, 0, -1)
+    local function triggerMethodFromInventory()
+        local priority = {"emerald_dao", "diamond_dao", "iron_dao", "wood_dao", "stone_dao", "void_axe", "jade_hammer", "fireball", "grappling_hook", "cannon", "catrewrite", "siege_tnt", "pirate_gunpowder_barrel"}
+        for _, itemName in ipairs(priority) do
+            local item = getItemByName(itemName)
+            local fn = LongJumpMethods[itemName]
+            if item and fn then
+                fn(item, start, getLookVector())
+                return true
             end
         end
-
-        local bv = hrp:FindFirstChild("LongJumpVelocity") or Instance.new("BodyVelocity")
-        bv.Name = "LongJumpVelocity"
-        bv.MaxForce = Vector3.new(1e5, 0, 1e5)
-        bv.Velocity = direction * moduleSettings["LongJump"].speed
-        bv.Parent = hrp
-
-        task.delay(moduleSettings["LongJump"].duration, function()
-            local liveBv = hrp:FindFirstChild("LongJumpVelocity")
-            if liveBv then liveBv:Destroy() end
-        end)
+        return false
     end
 
-    local function hookDao(dao)
-        if hookedTool == dao then return end
-        if activatedConnection then
-            activatedConnection:Disconnect()
-            activatedConnection = nil
-        end
-        if deactivatedConnection then
-            deactivatedConnection:Disconnect()
-            deactivatedConnection = nil
-        end
-        hookedTool = dao
-        activatedConnection = dao.Activated:Connect(function()
-            if not moduleStates["LongJump"] then return end
-            applyBoost()
-        end)
-        deactivatedConnection = dao.Deactivated:Connect(function()
-            if not moduleStates["LongJump"] then return end
-            applyBoost()
-        end)
-        addConnection("LongJump", activatedConnection)
-        addConnection("LongJump", deactivatedConnection)
-    end
-
-    local function unhookDao()
-        if activatedConnection then
-            activatedConnection:Disconnect()
-            activatedConnection = nil
-        end
-        if deactivatedConnection then
-            deactivatedConnection:Disconnect()
-            deactivatedConnection = nil
-        end
-        hookedTool = nil
-    end
+    triggerMethodFromInventory()
 
     addConnection("LongJump", UserInputService.InputBegan:Connect(function(input, gpe)
         if gpe or not moduleStates["LongJump"] then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.Q or input.KeyCode == Enum.KeyCode.F then
-            local char = getCharacter(lplr)
-            local held = char and char:FindFirstChildOfClass("Tool")
-            if held and isDaoTool(held) then
-                applyBoost()
-            end
+            triggerMethodFromInventory()
         end
     end))
 
-    -- Heartbeat watches for dao appearing/disappearing
-    addConnection("LongJump", RunService.Heartbeat:Connect(function()
+    addConnection("LongJump", RunService.PreSimulation:Connect(function(dt)
         if not moduleStates["LongJump"] then return end
-
-        local dao = getBestDao()
-        if not dao then
-            unhookDao()
+        local currentChar = getCharacter(lplr)
+        local root = getHRP(currentChar)
+        local currentHum = getHumanoid(currentChar)
+        if not (root and currentHum) then
+            start = nil
             return
         end
 
-        if dao ~= hookedTool then
-            hookDao(dao)
-        end
-
-        -- Auto equip on left click if dao is in backpack
-        local char = getCharacter(lplr)
-        local hum = getHumanoid(char)
-        if hum and dao.Parent ~= char then
-            if UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-                equipToolIfNeeded(dao)
+        if JumpTick > tick() and Direction then
+            root.AssemblyLinearVelocity = Direction * (currentHum.WalkSpeed + ((JumpTick - tick()) > 1.1 and JumpSpeed or 0)) + Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+            if currentHum.FloorMaterial == Enum.Material.Air and not start then
+                root.AssemblyLinearVelocity += Vector3.new(0, dt * (workspace.Gravity - 23), 0)
+            else
+                root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 15, root.AssemblyLinearVelocity.Z)
             end
+            start = nil
+        else
+            if start then
+                root.CFrame = CFrame.lookAlong(start, root.CFrame.LookVector)
+            end
+            root.AssemblyLinearVelocity = Vector3.zero
+            JumpSpeed = 0
         end
     end))
 end
@@ -6169,9 +6172,8 @@ createRegisteredModule("Blatant", "VerticalFly", false, toggleVerticalFly, {
     {type = "slider", name = "Anti Kick Sink", min = 0, max = 6, settingName = "antiKickSink"}
 })
 createRegisteredModule("Blatant", "LongJump", false, toggleLongJump, {
-    {type = "slider", name = "Speed", min = 10, max = 200, settingName = "speed"},
-    {type = "slider", name = "Duration", min = 0.1, max = 3, settingName = "duration"},
-    {type = "slider", name = "Cooldown", min = 0.1, max = 2, settingName = "cooldown"}
+    {type = "slider", name = "Speed", min = 1, max = 37, settingName = "speed"},
+    {type = "toggle", name = "Camera Direction", settingName = "cameraDirection"}
 })
 createRegisteredModule("Blatant", "Blink", false, toggleBlink, {
     {type = "slider", name = "Pulse Seconds", min = 0, max = 5, settingName = "pulseSeconds"}
