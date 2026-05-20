@@ -1,5 +1,9 @@
 -- AetherCore :)
 
+--====================================================
+-- services and global references
+--====================================================
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TextChatService = game:GetService("TextChatService")
@@ -19,9 +23,11 @@ local mouse = lplr:GetMouse()
 local camera = Workspace.CurrentCamera
 
 
-local moduleStates = {}
-local moduleConnections = {}
-local moduleKeybinds = {}
+
+--====================================================
+-- constants and default settings
+--====================================================
+
 local moduleSettings = {
     KillAura = {range = 14, swingSpeed = 18},
     AutoClicker = {cps = 10},
@@ -62,6 +68,14 @@ local moduleSettings = {
     AutoPearl = {fallTrigger = 28},
     Crosshair = {imageId = 9943168532}
 }
+
+--====================================================
+-- state tables (or wtv theyre called)
+--====================================================
+
+local moduleStates = {}
+local moduleConnections = {}
+local moduleKeybinds = {}
 local moduleUi = {}
 local moduleHandlers = {}
 local guiEnabled = true
@@ -76,6 +90,11 @@ local autoToxicMessageConnection
 local moduleConflictMap = { -- removed conflicts (creating a different system)
     Speed = {}
 }
+
+
+--====================================================
+-- error logging
+--====================================================
 
 local function logError(scope, err)
     warn(string.format("[AetherCore][%s] %s", tostring(scope), tostring(err)))
@@ -114,6 +133,11 @@ local function sayInChat(message)
     end)
 end
 
+
+
+--====================================================
+-- controller and remote resolvers
+--====================================================
 
 local KnitClient, CombatController, BedwarsShopController, BlockPlacementController, ClientHandler
 local resolvedCombatController, resolvedBlockPlacementController
@@ -202,6 +226,11 @@ local function getDamageBlockRemote()
 end
 
 
+
+--====================================================
+-- character helpers
+--====================================================
+
 local function getCharacter(player)
     return player and player.Character
 end
@@ -225,6 +254,11 @@ end
 local function getHRP(char)
     return char and char:FindFirstChild("HumanoidRootPart")
 end
+
+
+--====================================================
+-- movement/raycast helpers
+--====================================================
 
 local function raycastToGround(origin, ignoreList, castDistance)
     local params = RaycastParams.new()
@@ -281,6 +315,11 @@ local function getBlockPlacementController()
     end
     return resolvedBlockPlacementController
 end
+
+
+--====================================================
+-- item and tool helpers
+--====================================================
 
 local function doesToolNameMatch(tool, query)
     if not tool or not tool:IsA("Tool") or type(query) ~= "string" then
@@ -448,6 +487,11 @@ local function useDaoAbility()
 
     return used
 end
+
+
+--====================================================
+-- targeting helpers
+--====================================================
 
 local function getTargetByFilters(range, attackPlayers, attackNPCs, ignoreTeammates)
     local myChar = getCharacter(lplr)
@@ -694,6 +738,11 @@ local function faceCharacterTarget(targetCharacter)
 end
 
 
+
+--====================================================
+-- module manager
+--====================================================
+
 local function addConnection(moduleName, connection)
     if not moduleConnections[moduleName] then
         moduleConnections[moduleName] = {}
@@ -741,6 +790,13 @@ local function setModuleEnabled(moduleName, enabled)
     end
 end
 
+
+--====================================================
+-- ui theme
+--====================================================
+
+-- ui colors stay the same as original look
+
 local function performPrimaryClick()
     return safeCall("PrimaryClick", function()
         local mouseLocation = UserInputService:GetMouseLocation()
@@ -756,6 +812,11 @@ local function performPrimaryClick()
     end) or false
 end
 
+
+
+--====================================================
+-- ui components
+--====================================================
 
 local function legacyCreateSlider(parent, name, min, max, default, callback)
     local frame = Instance.new("Frame")
@@ -1039,6 +1100,16 @@ end
 
 
 
+
+--====================================================
+-- module definitions
+--====================================================
+
+-- combat modules
+
+--// KillAura
+-- category: combat
+-- purpose: handles nearby target attacking.
 moduleSettings["KillAura"] = {
     range = 14,
     fov = 360,
@@ -1296,6 +1367,9 @@ local function toggleKillAura(enabled)
 end
 
 
+--// Reach
+-- category: combat
+-- purpose: extends hit/mine/place ranges.
 moduleSettings["Reach"] = {
     mode = "Both",
     hitRange = 12,
@@ -1417,6 +1491,9 @@ local function toggleReach(enabled)
 end
 
 
+--// Speed
+-- category: blatant
+-- purpose: applies custom movement speed.
 moduleSettings["Speed"] = { speed = 24 }
 
 local function toggleSpeed(enabled)
@@ -1485,6 +1562,9 @@ local function toggleSprint(enabled)
     end))
 end
 
+--// Step
+-- category: blatant
+-- purpose: steps up ledges more aggressively.
 moduleSettings["Step"] = {
     maxHeight = 6,
     forwardCheckDistance = 2.6,
@@ -1561,6 +1641,9 @@ local function toggleStep(enabled)
     end))
 end
 
+--// SafeWalk
+-- category: utility
+-- purpose: helps stop falling from edges.
 moduleSettings["SafeWalk"] = {
     mode = "Normal",
     maxDrop = 4.5
@@ -4783,6 +4866,10 @@ local function validateModuleSettings()
     clampSetting("AutoVoidDrop", "dropInterval", moduleSettings.AutoVoidDrop.dropInterval, 0.1, 2, 0.45)
 end
 
+--====================================================
+-- settings save and load system
+--====================================================
+
 saveClientSettings = function()
     safeCall("SaveClientSettings", function()
         local payload = {
@@ -4843,6 +4930,16 @@ local function loadClientSettings()
     validateModuleSettings()
 end
 loadClientSettings()
+
+--====================================================
+-- startup
+--====================================================
+
+-- startup stays at the bottom so it is easy to see load order
+
+--====================================================
+-- windows and category creation
+--====================================================
 
 --// AetherCore Vape V4-inspired GUI replacement
 --// Replace everything from:
@@ -6356,6 +6453,10 @@ closeButton.MouseButton1Click:Connect(function()
     end
     screenGui:Destroy()
 end)
+
+--====================================================
+-- key binds
+--====================================================
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed or keybindListening then return end
