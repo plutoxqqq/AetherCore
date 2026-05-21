@@ -1,7 +1,8 @@
 -- AetherCore :)
 
-console.log("Welcome to AetherCore");
-console.log("Script is loading...");
+local consoleLog = (typeof(console) == "table" and type(console.log) == "function") and console.log or print
+consoleLog("Welcome to AetherCore")
+consoleLog("Script is loading...")
 
 --====================================================
 -- services and global references
@@ -6527,8 +6528,12 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed or keybindListening then return end
 
     if input.KeyCode == Enum.KeyCode.RightShift then
-        guiEnabled = not guiEnabled
-        screenGui.Enabled = guiEnabled
+        if screenGui and screenGui.Parent then
+            guiEnabled = not guiEnabled
+            screenGui.Enabled = guiEnabled
+        else
+            warn("[AetherCore] UI is unavailable to toggle.")
+        end
         return
     end
 
