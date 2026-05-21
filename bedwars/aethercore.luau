@@ -1,7 +1,8 @@
 -- AetherCore :)
 
-console.log("Welcome to AetherCore");
-console.log("Script is loading...");
+local consoleLog = (typeof(console) == "table" and type(console.log) == "function") and console.log or print
+consoleLog("Welcome to AetherCore")
+consoleLog("Script is loading...")
 
 --====================================================
 -- services and global references
@@ -113,6 +114,40 @@ local function safeCall(scope, fn, ...)
         return nil
     end
     return result
+end
+
+
+local warnedMissingObjects = {}
+local function warnMissingOnce(key, message)
+    if warnedMissingObjects[key] then
+        return
+    end
+    warnedMissingObjects[key] = true
+    warn(message)
+end
+
+local function getHandleInvItem(model)
+    if not model then
+        return nil
+    end
+    local handle = model:FindFirstChild("HandleInvItem")
+    if not handle then
+        warnMissingOnce("HandleInvItem:" .. model:GetFullName(), "[AetherCore] HandleInvItem missing for: " .. model:GetFullName())
+        return nil
+    end
+    return handle
+end
+
+local function getHumanoidScaleValue(humanoid, scaleName)
+    if not humanoid then
+        return nil
+    end
+    local scaleValue = humanoid:FindFirstChild(scaleName)
+    if not scaleValue then
+        warnMissingOnce(scaleName .. ":" .. humanoid:GetFullName(), "[AetherCore] Missing humanoid scale '" .. scaleName .. "' for: " .. humanoid:GetFullName())
+        return nil
+    end
+    return scaleValue
 end
 
 local function clampSetting(moduleName, settingName, value, min, max, fallback)
@@ -4546,6 +4581,25 @@ do
         return value:gsub("[%s%p_%-]+", "")
     end
 
+    local function buildLevenshteinMatrix(lenA, lenB)
+        local matrix = {}
+        for i = 0, lenA do
+            matrix[i] = {[0] = i}
+        end
+        for j = 0, lenB do
+            matrix[0][j] = j
+        end
+        return matrix
+    end
+
+    local function computeLevenshteinCell(matrix, left, right, i, j)
+        local cost = left:sub(i, i) == right:sub(j, j) and 0 or 1
+        local deletion = matrix[i - 1][j] + 1
+        local insertion = matrix[i][j - 1] + 1
+        local substitution = matrix[i - 1][j - 1] + cost
+        matrix[i][j] = math.min(deletion, insertion, substitution)
+    end
+
     local function levenshtein(a, b)
         local left = a or ""
         local right = b or ""
@@ -4558,21 +4612,10 @@ do
             return lenA
         end
 
-        local matrix = {}
-        for i = 0, lenA do
-            matrix[i] = {[0] = i}
-        end
-        for j = 0, lenB do
-            matrix[0][j] = j
-        end
-
+        local matrix = buildLevenshteinMatrix(lenA, lenB)
         for i = 1, lenA do
             for j = 1, lenB do
-                local cost = left:sub(i, i) == right:sub(j, j) and 0 or 1
-                local deletion = matrix[i - 1][j] + 1
-                local insertion = matrix[i][j - 1] + 1
-                local substitution = matrix[i - 1][j - 1] + cost
-                matrix[i][j] = math.min(deletion, insertion, substitution)
+                computeLevenshteinCell(matrix, left, right, i, j)
             end
         end
 
@@ -6485,8 +6528,12 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed or keybindListening then return end
 
     if input.KeyCode == Enum.KeyCode.RightShift then
-        guiEnabled = not guiEnabled
-        screenGui.Enabled = guiEnabled
+        if screenGui and screenGui.Parent then
+            guiEnabled = not guiEnabled
+            screenGui.Enabled = guiEnabled
+        else
+            warn("[AetherCore] UI is unavailable to toggle.")
+        end
         return
     end
 
