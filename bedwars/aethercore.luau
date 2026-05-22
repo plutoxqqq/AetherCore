@@ -6223,6 +6223,7 @@ local function createRegisteredModule(category, name, defaultEnabled, toggleCall
 end
 
 -- Added modules from 6872274481.vape and mapped to working AetherCore handlers.
+local function registerAetherModules()
 createRegisteredModule("Combat", "TriggerBot", false, toggleTriggerBot, {})
 createRegisteredModule("Blatant", "AntiFall", false, toggleAlias(toggleAntiVoid), {})
 createRegisteredModule("Blatant", "HitBoxes", false, toggleHitBoxes, {})
@@ -6434,6 +6435,9 @@ createRegisteredModule("World", "Nuker", false, toggleNuker, {
     {type = "toggle", name = "Mine Emerald", settingName = "mineEmerald"},
     {type = "slider", name = "Radius", min = 5, max = 20, settingName = "mineRadius"}
 })
+end
+
+registerAetherModules()
 
 local function refreshSearch()
     local visibleModulesByCategory = {}
@@ -6478,62 +6482,66 @@ local function setActiveSidebarTab(tabName)
     refreshSearch()
 end
 
-searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-    searchText = searchBox.Text or ""
-    refreshSearch()
-end)
-homeTabButton.MouseButton1Click:Connect(function()
-    setActiveSidebarTab("Home")
-end)
+local function setupNavigationAndCloseHandlers()
+    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        searchText = searchBox.Text or ""
+        refreshSearch()
+    end)
+    homeTabButton.MouseButton1Click:Connect(function()
+        setActiveSidebarTab("Home")
+    end)
 
-settingsTabButton.MouseButton1Click:Connect(function()
-    setActiveSidebarTab("Settings")
-end)
+    settingsTabButton.MouseButton1Click:Connect(function()
+        setActiveSidebarTab("Settings")
+    end)
 
-scriptHubTabButton.MouseButton1Click:Connect(function()
-    setActiveSidebarTab("ScriptHub")
-end)
+    scriptHubTabButton.MouseButton1Click:Connect(function()
+        setActiveSidebarTab("ScriptHub")
+    end)
 
-for _, category in ipairs(categoryData) do
-    local categoryButton = categoryToggleButtons[category.name]
-    if categoryButton then
-        categoryButton.MouseButton1Click:Connect(function()
-            activeSidebarTab = "Modules"
-            homeDashboardPanel.Visible = false
-            settingsDashboardPanel.Visible = false
-            if homeTabButton then homeTabButton.BackgroundColor3 = palette.panel end
-            if settingsTabButton then settingsTabButton.BackgroundColor3 = palette.panel end
-            if scriptHubTabButton then scriptHubTabButton.BackgroundColor3 = palette.panel end
-            refreshSearch()
-        end)
-    end
-end
-
-setActiveSidebarTab("Home")
-
-closeButton.MouseButton1Click:Connect(function()
-    if autoToxicMessageConnection then
-        autoToxicMessageConnection:Disconnect()
-        autoToxicMessageConnection = nil
-    end
-    local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
-    if sharedEnvironment and sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] then
-        sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
-    end
-
-    for name, enabled in pairs(moduleStates) do
-        if enabled then
-            moduleStates[name] = false
-            if moduleHandlers[name] then
-                safeCall(name .. "Disable", moduleHandlers[name], false)
-            end
-            if moduleUi[name] then
-                moduleUi[name].setEnabled(false)
-            end
+    for _, category in ipairs(categoryData) do
+        local categoryButton = categoryToggleButtons[category.name]
+        if categoryButton then
+            categoryButton.MouseButton1Click:Connect(function()
+                activeSidebarTab = "Modules"
+                homeDashboardPanel.Visible = false
+                settingsDashboardPanel.Visible = false
+                if homeTabButton then homeTabButton.BackgroundColor3 = palette.panel end
+                if settingsTabButton then settingsTabButton.BackgroundColor3 = palette.panel end
+                if scriptHubTabButton then scriptHubTabButton.BackgroundColor3 = palette.panel end
+                refreshSearch()
+            end)
         end
     end
-    screenGui:Destroy()
-end)
+
+    setActiveSidebarTab("Home")
+
+    closeButton.MouseButton1Click:Connect(function()
+        if autoToxicMessageConnection then
+            autoToxicMessageConnection:Disconnect()
+            autoToxicMessageConnection = nil
+        end
+        local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
+        if sharedEnvironment and sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] then
+            sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
+        end
+
+        for name, enabled in pairs(moduleStates) do
+            if enabled then
+                moduleStates[name] = false
+                if moduleHandlers[name] then
+                    safeCall(name .. "Disable", moduleHandlers[name], false)
+                end
+                if moduleUi[name] then
+                    moduleUi[name].setEnabled(false)
+                end
+            end
+        end
+        screenGui:Destroy()
+    end)
+end
+
+setupNavigationAndCloseHandlers()
 
 --====================================================
 -- key binds
