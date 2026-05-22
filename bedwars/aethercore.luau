@@ -4904,10 +4904,6 @@ local function setupTopBarAndStatusControls()
 end
 
 local topBarStatusRefs = setupTopBarAndStatusControls()
-local searchBox = topBarStatusRefs.searchBox
-local closeButton = topBarStatusRefs.closeButton
-local statusDiscord = topBarStatusRefs.statusDiscord
-local statusTime = topBarStatusRefs.statusTime
 
 makeDraggable(mainPanel, mainTop)
 makeDraggable(topBar, topBar)
@@ -5617,28 +5613,28 @@ topBar.Size = UDim2.new(0, 370, 0, 38)
 topBar.Position = UDim2.new(0, 295, 0, 105)
 styleVapeWindow(topBar)
 
-searchBox.Size = UDim2.new(1, -130, 0, 24)
-searchBox.Position = UDim2.new(0, 8, 0, 7)
-searchBox.BackgroundColor3 = vapePalette.row
-searchBox.TextColor3 = vapePalette.text
-searchBox.PlaceholderColor3 = vapePalette.darkText
-searchBox.Font = Enum.Font.SourceSans
-searchBox.TextSize = 16
+topBarStatusRefs.searchBox.Size = UDim2.new(1, -130, 0, 24)
+topBarStatusRefs.searchBox.Position = UDim2.new(0, 8, 0, 7)
+topBarStatusRefs.searchBox.BackgroundColor3 = vapePalette.row
+topBarStatusRefs.searchBox.TextColor3 = vapePalette.text
+topBarStatusRefs.searchBox.PlaceholderColor3 = vapePalette.darkText
+topBarStatusRefs.searchBox.Font = Enum.Font.SourceSans
+topBarStatusRefs.searchBox.TextSize = 16
 
-closeButton.Size = UDim2.new(0, 112, 0, 24)
-closeButton.Position = UDim2.new(1, -120, 0, 7)
-closeButton.BackgroundColor3 = vapePalette.danger
-closeButton.Font = Enum.Font.SourceSansBold
-closeButton.TextSize = 15
-closeButton.Text = "Self Destruct"
+topBarStatusRefs.closeButton.Size = UDim2.new(0, 112, 0, 24)
+topBarStatusRefs.closeButton.Position = UDim2.new(1, -120, 0, 7)
+topBarStatusRefs.closeButton.BackgroundColor3 = vapePalette.danger
+topBarStatusRefs.closeButton.Font = Enum.Font.SourceSansBold
+topBarStatusRefs.closeButton.TextSize = 15
+topBarStatusRefs.closeButton.Text = "Self Destruct"
 
 statusPanel.Size = UDim2.new(0, 275, 0, 25)
 statusPanel.Position = UDim2.new(0, 75, 0, 570)
 styleVapeWindow(statusPanel)
-statusDiscord.Font = Enum.Font.SourceSans
-statusDiscord.TextSize = 14
-statusTime.Font = Enum.Font.SourceSans
-statusTime.TextSize = 14
+topBarStatusRefs.statusDiscord.Font = Enum.Font.SourceSans
+topBarStatusRefs.statusDiscord.TextSize = 14
+topBarStatusRefs.statusTime.Font = Enum.Font.SourceSans
+topBarStatusRefs.statusTime.TextSize = 14
 
 local function createCategoryColumn(categoryName, index)
     local panel = createPanel(categoryName .. "Column", UDim2.new(0, 220, 0, 520), UDim2.new(0, 295 + ((index - 1) * 228), 0, 155))
@@ -6483,8 +6479,8 @@ local function setActiveSidebarTab(tabName)
 end
 
 local function setupNavigationAndCloseHandlers()
-    searchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        searchText = searchBox.Text or ""
+    topBarStatusRefs.searchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        searchText = topBarStatusRefs.searchBox.Text or ""
         refreshSearch()
     end)
     homeTabButton.MouseButton1Click:Connect(function()
@@ -6516,7 +6512,7 @@ local function setupNavigationAndCloseHandlers()
 
     setActiveSidebarTab("Home")
 
-    closeButton.MouseButton1Click:Connect(function()
+    topBarStatusRefs.closeButton.MouseButton1Click:Connect(function()
         if autoToxicMessageConnection then
             autoToxicMessageConnection:Disconnect()
             autoToxicMessageConnection = nil
