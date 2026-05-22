@@ -4610,11 +4610,11 @@ end
 
 setupHomeDashboardPanel()
 
-local function setupScriptHubDashboardPanel()
+local function createScriptHubHeader(parentPanel)
     local scriptHubHeader = Instance.new("Frame")
     scriptHubHeader.Size = UDim2.new(1, -20, 0, 84)
     scriptHubHeader.Position = UDim2.new(0, 10, 0, 12)
-    scriptHubHeader.Parent = scriptHubDashboardPanel
+    scriptHubHeader.Parent = parentPanel
     styleDashboardCard(scriptHubHeader)
 
     local scriptHubTitle = Instance.new("TextLabel")
@@ -4638,11 +4638,13 @@ local function setupScriptHubDashboardPanel()
     scriptHubSubtitle.Font = Enum.Font.Gotham
     scriptHubSubtitle.TextSize = 16
     scriptHubSubtitle.Parent = scriptHubHeader
+end
 
+local function createScriptHubChatPanel(parentPanel)
     local chatCard = Instance.new("Frame")
     chatCard.Size = UDim2.new(1, -20, 1, -120)
     chatCard.Position = UDim2.new(0, 10, 0, 106)
-    chatCard.Parent = scriptHubDashboardPanel
+    chatCard.Parent = parentPanel
     styleDashboardCard(chatCard)
 
     local chatLog = Instance.new("ScrollingFrame")
@@ -4687,6 +4689,10 @@ local function setupScriptHubDashboardPanel()
     sendButton.Parent = chatCard
     addCorner(sendButton, 8)
 
+    return chatLog, chatLayout, chatInput, sendButton
+end
+
+local function createScriptHubKnowledge()
     local moduleKnowledge = {
         ["killaura"] = "KillAura automatically attacks nearby valid targets while active.",
         ["autoclicker"] = "AutoClicker repeatedly performs clicks at the configured rate.",
@@ -4742,6 +4748,11 @@ local function setupScriptHubDashboardPanel()
     }
 
     local moduleCategoriesReply = "Combat: KillAura, AutoClicker, Aimbot, Reach, AntiHit, AntiDeath\nBlatant: Speed, Step, SafeWalk, HighJump, VerticalFly, Scaffold\nRender: FOV, Crosshair, Viewmodel, BedPlates, WinEffect\nUtility: FastPickup, FastBreak, AutoToxic, Interface, UI Cleanup\nWorld: Breaker, Nuker, AutoVoidDrop, AutoPearl, AutoBank\nLegend: RavenTP, MissileTP, ArmorSwitch"
+    return moduleKnowledge, moduleAliases, moduleCategoriesReply
+end
+
+local function setupScriptHubChatBehavior(chatLog, chatLayout, chatInput, sendButton)
+    local moduleKnowledge, moduleAliases, moduleCategoriesReply = createScriptHubKnowledge()
 
     local function normalizeText(text)
         local value = (text or ""):lower()
@@ -4905,6 +4916,12 @@ local function setupScriptHubDashboardPanel()
     end)
 
     addChatBubble("Hello. I am your AetherCore assistant. Ask me what a module does, how a module works, or how to use the script.", false)
+end
+
+local function setupScriptHubDashboardPanel()
+    createScriptHubHeader(scriptHubDashboardPanel)
+    local chatLog, chatLayout, chatInput, sendButton = createScriptHubChatPanel(scriptHubDashboardPanel)
+    setupScriptHubChatBehavior(chatLog, chatLayout, chatInput, sendButton)
 end
 
 setupScriptHubDashboardPanel()
