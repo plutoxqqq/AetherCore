@@ -4311,7 +4311,7 @@ homeDashboardPanel = createDashboardBase("HomeDashboard")
 settingsDashboardPanel = createDashboardBase("SettingsDashboard")
 scriptHubDashboardPanel = createDashboardBase("ScriptHubDashboard")
 
-do
+local function setupHomeDashboardPanel()
     local welcomeCard = Instance.new("Frame")
     welcomeCard.Size = UDim2.new(1, -20, 0, 84)
     welcomeCard.Position = UDim2.new(0, 10, 0, 12)
@@ -4443,7 +4443,9 @@ do
     versionText.Parent = statusCard
 end
 
-do
+setupHomeDashboardPanel()
+
+local function setupScriptHubDashboardPanel()
     local scriptHubHeader = Instance.new("Frame")
     scriptHubHeader.Size = UDim2.new(1, -20, 0, 84)
     scriptHubHeader.Position = UDim2.new(0, 10, 0, 12)
@@ -4740,7 +4742,9 @@ do
     addChatBubble("Hello. I am your AetherCore assistant. Ask me what a module does, how a module works, or how to use the script.", false)
 end
 
-do
+setupScriptHubDashboardPanel()
+
+local function setupSettingsDashboardPanel()
     local settingsHeader = Instance.new("Frame")
     settingsHeader.Size = UDim2.new(1, -20, 0, 84)
     settingsHeader.Position = UDim2.new(0, 10, 0, 12)
@@ -4827,6 +4831,8 @@ do
     infoText.TextSize = 13
     infoText.Parent = infoCard
 end
+
+setupSettingsDashboardPanel()
 
 local searchBox = Instance.new("TextBox")
 searchBox.Size = UDim2.new(1, -130, 0, 26)
