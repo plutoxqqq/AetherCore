@@ -5209,7 +5209,7 @@ function initializeClientSettingsPersistence()
                 loadedCategoryPositions = decoded.categoryPositions
             end
         end)
-        validateModuleSettings()
+        AetherValidateModuleSettings()
     end
 
     loadClientSettingsNow()
