@@ -3311,35 +3311,100 @@ local function toggleAimbot(enabled)
 end
 
 moduleSettings["AimAssist"] = {
-    speed = 0.1,
-    range = 30
+    range = 30,
+    prediction = 1.4,
+    smoothing = 12,
+    maxAngle = 85,
+    sortMethod = "Angle",
+    lagResolver = true,
+    humanization = true,
+    wallCheck = true,
+    targetPlayers = true,
+    targetNPCs = false,
+    mode = "Smooth"
 }
 
 local function toggleAimAssist(enabled)
     cleanupModule("AimAssist")
     if not enabled then return end
-    if not mouseMoveRelative then
-        warn("[AetherCore][AimAssist] mousemoverel is unavailable in this executor.")
-        return
+
+    local randomizer = Random.new()
+    local function getSortScore(character, rootPart, sortMethod)
+        local targetRoot = character:FindFirstChild("HumanoidRootPart")
+        local targetHum = getHumanoid(character)
+        if not targetRoot or not targetHum then
+            return math.huge
+        end
+        if sortMethod == "Health" then
+            return targetHum.Health
+        elseif sortMethod == "Damage" or sortMethod == "Threat" then
+            local myRoot = getHRP(getCharacter(lplr))
+            return myRoot and (targetRoot.Position - myRoot.Position).Magnitude or math.huge
+        end
+        return math.huge
     end
 
-    local connection = RunService.RenderStepped:Connect(function(deltaTime)
+    local connection = RunService.PostSimulation:Connect(function(dt)
         if not moduleStates["AimAssist"] then return end
+        local character = getCharacter(lplr)
+        local root = getHRP(character)
+        if not (character and root) then return end
+
         local settings = moduleSettings["AimAssist"]
-        local nearest = getNearestEnemy(settings.range, true)
-        if not nearest then return end
-        local head = nearest:FindFirstChild("Head")
-        if not head then return end
+        local bestTarget, bestMetric = nil, math.huge
 
-        local screenPos, onScreen = camera:WorldToScreenPoint(head.Position)
-        if not onScreen then return end
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= lplr and isEnemyPlayer(player) then
+                local targetChar = getCharacter(player)
+                local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+                if targetRoot and isAliveCharacter(targetChar) then
+                    local distance = (targetRoot.Position - root.Position).Magnitude
+                    if distance <= (settings.range or 30) then
+                        local blocked = settings.wallCheck and isTargetBehindWall(root.Position, targetRoot.Position)
+                        if not blocked then
+                            local metric
+                            if settings.sortMethod == "Angle" then
+                                local dir = (targetRoot.Position - root.Position).Unit
+                                metric = math.acos(math.clamp(root.CFrame.LookVector:Dot(dir), -1, 1))
+                            else
+                                metric = getSortScore(targetChar, root, settings.sortMethod)
+                            end
+                            if metric < bestMetric then
+                                bestMetric = metric
+                                bestTarget = targetChar
+                            end
+                        end
+                    end
+                end
+            end
+        end
 
-        local targetPos = Vector2.new(screenPos.X, screenPos.Y)
-        local mousePos = Vector2.new(mouse.X, mouse.Y)
-        local smoothing = math.clamp(settings.speed * deltaTime * 60, 0.01, 1)
-        local delta = (targetPos - mousePos) * smoothing
-        mouseMoveRelative(delta.X, delta.Y)
+        if not bestTarget then return end
+        local targetRoot = bestTarget:FindFirstChild("HumanoidRootPart")
+        if not targetRoot then return end
+
+        local targetPos = targetRoot.Position
+        local targetVel = targetRoot.AssemblyLinearVelocity
+        local predicted = targetPos + (targetVel * (settings.prediction or 1.4) * 0.035)
+        if settings.lagResolver then
+            predicted += targetVel * lplr:GetNetworkPing() * 0.8
+        end
+
+        local lookDir = (predicted - root.Position)
+        if lookDir.Magnitude < 0.001 then return end
+        local angle = math.deg(math.acos(math.clamp(root.CFrame.LookVector:Dot(lookDir.Unit), -1, 1)))
+        if angle > (settings.maxAngle or 85) then return end
+
+        local baseSmoothing = settings.mode == "Aggressive" and math.max((settings.smoothing or 12) * 1.35, 1) or (settings.smoothing or 12)
+        local factor = math.clamp(baseSmoothing * dt, 0.01, 1)
+        if settings.humanization then
+            factor = factor * (0.85 + randomizer:NextNumber() * 0.3)
+        end
+
+        local targetCFrame = CFrame.lookAt(camera.CFrame.Position, predicted)
+        camera.CFrame = camera.CFrame:Lerp(targetCFrame, factor)
     end)
+
     addConnection("AimAssist", connection)
 end
 
@@ -3391,23 +3456,34 @@ end
 
 
 moduleSettings["Velocity"] = {
+    direction = "Random",
+    chance = 100,
+    onlyWhenTargeting = false,
     horizontalReduction = 100,
     verticalReduction = 100
 }
+
+local function rotateYVector(v, deg)
+    local r = math.rad(deg)
+    return Vector3.new(
+        v.X * math.cos(r) - v.Z * math.sin(r),
+        0,
+        v.X * math.sin(r) + v.Z * math.cos(r)
+    )
+end
 
 local function toggleVelocity(enabled)
     cleanupModule("Velocity")
     if not enabled then return end
 
+    local randomizer = Random.new()
     local function applyVelocity(char)
         local hum = getHumanoid(char)
         local root = getHRP(char)
-        if not hum or not root then
-            return
-        end
+        if not hum or not root then return end
+
         local recentlyDamagedUntil = 0
         local lastHealth = hum.Health
-
         addConnection("Velocity", hum.HealthChanged:Connect(function(newHealth)
             if newHealth < lastHealth then
                 recentlyDamagedUntil = tick() + 0.35
@@ -3416,23 +3492,38 @@ local function toggleVelocity(enabled)
         end))
 
         addConnection("Velocity", RunService.Heartbeat:Connect(function()
-            if not moduleStates["Velocity"] or not root.Parent then return end
-            if tick() > recentlyDamagedUntil then return end
+            if not moduleStates["Velocity"] or not root.Parent or tick() > recentlyDamagedUntil then return end
             local settings = moduleSettings["Velocity"]
-            local horizontalReduction = math.clamp(settings.horizontalReduction / 100, 0, 1)
-            local verticalReduction = math.clamp(settings.verticalReduction / 100, 0, 1)
+            if randomizer:NextNumber(0, 100) > (settings.chance or 100) then return end
+
+            if settings.onlyWhenTargeting then
+                local target = getNearestEnemy(50, settings.wallCheck ~= true)
+                if not target then return end
+            end
+
             local current = root.AssemblyLinearVelocity
-            local moveDirection = hum.MoveDirection
-            local baseHorizontal = moveDirection.Magnitude > 0 and moveDirection.Unit * hum.WalkSpeed or Vector3.zero
-            local currentHorizontal = Vector3.new(current.X, 0, current.Z)
-            local knockbackHorizontal = currentHorizontal - Vector3.new(baseHorizontal.X, 0, baseHorizontal.Z)
-            local reducedHorizontal = knockbackHorizontal * (1 - horizontalReduction)
-            local targetHorizontal = Vector3.new(baseHorizontal.X, 0, baseHorizontal.Z) + reducedHorizontal
-            root.AssemblyLinearVelocity = Vector3.new(
-                targetHorizontal.X,
-                current.Y * (1 - verticalReduction),
-                targetHorizontal.Z
-            )
+            local flat = Vector3.new(current.X, 0, current.Z)
+            if flat.Magnitude < 0.001 then return end
+            local awayVec = flat.Unit
+
+            local chosen = settings.direction or "Random"
+            if chosen == "Random" then
+                local options = {"Left", "Right", "Pull"}
+                chosen = options[randomizer:NextInteger(1, #options)]
+            end
+
+            local desiredAway = awayVec
+            if chosen == "Left" then
+                desiredAway = rotateYVector(awayVec, 90)
+            elseif chosen == "Right" then
+                desiredAway = rotateYVector(awayVec, -90)
+            elseif chosen == "Pull" then
+                desiredAway = -awayVec
+            end
+
+            local speed = flat.Magnitude
+            local redirected = desiredAway * speed
+            root.AssemblyLinearVelocity = Vector3.new(redirected.X, current.Y, redirected.Z)
         end))
     end
 
@@ -4953,7 +5044,7 @@ end
 -- settings save and load system
 --====================================================
 
-local function initializeClientSettingsPersistence()
+function initializeClientSettingsPersistence()
     saveClientSettings = function()
         safeCall("SaveClientSettings", function()
             local payload = {
@@ -6295,8 +6386,17 @@ createRegisteredModule("Combat", "Reach", false, toggleReach, {
     {type = "slider", name = "Place Range", min = 6, max = 20, settingName = "placeRange"}
 })
 createRegisteredModule("Combat", "AimAssist", false, toggleAimAssist, {
-    {type = "slider", name = "Speed", min = 0.01, max = 0.5, settingName = "speed"},
-    {type = "slider", name = "Range", min = 10, max = 50, settingName = "range"}
+    {type = "slider", name = "Range", min = 10, max = 50, settingName = "range"},
+    {type = "slider", name = "Prediction", min = 0, max = 2.5, settingName = "prediction"},
+    {type = "slider", name = "Smoothing", min = 4, max = 25, settingName = "smoothing"},
+    {type = "slider", name = "Max Angle", min = 30, max = 180, settingName = "maxAngle"},
+    {type = "dropdown", name = "Sort Method", options = {"Angle", "Threat", "Damage", "Health"}, settingName = "sortMethod"},
+    {type = "dropdown", name = "Mode", options = {"Smooth", "Aggressive"}, settingName = "mode"},
+    {type = "toggle", name = "Lag Resolver", settingName = "lagResolver"},
+    {type = "toggle", name = "Humanization", settingName = "humanization"},
+    {type = "toggle", name = "Wall Check", settingName = "wallCheck"},
+    {type = "toggle", name = "Target Players", settingName = "targetPlayers"},
+    {type = "toggle", name = "Target NPCs", settingName = "targetNPCs"}
 })
 createRegisteredModule("Combat", "Aimbot", false, toggleAimbot, {
     {type = "slider", name = "FOV", min = 20, max = 450, settingName = "fov"},
@@ -6319,8 +6419,9 @@ createRegisteredModule("Combat", "AutoQueue", false, toggleAutoQueue, {
     {type = "slider", name = "Queue Delay", min = 0.1, max = 5, settingName = "delay"}
 })
 createRegisteredModule("Combat", "Velocity", false, toggleVelocity, {
-    {type = "slider", name = "Horizontal %", min = 0, max = 100, settingName = "horizontalReduction"},
-    {type = "slider", name = "Vertical %", min = 0, max = 100, settingName = "verticalReduction"}
+    {type = "dropdown", name = "Direction", options = {"Left", "Right", "Pull", "Random"}, settingName = "direction"},
+    {type = "slider", name = "Chance", min = 0, max = 100, settingName = "chance"},
+    {type = "toggle", name = "Only when targeting", settingName = "onlyWhenTargeting"}
 })
 createRegisteredModule("Combat", "NoClickDelay", false, toggleNoClickDelay, {})
 createRegisteredModule("Blatant", "Speed", false, toggleSpeed, {
