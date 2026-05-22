@@ -5,173 +5,215 @@ consoleLog("Welcome to AetherCore")
 consoleLog("Script is loading...")
 
 --====================================================
--- services and global references
+-- aether bootstrap containers / scoped init
 --====================================================
 
-local Players = game:GetService("Players")
-local UserInputService = game:GetService("UserInputService")
-local TextChatService = game:GetService("TextChatService")
-local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local Debris = game:GetService("Debris")
-local VirtualUser = game:GetService("VirtualUser")
-local CollectionService = game:GetService("CollectionService")
-local Lighting = game:GetService("Lighting")
-local StarterGui = game:GetService("StarterGui")
-
-local lplr = Players.LocalPlayer
-local mouse = lplr:GetMouse()
-local camera = Workspace.CurrentCamera
-
-
-
---====================================================
--- constants and default settings
---====================================================
-
-local moduleSettings = {
-    KillAura = {range = 14, swingSpeed = 18},
-    AutoClicker = {cps = 10},
-    Sprint = {omni = true},
-    Speed = {speed = 23},
-    Step = {maxHeight = 6, forwardCheckDistance = 2.6},
-    SafeWalk = {maxDrop = 4.5},
-    HighJump = {boost = 80},
-    Aimbot = {
-        fov = 160,
-        smoothness = 0.55,
-        predictionStrength = 1,
-        arrowSpeed = 185,
-        gravity = Workspace and Workspace.Gravity or 196.2,
-        maxDistance = 260
-    },
-    Reach = {hitRange = 13, mineRange = 18, placeRange = 18},
-    VerticalFly = {horizontalSpeed = 28, verticalSpeed = 45, groundOffset = 3.2, hoverHeight = 3.2},
-    AntiDeath = {healthThreshold = 25, belowDuration = 2, slowMode = 1.5, voidOffset = 130},
-    AntiHit = {slowMode = 1, riseWindow = 0.14, voidOffset = 130, antiDamageJitter = 2.2},
-    FastBreak = {cooldown = 0.21, attemptsPerPulse = 2},
-    AutoVoidDrop = {triggerOffset = 18, dropInterval = 0.45},
-    FastPickup = {range = 14},
-    AutoLeave = {staffOnly = true, leaveOnMatchEnd = true},
-    Blink = {pulseSeconds = 0},
-    AutoQueue = {delay = 1},
-    AutoBuy = {sword = true, armor = true, upgrades = true},
-    BedNuker = {range = 20},
-    AutoPlay = {random = false},
-    AutoShoot = {enabled = true},
-    StaffDetector = {leaveOnDetect = false},
-    AutoSuffocate = {range = 18},
-    FPSBoost = {removeKillEffects = true, removeVisualizer = true},
-    HitColor = {r = 1, g = 0, b = 0, a = 0.4},
-    FOV = {value = 80},
-    Viewmodel = {xOffset = 0, yOffset = 0, zOffset = 0},
-    PickupRange = {range = 16},
-    AutoPearl = {fallTrigger = 28},
-    Crosshair = {imageId = 9943168532}
+local Aether = {
+    Services = {},
+    State = {},
+    Settings = {},
+    UI = {},
+    Modules = {},
+    Helpers = {}
 }
 
---====================================================
--- state tables (or wtv theyre called)
---====================================================
+local function initServices()
+    local Services = Aether.Services
+    Services.Players = game:GetService("Players")
+    Services.UserInputService = game:GetService("UserInputService")
+    Services.TextChatService = game:GetService("TextChatService")
+    Services.TweenService = game:GetService("TweenService")
+    Services.HttpService = game:GetService("HttpService")
+    Services.ReplicatedStorage = game:GetService("ReplicatedStorage")
+    Services.RunService = game:GetService("RunService")
+    Services.Workspace = game:GetService("Workspace")
+    Services.Debris = game:GetService("Debris")
+    Services.VirtualUser = game:GetService("VirtualUser")
+    Services.CollectionService = game:GetService("CollectionService")
+    Services.Lighting = game:GetService("Lighting")
+    Services.StarterGui = game:GetService("StarterGui")
 
-local moduleStates = {}
-local moduleConnections = {}
-local moduleKeybinds = {}
-local moduleUi = {}
-local moduleHandlers = {}
-local guiEnabled = true
-local autoToxicEnabled = false
-local originalCharacterValues = {}
-local SETTINGS_STORE_KEY = "AetherCoreClientConfigV1"
-local AUTO_TOXIC_CONNECTION_KEY = "AetherCoreAutoToxicMessageConnection"
-local mouseMoveRelative = type(mousemoverel) == "function" and mousemoverel or nil
-local clipboardSetter = type(setclipboard) == "function" and setclipboard or nil
-local sharedEnvironmentGetter = type(getgenv) == "function" and getgenv or nil
-local autoToxicMessageConnection
-local moduleConflictMap = { -- removed conflicts (creating a different system)
-    Speed = {}
-}
-
-
---====================================================
--- error logging
---====================================================
-
-local function logError(scope, err)
-    warn(string.format("[AetherCore][%s] %s", tostring(scope), tostring(err)))
+    local localPlayer = Services.Players.LocalPlayer
+    Services.LocalPlayer = localPlayer
+    Services.Mouse = localPlayer and localPlayer:GetMouse() or nil
+    Services.Camera = Services.Workspace.CurrentCamera
 end
 
-local function safeCall(scope, fn, ...)
-    local args = table.pack(...)
-    local ok, result = xpcall(function()
-        return fn(table.unpack(args, 1, args.n))
-    end, debug.traceback)
-    if not ok then
-        logError(scope, result)
-        return nil
-    end
-    return result
+local function initSettings()
+    Aether.Settings.moduleSettings = {
+        KillAura = {range = 14, swingSpeed = 18},
+        AutoClicker = {cps = 10},
+        Sprint = {omni = true},
+        Speed = {speed = 23},
+        Step = {maxHeight = 6, forwardCheckDistance = 2.6},
+        SafeWalk = {maxDrop = 4.5},
+        HighJump = {boost = 80},
+        Aimbot = {
+            fov = 160,
+            smoothness = 0.55,
+            predictionStrength = 1,
+            arrowSpeed = 185,
+            gravity = (Aether.Services.Workspace and Aether.Services.Workspace.Gravity) or 196.2,
+            maxDistance = 260
+        },
+        Reach = {hitRange = 13, mineRange = 18, placeRange = 18},
+        VerticalFly = {horizontalSpeed = 28, verticalSpeed = 45, groundOffset = 3.2, hoverHeight = 3.2},
+        AntiDeath = {healthThreshold = 25, belowDuration = 2, slowMode = 1.5, voidOffset = 130},
+        AntiHit = {slowMode = 1, riseWindow = 0.14, voidOffset = 130, antiDamageJitter = 2.2},
+        FastBreak = {cooldown = 0.21, attemptsPerPulse = 2},
+        AutoVoidDrop = {triggerOffset = 18, dropInterval = 0.45},
+        FastPickup = {range = 14},
+        AutoLeave = {staffOnly = true, leaveOnMatchEnd = true},
+        Blink = {pulseSeconds = 0},
+        AutoQueue = {delay = 1},
+        AutoBuy = {sword = true, armor = true, upgrades = true},
+        BedNuker = {range = 20},
+        AutoPlay = {random = false},
+        AutoShoot = {enabled = true},
+        StaffDetector = {leaveOnDetect = false},
+        AutoSuffocate = {range = 18},
+        FPSBoost = {removeKillEffects = true, removeVisualizer = true},
+        HitColor = {r = 1, g = 0, b = 0, a = 0.4},
+        FOV = {value = 80},
+        Viewmodel = {xOffset = 0, yOffset = 0, zOffset = 0},
+        PickupRange = {range = 16},
+        AutoPearl = {fallTrigger = 28},
+        Crosshair = {imageId = 9943168532}
+    }
 end
 
-
-local warnedMissingObjects = {}
-local function warnMissingOnce(key, message)
-    if warnedMissingObjects[key] then
-        return
-    end
-    warnedMissingObjects[key] = true
-    warn(message)
+local function initState()
+    local State = Aether.State
+    State.moduleStates = {}
+    State.moduleConnections = {}
+    State.moduleKeybinds = {}
+    State.moduleUi = {}
+    State.moduleHandlers = {}
+    State.guiEnabled = true
+    State.autoToxicEnabled = false
+    State.originalCharacterValues = {}
+    State.SETTINGS_STORE_KEY = "AetherCoreClientConfigV1"
+    State.AUTO_TOXIC_CONNECTION_KEY = "AetherCoreAutoToxicMessageConnection"
+    State.mouseMoveRelative = type(mousemoverel) == "function" and mousemoverel or nil
+    State.clipboardSetter = type(setclipboard) == "function" and setclipboard or nil
+    State.sharedEnvironmentGetter = type(getgenv) == "function" and getgenv or nil
+    State.autoToxicMessageConnection = nil
+    State.moduleConflictMap = {Speed = {}}
+    State.warnedMissingObjects = {}
 end
 
-local function getHandleInvItem(model)
-    if not model then
-        return nil
-    end
-    local handle = model:FindFirstChild("HandleInvItem")
-    if not handle then
-        warnMissingOnce("HandleInvItem:" .. model:GetFullName(), "[AetherCore] HandleInvItem missing for: " .. model:GetFullName())
-        return nil
-    end
-    return handle
-end
+local function initHelpers()
+    local Helpers = Aether.Helpers
 
-local function getHumanoidScaleValue(humanoid, scaleName)
-    if not humanoid then
-        return nil
+    function Helpers.logError(scope, err)
+        warn(string.format("[AetherCore][%s] %s", tostring(scope), tostring(err)))
     end
-    local scaleValue = humanoid:FindFirstChild(scaleName)
-    if not scaleValue then
-        warnMissingOnce(scaleName .. ":" .. humanoid:GetFullName(), "[AetherCore] Missing humanoid scale '" .. scaleName .. "' for: " .. humanoid:GetFullName())
-        return nil
-    end
-    return scaleValue
-end
 
-local function clampSetting(moduleName, settingName, value, min, max, fallback)
-    local numeric = tonumber(value)
-    if not numeric then
-        numeric = fallback
-    end
-    local clamped = math.clamp(numeric or 0, min, max)
-    moduleSettings[moduleName] = moduleSettings[moduleName] or {}
-    moduleSettings[moduleName][settingName] = clamped
-    return clamped
-end
-
-
-local function sayInChat(message)
-    pcall(function()
-        local channel = TextChatService.ChatInputBarConfiguration.TargetTextChannel
-        if channel then
-            channel:SendAsync(message)
+    function Helpers.safeCall(scope, fn, ...)
+        local args = table.pack(...)
+        local ok, result = xpcall(function()
+            return fn(table.unpack(args, 1, args.n))
+        end, debug.traceback)
+        if not ok then
+            Helpers.logError(scope, result)
+            return nil
         end
-    end)
+        return result
+    end
+
+    function Helpers.warnMissingOnce(key, message)
+        if Aether.State.warnedMissingObjects[key] then
+            return
+        end
+        Aether.State.warnedMissingObjects[key] = true
+        warn(message)
+    end
+
+    function Helpers.getHandleInvItem(model)
+        if not model then return nil end
+        local handle = model:FindFirstChild("HandleInvItem")
+        if not handle then
+            Helpers.warnMissingOnce("HandleInvItem:" .. model:GetFullName(), "[AetherCore] HandleInvItem missing for: " .. model:GetFullName())
+            return nil
+        end
+        return handle
+    end
+
+    function Helpers.getHumanoidScaleValue(humanoid, scaleName)
+        if not humanoid then return nil end
+        local scaleValue = humanoid:FindFirstChild(scaleName)
+        if not scaleValue then
+            Helpers.warnMissingOnce(scaleName .. ":" .. humanoid:GetFullName(), "[AetherCore] Missing humanoid scale '" .. scaleName .. "' for: " .. humanoid:GetFullName())
+            return nil
+        end
+        return scaleValue
+    end
+
+    function Helpers.clampSetting(moduleName, settingName, value, min, max, fallback)
+        local numeric = tonumber(value) or fallback
+        local clamped = math.clamp(numeric or 0, min, max)
+        local moduleSettings = Aether.Settings.moduleSettings
+        moduleSettings[moduleName] = moduleSettings[moduleName] or {}
+        moduleSettings[moduleName][settingName] = clamped
+        return clamped
+    end
+
+    function Helpers.sayInChat(message)
+        pcall(function()
+            local chatService = Aether.Services.TextChatService
+            local channel = chatService.ChatInputBarConfiguration.TargetTextChannel
+            if channel then channel:SendAsync(message) end
+        end)
+    end
 end
 
+initServices()
+initSettings()
+initState()
+initHelpers()
 
+local Players = Aether.Services.Players
+local UserInputService = Aether.Services.UserInputService
+local TextChatService = Aether.Services.TextChatService
+local TweenService = Aether.Services.TweenService
+local HttpService = Aether.Services.HttpService
+local ReplicatedStorage = Aether.Services.ReplicatedStorage
+local RunService = Aether.Services.RunService
+local Workspace = Aether.Services.Workspace
+local Debris = Aether.Services.Debris
+local VirtualUser = Aether.Services.VirtualUser
+local CollectionService = Aether.Services.CollectionService
+local Lighting = Aether.Services.Lighting
+local StarterGui = Aether.Services.StarterGui
+
+local lplr = Aether.Services.LocalPlayer
+local mouse = Aether.Services.Mouse
+local camera = Aether.Services.Camera
+
+local moduleSettings = Aether.Settings.moduleSettings
+local moduleStates = Aether.State.moduleStates
+local moduleConnections = Aether.State.moduleConnections
+local moduleKeybinds = Aether.State.moduleKeybinds
+local moduleUi = Aether.State.moduleUi
+local moduleHandlers = Aether.State.moduleHandlers
+local guiEnabled = Aether.State.guiEnabled
+local autoToxicEnabled = Aether.State.autoToxicEnabled
+local originalCharacterValues = Aether.State.originalCharacterValues
+local SETTINGS_STORE_KEY = Aether.State.SETTINGS_STORE_KEY
+local AUTO_TOXIC_CONNECTION_KEY = Aether.State.AUTO_TOXIC_CONNECTION_KEY
+local mouseMoveRelative = Aether.State.mouseMoveRelative
+local clipboardSetter = Aether.State.clipboardSetter
+local sharedEnvironmentGetter = Aether.State.sharedEnvironmentGetter
+local autoToxicMessageConnection = Aether.State.autoToxicMessageConnection
+local moduleConflictMap = Aether.State.moduleConflictMap
+
+local logError = Aether.Helpers.logError
+local safeCall = Aether.Helpers.safeCall
+local warnMissingOnce = Aether.Helpers.warnMissingOnce
+local getHandleInvItem = Aether.Helpers.getHandleInvItem
+local getHumanoidScaleValue = Aether.Helpers.getHumanoidScaleValue
+local clampSetting = Aether.Helpers.clampSetting
+local sayInChat = Aether.Helpers.sayInChat
 
 --====================================================
 -- controller and remote resolvers
@@ -4568,11 +4610,11 @@ end
 
 setupHomeDashboardPanel()
 
-local function setupScriptHubDashboardPanel()
+local function createScriptHubHeader(parentPanel)
     local scriptHubHeader = Instance.new("Frame")
     scriptHubHeader.Size = UDim2.new(1, -20, 0, 84)
     scriptHubHeader.Position = UDim2.new(0, 10, 0, 12)
-    scriptHubHeader.Parent = scriptHubDashboardPanel
+    scriptHubHeader.Parent = parentPanel
     styleDashboardCard(scriptHubHeader)
 
     local scriptHubTitle = Instance.new("TextLabel")
@@ -4596,11 +4638,13 @@ local function setupScriptHubDashboardPanel()
     scriptHubSubtitle.Font = Enum.Font.Gotham
     scriptHubSubtitle.TextSize = 16
     scriptHubSubtitle.Parent = scriptHubHeader
+end
 
+local function createScriptHubChatPanel(parentPanel)
     local chatCard = Instance.new("Frame")
     chatCard.Size = UDim2.new(1, -20, 1, -120)
     chatCard.Position = UDim2.new(0, 10, 0, 106)
-    chatCard.Parent = scriptHubDashboardPanel
+    chatCard.Parent = parentPanel
     styleDashboardCard(chatCard)
 
     local chatLog = Instance.new("ScrollingFrame")
@@ -4645,6 +4689,10 @@ local function setupScriptHubDashboardPanel()
     sendButton.Parent = chatCard
     addCorner(sendButton, 8)
 
+    return chatLog, chatLayout, chatInput, sendButton
+end
+
+local function createScriptHubKnowledge()
     local moduleKnowledge = {
         ["killaura"] = "KillAura automatically attacks nearby valid targets while active.",
         ["autoclicker"] = "AutoClicker repeatedly performs clicks at the configured rate.",
@@ -4700,6 +4748,11 @@ local function setupScriptHubDashboardPanel()
     }
 
     local moduleCategoriesReply = "Combat: KillAura, AutoClicker, Aimbot, Reach, AntiHit, AntiDeath\nBlatant: Speed, Step, SafeWalk, HighJump, VerticalFly, Scaffold\nRender: FOV, Crosshair, Viewmodel, BedPlates, WinEffect\nUtility: FastPickup, FastBreak, AutoToxic, Interface, UI Cleanup\nWorld: Breaker, Nuker, AutoVoidDrop, AutoPearl, AutoBank\nLegend: RavenTP, MissileTP, ArmorSwitch"
+    return moduleKnowledge, moduleAliases, moduleCategoriesReply
+end
+
+local function setupScriptHubChatBehavior(chatLog, chatLayout, chatInput, sendButton)
+    local moduleKnowledge, moduleAliases, moduleCategoriesReply = createScriptHubKnowledge()
 
     local function normalizeText(text)
         local value = (text or ""):lower()
@@ -4863,6 +4916,12 @@ local function setupScriptHubDashboardPanel()
     end)
 
     addChatBubble("Hello. I am your AetherCore assistant. Ask me what a module does, how a module works, or how to use the script.", false)
+end
+
+local function setupScriptHubDashboardPanel()
+    createScriptHubHeader(scriptHubDashboardPanel)
+    local chatLog, chatLayout, chatInput, sendButton = createScriptHubChatPanel(scriptHubDashboardPanel)
+    setupScriptHubChatBehavior(chatLog, chatLayout, chatInput, sendButton)
 end
 
 setupScriptHubDashboardPanel()
