@@ -5006,38 +5006,53 @@ local function filterMatches(name)
 end
 
 local function validateModuleSettings()
-    clampSetting("KillAura", "range", moduleSettings.KillAura.range, 5, 20, 14)
-    clampSetting("KillAura", "swingSpeed", moduleSettings.KillAura.swingSpeed, 1, 20, 18)
-    clampSetting("AutoClicker", "cps", moduleSettings.AutoClicker.cps, 1, 20, 10)
-    clampSetting("Speed", "speed", moduleSettings.Speed.speed, 16, 50, 24)
-    clampSetting("Step", "maxHeight", moduleSettings.Step.maxHeight, 2, 14, 6)
-    clampSetting("Step", "forwardCheckDistance", moduleSettings.Step.forwardCheckDistance, 1.5, 5, 2.6)
-    clampSetting("SafeWalk", "maxDrop", moduleSettings.SafeWalk.maxDrop, 2, 10, 4.5)
-    clampSetting("HighJump", "boost", moduleSettings.HighJump.boost, 10, 180, 40)
-    clampSetting("Aimbot", "fov", moduleSettings.Aimbot.fov, 20, 450, 160)
-    clampSetting("Aimbot", "smoothness", moduleSettings.Aimbot.smoothness, 0.01, 1, 0.55)
-    clampSetting("Aimbot", "predictionStrength", moduleSettings.Aimbot.predictionStrength, 0, 2, 1)
-    clampSetting("Aimbot", "arrowSpeed", moduleSettings.Aimbot.arrowSpeed, 40, 350, 185)
-    clampSetting("Aimbot", "gravity", moduleSettings.Aimbot.gravity, 40, 350, Workspace.Gravity)
-    clampSetting("Aimbot", "maxDistance", moduleSettings.Aimbot.maxDistance, 60, 400, 260)
-    clampSetting("Reach", "hitRange", moduleSettings.Reach.hitRange, 6, 20, 12)
-    clampSetting("Reach", "mineRange", moduleSettings.Reach.mineRange, 6, 20, 12)
-    clampSetting("Reach", "placeRange", moduleSettings.Reach.placeRange, 6, 20, 12)
-    clampSetting("VerticalFly", "horizontalSpeed", moduleSettings.VerticalFly.horizontalSpeed, 8, 60, 28)
-    clampSetting("VerticalFly", "verticalSpeed", moduleSettings.VerticalFly.verticalSpeed, 10, 120, 45)
-    clampSetting("VerticalFly", "groundOffset", moduleSettings.VerticalFly.groundOffset or moduleSettings.VerticalFly.hoverHeight, 1, 8, 3.2)
+    local validationRules = {
+        {"KillAura", "range", 5, 20, 14},
+        {"KillAura", "swingSpeed", 1, 20, 18},
+        {"AutoClicker", "cps", 1, 20, 10},
+        {"Speed", "speed", 16, 50, 24},
+        {"Step", "maxHeight", 2, 14, 6},
+        {"Step", "forwardCheckDistance", 1.5, 5, 2.6},
+        {"SafeWalk", "maxDrop", 2, 10, 4.5},
+        {"HighJump", "boost", 10, 180, 40},
+        {"Aimbot", "fov", 20, 450, 160},
+        {"Aimbot", "smoothness", 0.01, 1, 0.55},
+        {"Aimbot", "predictionStrength", 0, 2, 1},
+        {"Aimbot", "arrowSpeed", 40, 350, 185},
+        {"Aimbot", "gravity", 40, 350, Workspace.Gravity},
+        {"Aimbot", "maxDistance", 60, 400, 260},
+        {"Reach", "hitRange", 6, 20, 12},
+        {"Reach", "mineRange", 6, 20, 12},
+        {"Reach", "placeRange", 6, 20, 12},
+        {"VerticalFly", "horizontalSpeed", 8, 60, 28},
+        {"VerticalFly", "verticalSpeed", 10, 120, 45},
+        {"AntiDeath", "belowDuration", 0.5, 4, 2},
+        {"AntiDeath", "slowMode", 0.2, 5, 1.5},
+        {"AntiDeath", "voidOffset", 60, 250, 130},
+        {"AntiHit", "slowMode", 0.2, 5, 1},
+        {"AntiHit", "riseWindow", 0.08, 0.35, 0.14},
+        {"AntiHit", "voidOffset", 60, 260, 130},
+        {"AntiHit", "antiDamageJitter", 0, 6, 2.2},
+        {"FastBreak", "cooldown", 0, 0.3, 0.03},
+        {"FastBreak", "attemptsPerPulse", 1, 6, 2},
+        {"AutoVoidDrop", "triggerOffset", 4, 60, 18},
+        {"AutoVoidDrop", "dropInterval", 0.1, 2, 0.45}
+    }
+
+    for _, rule in ipairs(validationRules) do
+        local moduleName, settingName, minValue, maxValue, fallbackValue = rule[1], rule[2], rule[3], rule[4], rule[5]
+        local moduleTable = moduleSettings[moduleName]
+        if moduleTable then
+            clampSetting(moduleName, settingName, moduleTable[settingName], minValue, maxValue, fallbackValue)
+        end
+    end
+
+    local verticalFly = moduleSettings.VerticalFly
+    if verticalFly then
+        clampSetting("VerticalFly", "groundOffset", verticalFly.groundOffset or verticalFly.hoverHeight, 1, 8, 3.2)
+    end
+
     moduleSettings.AntiDeath.healthThreshold = math.max(1, tonumber(moduleSettings.AntiDeath.healthThreshold) or 25)
-    clampSetting("AntiDeath", "belowDuration", moduleSettings.AntiDeath.belowDuration, 0.5, 4, 2)
-    clampSetting("AntiDeath", "slowMode", moduleSettings.AntiDeath.slowMode, 0.2, 5, 1.5)
-    clampSetting("AntiDeath", "voidOffset", moduleSettings.AntiDeath.voidOffset, 60, 250, 130)
-    clampSetting("AntiHit", "slowMode", moduleSettings.AntiHit.slowMode, 0.2, 5, 1)
-    clampSetting("AntiHit", "riseWindow", moduleSettings.AntiHit.riseWindow, 0.08, 0.35, 0.14)
-    clampSetting("AntiHit", "voidOffset", moduleSettings.AntiHit.voidOffset, 60, 260, 130)
-    clampSetting("AntiHit", "antiDamageJitter", moduleSettings.AntiHit.antiDamageJitter, 0, 6, 2.2)
-    clampSetting("FastBreak", "cooldown", moduleSettings.FastBreak.cooldown, 0, 0.3, 0.03)
-    clampSetting("FastBreak", "attemptsPerPulse", moduleSettings.FastBreak.attemptsPerPulse, 1, 6, 2)
-    clampSetting("AutoVoidDrop", "triggerOffset", moduleSettings.AutoVoidDrop.triggerOffset, 4, 60, 18)
-    clampSetting("AutoVoidDrop", "dropInterval", moduleSettings.AutoVoidDrop.dropInterval, 0.1, 2, 0.45)
 end
 
 --====================================================
