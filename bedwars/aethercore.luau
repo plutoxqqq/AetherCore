@@ -5032,12 +5032,12 @@ makeDraggable(mainPanel, mainTop)
 makeDraggable(topBar, topBar)
 makeDraggable(statusPanel, statusPanel)
 
-local function filterMatches(name)
+function AetherFilterMatches(name, searchText)
     local q = string.lower(searchText or "")
     return q == "" or string.find(string.lower(name), q, 1, true) ~= nil
 end
 
-local validationRules = {
+AetherValidationRules = {
     {"KillAura", "range", 5, 20, 14},
     {"KillAura", "swingSpeed", 1, 20, 18},
     {"AutoClicker", "cps", 1, 20, 10},
@@ -5070,9 +5070,9 @@ local validationRules = {
     {"AutoVoidDrop", "dropInterval", 0.1, 2, 0.45}
 }
 
-local function validateModuleSettings()
+function AetherValidateModuleSettings()
 
-    for _, rule in ipairs(validationRules) do
+    for _, rule in ipairs(AetherValidationRules) do
         local moduleName, settingName, minValue, maxValue, fallbackValue = rule[1], rule[2], rule[3], rule[4], rule[5]
         local moduleTable = moduleSettings[moduleName]
         if moduleTable then
