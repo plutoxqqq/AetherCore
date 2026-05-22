@@ -2871,6 +2871,38 @@ local function toggleAutoLeave(enabled)
     end))
 end
 
+moduleSettings["ProximityEditor"] = {
+    holdDuration = 0,
+    affectNewPrompts = false
+}
+
+local function toggleProximityEditor(enabled)
+    cleanupModule("ProximityEditor")
+    if not enabled then
+        return
+    end
+
+    local function applyPrompt(prompt)
+        if not (prompt and prompt:IsA("ProximityPrompt")) then
+            return
+        end
+        prompt.HoldDuration = math.clamp(tonumber((moduleSettings["ProximityEditor"] or {}).holdDuration) or 0, 0, 5)
+    end
+
+    for _, obj in ipairs(game:GetDescendants()) do
+        applyPrompt(obj)
+    end
+
+    if (moduleSettings["ProximityEditor"] or {}).affectNewPrompts then
+        addConnection("ProximityEditor", game.DescendantAdded:Connect(function(obj)
+            if not moduleStates["ProximityEditor"] then
+                return
+            end
+            applyPrompt(obj)
+        end))
+    end
+end
+
 
 moduleSettings["Nuker"] = {
     mineBeds = true,
@@ -5935,8 +5967,9 @@ local function uiCreateSlider(parent, name, min, max, default, callback, options
     local function apply(v, fromTextEntry)
         local numeric = tonumber(v)
         if not numeric then return end
-        local allowBeyondMax = fromTextEntry and options.allowTextInputBeyondMax
-        local appliedValue = allowBeyondMax and math.max(numeric, min) or math.clamp(numeric, min, max)
+        local safeNumeric = math.clamp(numeric, -1000000, 1000000)
+        local allowBeyondMax = fromTextEntry and (options.allowTextInputBeyondMax ~= false)
+        local appliedValue = allowBeyondMax and math.max(safeNumeric, min) or math.clamp(safeNumeric, min, max)
         local visualValue = math.clamp(appliedValue, min, max)
         fill.Size = UDim2.new((visualValue - min) / range, 0, 1, 0)
         valueButton.Text = tostring(math.floor(appliedValue * 100) / 100)
@@ -6097,11 +6130,17 @@ local function createSettingsContent(parent, moduleName)
         if setting.type == "slider" then
             uiCreateSlider(parent, setting.name, setting.min, setting.max, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if moduleStates[moduleName] and moduleHandlers[moduleName] then
+                    safeCall(moduleName .. "SettingsSliderUpdate", moduleHandlers[moduleName], true)
+                end
                 saveClientSettings()
-            end, { allowTextInputBeyondMax = setting.allowTextInputBeyondMax == true })
+            end, { allowTextInputBeyondMax = setting.allowTextInputBeyondMax })
         elseif setting.type == "toggle" then
             uiCreateToggle(parent, setting.name, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if moduleStates[moduleName] and moduleHandlers[moduleName] then
+                    safeCall(moduleName .. "SettingsToggleUpdate", moduleHandlers[moduleName], true)
+                end
                 saveClientSettings()
             end)
         elseif setting.type == "dropdown" then
@@ -6530,6 +6569,10 @@ createRegisteredModule("Utility", "AntiVoid", false, toggleAntiVoid, {
 })
 createRegisteredModule("Utility", "FastPickup", false, toggleFastPickup, {
     {type = "slider", name = "Range", min = 4, max = 30, settingName = "range"}
+})
+createRegisteredModule("Utility", "ProximityEditor", false, toggleProximityEditor, {
+    {type = "slider", name = "Hold Duration", min = 0, max = 5, settingName = "holdDuration"},
+    {type = "toggle", name = "Affect New Prompts", settingName = "affectNewPrompts"}
 })
 createRegisteredModule("Utility", "AutoLeave", false, toggleAutoLeave, {
     {type = "toggle", name = "Staff Only", settingName = "staffOnly"},
