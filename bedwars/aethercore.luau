@@ -4953,66 +4953,71 @@ end
 -- settings save and load system
 --====================================================
 
-saveClientSettings = function()
-    safeCall("SaveClientSettings", function()
-        local payload = {
-            keybinds = {},
-            moduleStates = {},
-            settings = moduleSettings,
-            categoryPositions = {}
-        }
-        for moduleName, key in pairs(moduleKeybinds) do
-            payload.keybinds[moduleName] = key and key.Name or nil
-        end
-        for moduleName, enabled in pairs(moduleStates) do
-            payload.moduleStates[moduleName] = enabled == true
-        end
-        for categoryName, panel in pairs(categoryPanels) do
-            payload.categoryPositions[categoryName] = {x = panel.Position.X.Offset, y = panel.Position.Y.Offset}
-        end
-        local encoded = HttpService:JSONEncode(payload)
-        if sharedEnvironmentGetter then
-            sharedEnvironmentGetter()[SETTINGS_STORE_KEY] = encoded
-        end
-    end)
-end
+local function initializeClientSettingsPersistence()
+    saveClientSettings = function()
+        safeCall("SaveClientSettings", function()
+            local payload = {
+                keybinds = {},
+                moduleStates = {},
+                settings = moduleSettings,
+                categoryPositions = {}
+            }
+            for moduleName, key in pairs(moduleKeybinds) do
+                payload.keybinds[moduleName] = key and key.Name or nil
+            end
+            for moduleName, enabled in pairs(moduleStates) do
+                payload.moduleStates[moduleName] = enabled == true
+            end
+            for categoryName, panel in pairs(categoryPanels) do
+                payload.categoryPositions[categoryName] = {x = panel.Position.X.Offset, y = panel.Position.Y.Offset}
+            end
+            local encoded = HttpService:JSONEncode(payload)
+            if sharedEnvironmentGetter then
+                sharedEnvironmentGetter()[SETTINGS_STORE_KEY] = encoded
+            end
+        end)
+    end
 
-local function loadClientSettings()
-    safeCall("LoadClientSettings", function()
-        local raw = sharedEnvironmentGetter and sharedEnvironmentGetter()[SETTINGS_STORE_KEY]
-        if type(raw) ~= "string" then return end
-        local decoded = HttpService:JSONDecode(raw)
-        if type(decoded) ~= "table" then return end
-        if type(decoded.keybinds) == "table" then
-            for moduleName, keyName in pairs(decoded.keybinds) do
-                if Enum.KeyCode[keyName] then
-                    moduleKeybinds[moduleName] = Enum.KeyCode[keyName]
-                end
-            end
-        end
-        if type(decoded.moduleStates) == "table" then
-            for moduleName, enabled in pairs(decoded.moduleStates) do
-                if type(enabled) == "boolean" then
-                    loadedModuleStates[moduleName] = enabled
-                end
-            end
-        end
-        if type(decoded.settings) == "table" then
-            for moduleName, values in pairs(decoded.settings) do
-                if moduleSettings[moduleName] and type(values) == "table" then
-                    for key, value in pairs(values) do
-                        moduleSettings[moduleName][key] = value
+    local function loadClientSettingsNow()
+        safeCall("LoadClientSettings", function()
+            local raw = sharedEnvironmentGetter and sharedEnvironmentGetter()[SETTINGS_STORE_KEY]
+            if type(raw) ~= "string" then return end
+            local decoded = HttpService:JSONDecode(raw)
+            if type(decoded) ~= "table" then return end
+            if type(decoded.keybinds) == "table" then
+                for moduleName, keyName in pairs(decoded.keybinds) do
+                    if Enum.KeyCode[keyName] then
+                        moduleKeybinds[moduleName] = Enum.KeyCode[keyName]
                     end
                 end
             end
-        end
-        if type(decoded.categoryPositions) == "table" then
-            loadedCategoryPositions = decoded.categoryPositions
-        end
-    end)
-    validateModuleSettings()
+            if type(decoded.moduleStates) == "table" then
+                for moduleName, enabled in pairs(decoded.moduleStates) do
+                    if type(enabled) == "boolean" then
+                        loadedModuleStates[moduleName] = enabled
+                    end
+                end
+            end
+            if type(decoded.settings) == "table" then
+                for moduleName, values in pairs(decoded.settings) do
+                    if moduleSettings[moduleName] and type(values) == "table" then
+                        for key, value in pairs(values) do
+                            moduleSettings[moduleName][key] = value
+                        end
+                    end
+                end
+            end
+            if type(decoded.categoryPositions) == "table" then
+                loadedCategoryPositions = decoded.categoryPositions
+            end
+        end)
+        validateModuleSettings()
+    end
+
+    loadClientSettingsNow()
 end
-loadClientSettings()
+
+initializeClientSettingsPersistence()
 
 --====================================================
 -- startup
