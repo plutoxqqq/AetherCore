@@ -4834,71 +4834,80 @@ end
 
 setupSettingsDashboardPanel()
 
-local searchBox = Instance.new("TextBox")
-searchBox.Size = UDim2.new(1, -130, 0, 26)
-searchBox.Position = UDim2.new(0, 8, 0, 7)
-searchBox.BackgroundColor3 = palette.module
-searchBox.PlaceholderText = "Search modules..."
-searchBox.ClearTextOnFocus = false
-searchBox.Text = ""
-searchBox.TextColor3 = palette.text
-searchBox.PlaceholderColor3 = palette.secondary
-searchBox.Font = Enum.Font.Gotham
-searchBox.TextSize = 13
-searchBox.Parent = topBar
-addCorner(searchBox, 6)
+local function setupTopBarAndStatusControls()
+    local refs = {}
 
-local closeButton = Instance.new("TextButton")
-closeButton.Size = UDim2.new(0, 112, 0, 26)
-closeButton.Position = UDim2.new(1, -120, 0, 7)
-closeButton.BackgroundColor3 = palette.danger
-closeButton.Text = "Uninject"
-closeButton.TextColor3 = palette.text
-closeButton.Font = Enum.Font.GothamBold
-closeButton.TextSize = 12
-closeButton.Parent = topBar
-addCorner(closeButton, 6)
+    refs.searchBox = Instance.new("TextBox")
+    refs.searchBox.Size = UDim2.new(1, -130, 0, 26)
+    refs.searchBox.Position = UDim2.new(0, 8, 0, 7)
+    refs.searchBox.BackgroundColor3 = palette.module
+    refs.searchBox.PlaceholderText = "Search modules..."
+    refs.searchBox.ClearTextOnFocus = false
+    refs.searchBox.Text = ""
+    refs.searchBox.TextColor3 = palette.text
+    refs.searchBox.PlaceholderColor3 = palette.secondary
+    refs.searchBox.Font = Enum.Font.Gotham
+    refs.searchBox.TextSize = 13
+    refs.searchBox.Parent = topBar
+    addCorner(refs.searchBox, 6)
 
-local statusDiscord = Instance.new("TextButton")
-statusDiscord.Size = UDim2.new(0, 150, 1, 0)
-statusDiscord.BackgroundTransparency = 1
-statusDiscord.Text = "discord.gg/mMMFRaUgDz"
-statusDiscord.TextColor3 = palette.secondary
-statusDiscord.Font = Enum.Font.Gotham
-statusDiscord.TextSize = 11
-statusDiscord.TextXAlignment = Enum.TextXAlignment.Left
-statusDiscord.Parent = statusPanel
+    refs.closeButton = Instance.new("TextButton")
+    refs.closeButton.Size = UDim2.new(0, 112, 0, 26)
+    refs.closeButton.Position = UDim2.new(1, -120, 0, 7)
+    refs.closeButton.BackgroundColor3 = palette.danger
+    refs.closeButton.Text = "Uninject"
+    refs.closeButton.TextColor3 = palette.text
+    refs.closeButton.Font = Enum.Font.GothamBold
+    refs.closeButton.TextSize = 12
+    refs.closeButton.Parent = topBar
+    addCorner(refs.closeButton, 6)
 
-local statusTime = Instance.new("TextLabel")
-statusTime.Size = UDim2.new(0, 110, 1, 0)
-statusTime.Position = UDim2.new(1, -110, 0, 0)
-statusTime.BackgroundTransparency = 1
-statusTime.Text = "Time: 0s"
-statusTime.TextColor3 = palette.secondary
-statusTime.Font = Enum.Font.Gotham
-statusTime.TextSize = 11
-statusTime.TextXAlignment = Enum.TextXAlignment.Right
-statusTime.Parent = statusPanel
+    refs.statusDiscord = Instance.new("TextButton")
+    refs.statusDiscord.Size = UDim2.new(0, 150, 1, 0)
+    refs.statusDiscord.BackgroundTransparency = 1
+    refs.statusDiscord.Text = "discord.gg/mMMFRaUgDz"
+    refs.statusDiscord.TextColor3 = palette.secondary
+    refs.statusDiscord.Font = Enum.Font.Gotham
+    refs.statusDiscord.TextSize = 11
+    refs.statusDiscord.TextXAlignment = Enum.TextXAlignment.Left
+    refs.statusDiscord.Parent = statusPanel
 
-statusDiscord.MouseButton1Click:Connect(function()
-    if clipboardSetter then
-        safeCall("CopyDiscord", function()
-            clipboardSetter("https://discord.gg/mMMFRaUgDz")
-        end)
-    else
-        warn("[AetherCore][CopyDiscord] setclipboard is unavailable in this executor.")
-    end
-end)
+    refs.statusTime = Instance.new("TextLabel")
+    refs.statusTime.Size = UDim2.new(0, 110, 1, 0)
+    refs.statusTime.Position = UDim2.new(1, -110, 0, 0)
+    refs.statusTime.BackgroundTransparency = 1
+    refs.statusTime.Text = "Time: 0s"
+    refs.statusTime.TextColor3 = palette.secondary
+    refs.statusTime.Font = Enum.Font.Gotham
+    refs.statusTime.TextSize = 11
+    refs.statusTime.TextXAlignment = Enum.TextXAlignment.Right
+    refs.statusTime.Parent = statusPanel
 
-local function updateStatusTime()
-    local startTick = tick()
-    RunService.RenderStepped:Connect(function()
-        if statusTime and statusTime.Parent then
-            statusTime.Text = string.format("Time: %ds", math.floor(tick() - startTick))
+    refs.statusDiscord.MouseButton1Click:Connect(function()
+        if clipboardSetter then
+            safeCall("CopyDiscord", function()
+                clipboardSetter("https://discord.gg/mMMFRaUgDz")
+            end)
+        else
+            warn("[AetherCore][CopyDiscord] setclipboard is unavailable in this executor.")
         end
     end)
+
+    local startTick = tick()
+    RunService.RenderStepped:Connect(function()
+        if refs.statusTime and refs.statusTime.Parent then
+            refs.statusTime.Text = string.format("Time: %ds", math.floor(tick() - startTick))
+        end
+    end)
+
+    return refs
 end
-updateStatusTime()
+
+local topBarStatusRefs = setupTopBarAndStatusControls()
+local searchBox = topBarStatusRefs.searchBox
+local closeButton = topBarStatusRefs.closeButton
+local statusDiscord = topBarStatusRefs.statusDiscord
+local statusTime = topBarStatusRefs.statusTime
 
 makeDraggable(mainPanel, mainTop)
 makeDraggable(topBar, topBar)
