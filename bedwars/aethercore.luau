@@ -6804,9 +6804,9 @@ function setupNavigationAndCloseHandlers()
 
     setActiveSidebarTab("Home")
 
-    topBarStatusRefs.closeButton.MouseButton1Click:Connect(function()
-        selfDestructAether()
-    end)
+topBarStatusRefs.closeButton.MouseButton1Click:Connect(function()
+    selfDestructAether()
+end)
 
 setupNavigationAndCloseHandlers()
 
