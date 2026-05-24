@@ -3418,6 +3418,36 @@ function toggleAimAssist(enabled)
         return math.huge
     end
 
+    local function collectCandidates(settings, root)
+        local candidates = {}
+
+        if settings.targetPlayers ~= false then
+            for _, player in ipairs(Players:GetPlayers()) do
+                if player ~= lplr and isEnemyPlayer(player) then
+                    local targetChar = getCharacter(player)
+                    local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+                    if targetRoot and isAliveCharacter(targetChar) then
+                        table.insert(candidates, targetChar)
+                    end
+                end
+            end
+        end
+
+        if settings.targetNPCs then
+            for _, model in ipairs(Workspace:GetDescendants()) do
+                if model:IsA("Model") and model ~= getCharacter(lplr) and not isPlayerCharacterModel(model) then
+                    local targetHum = model:FindFirstChildOfClass("Humanoid")
+                    local targetRoot = model:FindFirstChild("HumanoidRootPart")
+                    if targetHum and targetRoot and targetHum.Health > 0 then
+                        table.insert(candidates, model)
+                    end
+                end
+            end
+        end
+
+        return candidates
+    end
+
     local connection = RunService.PostSimulation:Connect(function(dt)
         if not moduleStates["AimAssist"] then return end
         local character = getCharacter(lplr)
@@ -3425,28 +3455,26 @@ function toggleAimAssist(enabled)
         if not (character and root) then return end
 
         local settings = moduleSettings["AimAssist"]
+        if settings.targetPlayers == false and not settings.targetNPCs then return end
         local bestTarget, bestMetric = nil, math.huge
 
-        for _, player in ipairs(Players:GetPlayers()) do
-            if player ~= lplr and isEnemyPlayer(player) then
-                local targetChar = getCharacter(player)
-                local targetRoot = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
-                if targetRoot and isAliveCharacter(targetChar) then
-                    local distance = (targetRoot.Position - root.Position).Magnitude
-                    if distance <= (settings.range or 30) then
-                        local blocked = settings.wallCheck and isTargetBehindWall(root.Position, targetRoot.Position)
-                        if not blocked then
-                            local metric
-                            if settings.sortMethod == "Angle" then
-                                local dir = (targetRoot.Position - root.Position).Unit
-                                metric = math.acos(math.clamp(root.CFrame.LookVector:Dot(dir), -1, 1))
-                            else
-                                metric = getSortScore(targetChar, root, settings.sortMethod)
-                            end
-                            if metric < bestMetric then
-                                bestMetric = metric
-                                bestTarget = targetChar
-                            end
+        for _, targetChar in ipairs(collectCandidates(settings, root)) do
+            local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+            if targetRoot then
+                local distance = (targetRoot.Position - root.Position).Magnitude
+                if distance <= (settings.range or 30) then
+                    local blocked = settings.wallCheck and isTargetBehindWall(root.Position, targetRoot.Position)
+                    if not blocked then
+                        local metric
+                        if settings.sortMethod == "Angle" then
+                            local dir = (targetRoot.Position - root.Position).Unit
+                            metric = math.acos(math.clamp(root.CFrame.LookVector:Dot(dir), -1, 1))
+                        else
+                            metric = getSortScore(targetChar, root, settings.sortMethod)
+                        end
+                        if metric < bestMetric then
+                            bestMetric = metric
+                            bestTarget = targetChar
                         end
                     end
                 end
@@ -3532,9 +3560,7 @@ end
 moduleSettings["Velocity"] = {
     direction = "Random",
     chance = 100,
-    onlyWhenTargeting = false,
-    horizontalReduction = 100,
-    verticalReduction = 100
+    onlyWhenTargeting = false
 }
 
 function rotateYVector(v, deg)
