@@ -4610,7 +4610,9 @@ end
 
 setupHomeDashboardPanel()
 
-local function createScriptHubHeader(parentPanel)
+local ScriptHubUI = {}
+
+function ScriptHubUI.createHeader(parentPanel)
     local scriptHubHeader = Instance.new("Frame")
     scriptHubHeader.Size = UDim2.new(1, -20, 0, 84)
     scriptHubHeader.Position = UDim2.new(0, 10, 0, 12)
@@ -4640,7 +4642,7 @@ local function createScriptHubHeader(parentPanel)
     scriptHubSubtitle.Parent = scriptHubHeader
 end
 
-local function createScriptHubChatPanel(parentPanel)
+function ScriptHubUI.createChatPanel(parentPanel)
     local chatCard = Instance.new("Frame")
     chatCard.Size = UDim2.new(1, -20, 1, -120)
     chatCard.Position = UDim2.new(0, 10, 0, 106)
@@ -4919,8 +4921,8 @@ local function setupScriptHubChatBehavior(chatLog, chatLayout, chatInput, sendBu
 end
 
 local function setupScriptHubDashboardPanel()
-    createScriptHubHeader(scriptHubDashboardPanel)
-    local chatLog, chatLayout, chatInput, sendButton = createScriptHubChatPanel(scriptHubDashboardPanel)
+    ScriptHubUI.createHeader(scriptHubDashboardPanel)
+    local chatLog, chatLayout, chatInput, sendButton = ScriptHubUI.createChatPanel(scriptHubDashboardPanel)
     setupScriptHubChatBehavior(chatLog, chatLayout, chatInput, sendButton)
 end
 
