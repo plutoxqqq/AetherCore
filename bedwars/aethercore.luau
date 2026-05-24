@@ -6693,10 +6693,13 @@ end
 selfDestructing = false
 
 function selfDestructAether()
-    if selfDestructing then return end
+    if selfDestructing then
+        return
+    end
+
     selfDestructing = true
 
-    safeCall("SelfDestruct", function()
+    pcall(function()
         if autoToxicMessageConnection then
             autoToxicMessageConnection:Disconnect()
             autoToxicMessageConnection = nil
@@ -6711,13 +6714,17 @@ function selfDestructAether()
             moduleStates[moduleName] = false
 
             if moduleHandlers[moduleName] then
-                safeCall(moduleName .. "SelfDestructDisable", moduleHandlers[moduleName], false)
+                pcall(function()
+                    moduleHandlers[moduleName](false)
+                end)
             end
 
-            cleanupModule(moduleName)
+            pcall(function()
+                cleanupModule(moduleName)
+            end)
 
             if moduleUi[moduleName] then
-                safeCall(moduleName .. "SelfDestructUI", function()
+                pcall(function()
                     moduleUi[moduleName].setEnabled(false)
                 end)
             end
@@ -6729,7 +6736,7 @@ function selfDestructAether()
                     connections:Disconnect()
                 end)
             elseif type(connections) == "table" then
-                for _, connection in ipairs(connections) do
+                for _, connection in pairs(connections) do
                     if typeof(connection) == "RBXScriptConnection" then
                         pcall(function()
                             connection:Disconnect()
@@ -6763,6 +6770,7 @@ function selfDestructAether()
             pcall(function()
                 screenGui:Destroy()
             end)
+
             screenGui = nil
         end
 
