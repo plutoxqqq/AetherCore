@@ -1594,71 +1594,87 @@ end
 --// Speed
 -- category: blatant
 -- purpose: applies custom movement speed.
-moduleSettings["Speed"] = { speed = 24 }
+moduleSettings["Speed"] = { speed = 23 }
 
 function toggleSpeed(enabled)
     cleanupModule("Speed")
     if not enabled then
-        local char = getCharacter(lplr)
-        if char then
-            local hum = getHumanoid(char)
-            if hum then
-                hum.WalkSpeed = 16
-                hum.JumpPower = 50
-            end
-        end
+        local hum = getHumanoid(getCharacter(lplr))
+        if hum then hum:SetAttribute("AetherSpeedEnabled", false) end
         return
     end
 
-    local function applySpeed()
-        local char = getCharacter(lplr)
-        if not char then return end
+    local function markSpeedState(char)
         local hum = getHumanoid(char)
-        if hum then
-            hum.WalkSpeed = moduleSettings["Speed"].speed
-            hum.JumpPower = 60
-        end
+        if hum then hum:SetAttribute("AetherSpeedEnabled", true) end
     end
 
-    applySpeed()
-    addConnection("Speed", lplr.CharacterAdded:Connect(applySpeed))
-    addConnection("Speed", RunService.Heartbeat:Connect(function()
-        if not moduleStates["Speed"] then return end
-        applySpeed()
+    local function applySpeed()
+        if not moduleStates["Speed"] or moduleStates["Sprint"] then return end
+        local char = getCharacter(lplr)
+        local hum = getHumanoid(char)
+        local hrp = getHRP(char)
+        if not hum or not hrp or hum.Health <= 0 then return end
+        local moveDir = hum.MoveDirection
+        if moveDir.Magnitude < 0.01 then return end
+        local direction = Vector3.new(moveDir.X, 0, moveDir.Z)
+        if direction.Magnitude < 0.001 then return end
+        local horizontalTarget = direction.Unit * math.clamp(tonumber((moduleSettings["Speed"] or {}).speed) or 23, 16, 80)
+        local currentVel = hrp.AssemblyLinearVelocity
+        local currentHorizontal = Vector3.new(currentVel.X, 0, currentVel.Z)
+        local nextHorizontal = currentHorizontal:Lerp(horizontalTarget, 0.35)
+        hrp.AssemblyLinearVelocity = Vector3.new(nextHorizontal.X, currentVel.Y, nextHorizontal.Z)
+    end
+
+    markSpeedState(getCharacter(lplr))
+    addConnection("Speed", lplr.CharacterAdded:Connect(function(char)
+        task.defer(markSpeedState, char)
     end))
+    addConnection("Speed", RunService.Heartbeat:Connect(applySpeed))
 end
 
 function toggleSprint(enabled)
     cleanupModule("Sprint")
-    if not enabled then return end
-    local function applySprint()
-        local char = getCharacter(lplr)
-        local hum = char and getHumanoid(char)
+    local function restoreSprint(char)
+        local hum = getHumanoid(char)
         if not hum then return end
-        hum:SetAttribute("AetherSprintForced", true)
-        pcall(function()
-            hum.WalkSpeed = math.max(hum.WalkSpeed, 16)
-        end)
+        local defaultSpeed = hum:GetAttribute("AetherDefaultWalkSpeed")
+        hum:SetAttribute("AetherSprintEnabled", false)
+        hum.WalkSpeed = type(defaultSpeed) == "number" and defaultSpeed or 16
     end
-    addConnection("Sprint", RunService.RenderStepped:Connect(function()
+    if not enabled then
+        restoreSprint(getCharacter(lplr))
+        return
+    end
+    local function primeSprint(char)
+        local hum = getHumanoid(char)
+        if not hum then return end
+        if type(hum:GetAttribute("AetherDefaultWalkSpeed")) ~= "number" then
+            hum:SetAttribute("AetherDefaultWalkSpeed", hum.WalkSpeed)
+        end
+        hum:SetAttribute("AetherSprintEnabled", true)
+    end
+    addConnection("Sprint", RunService.Heartbeat:Connect(function()
         if not moduleStates["Sprint"] then return end
         local char = getCharacter(lplr)
-        local hum = char and getHumanoid(char)
-        if not hum then return end
-        local moveDir = hum.MoveDirection
-        if moveDir.Magnitude > 0.01 then
-            if (moduleSettings["Sprint"] or {}).omni then
-                hum:ChangeState(Enum.HumanoidStateType.Running)
-            end
-            pcall(function()
-                hum.AutoRotate = true
-            end)
+        local hum = getHumanoid(char)
+        if not hum or hum.Health <= 0 then return end
+        if type(hum:GetAttribute("AetherDefaultWalkSpeed")) ~= "number" then
+            hum:SetAttribute("AetherDefaultWalkSpeed", hum.WalkSpeed)
+        end
+        local baseSpeed = hum:GetAttribute("AetherDefaultWalkSpeed") or 16
+        local target = hum.MoveDirection.Magnitude > 0 and math.max(baseSpeed, 16) or baseSpeed
+        if hum.WalkSpeed ~= target then
+            hum.WalkSpeed = target
         end
     end))
-    applySprint()
+    primeSprint(getCharacter(lplr))
     addConnection("Sprint", lplr.CharacterAdded:Connect(function()
-        task.wait(0.1)
-        applySprint()
+        task.defer(function()
+            local char = getCharacter(lplr)
+            primeSprint(char)
+            restoreSprint(char)
+        end)
     end))
 end
 
@@ -1700,11 +1716,9 @@ function toggleStep(enabled)
         local hrp = getHRP(char)
         if not hum or not hrp or hum.Health <= 0 then return end
 
-        applyStep(char)
-
         if hum.MoveDirection.Magnitude < 0.05 then return end
 
-        local settings = moduleSettings["Step"]
+        local settings = moduleSettings["Step"] or {}
         local now = tick()
         local cooldown = math.clamp(settings.stepCooldown or 0.09, 0.03, 0.25)
         if now - (settings.lastStepAt or 0) < cooldown then return end
@@ -1717,27 +1731,22 @@ function toggleStep(enabled)
         local moveDir = hum.MoveDirection.Unit
         local forwardDist = math.clamp(settings.forwardCheckDistance or 2.6, 1.2, 5)
 
-        -- check for wall ahead
-        local wallHit = Workspace:Raycast(hrp.Position, moveDir * forwardDist, rayParams)
-        if not wallHit or math.abs(wallHit.Normal.Y) > 0.45 then return end
+        local wallHit = Workspace:Raycast(hrp.Position + Vector3.new(0, 1.2, 0), moveDir * forwardDist, rayParams)
+        if not wallHit or math.abs(wallHit.Normal.Y) > 0.35 then return end
 
-        -- check there's a surface above the wall to land on
-        local probeOrigin = wallHit.Position + moveDir * 1.1 + Vector3.new(0, settings.maxHeight + 2.5, 0)
-        local surfaceHit = Workspace:Raycast(probeOrigin, Vector3.new(0, -(settings.maxHeight + 3.5), 0), rayParams)
-        if not surfaceHit or surfaceHit.Normal.Y < 0.55 then return end
+        local maxHeight = math.clamp(settings.maxHeight or 6, 2, 14)
+        local probeOrigin = wallHit.Position + Vector3.new(0, maxHeight + 1.1, 0)
+        local surfaceHit = Workspace:Raycast(probeOrigin, Vector3.new(0, -(maxHeight + 0.6), 0), rayParams)
+        if not surfaceHit or surfaceHit.Normal.Y < 0.5 then return end
 
         local verticalDelta = surfaceHit.Position.Y - hrp.Position.Y
-        if verticalDelta <= 0.6 or verticalDelta > settings.maxHeight + 0.35 then return end
+        if verticalDelta <= 0.4 or verticalDelta > maxHeight then return end
+        local clearanceHit = Workspace:Raycast(hrp.Position + Vector3.new(0, 2, 0), Vector3.new(0, verticalDelta + 0.6, 0), rayParams)
+        if clearanceHit then return end
 
         settings.lastStepAt = now
 
-        -- launch upward with velocity instead of CFrame teleport
-        local launchPower = math.clamp(verticalDelta * 8, 20, 80)
-        hrp.AssemblyLinearVelocity = Vector3.new(
-            hrp.AssemblyLinearVelocity.X,
-            launchPower,
-            hrp.AssemblyLinearVelocity.Z
-        )
+        hrp.CFrame = hrp.CFrame + Vector3.new(0, verticalDelta, 0)
     end))
 end
 
@@ -1753,9 +1762,6 @@ function toggleSafeWalk(enabled)
     cleanupModule("SafeWalk")
     if not enabled then return end
 
-    local lastSafePosition
-    local lastGroundedAt = 0
-
     addConnection("SafeWalk", RunService.Heartbeat:Connect(function()
         if not moduleStates["SafeWalk"] then return end
         local char = getCharacter(lplr)
@@ -1763,53 +1769,23 @@ function toggleSafeWalk(enabled)
         local hrp = getHRP(char)
         if not hum or not hrp or hum.Health <= 0 then return end
 
-        local settings = moduleSettings["SafeWalk"]
         local moveDirection = hum.MoveDirection
-        local horizontalSpeed = Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z).Magnitude
-        if moveDirection.Magnitude < 0.02 and horizontalSpeed < 0.2 then
-            return
-        end
-
-        local humanoidState = hum:GetState()
-        local isAirborne = hum.FloorMaterial == Enum.Material.Air
-            or humanoidState == Enum.HumanoidStateType.Freefall
-            or humanoidState == Enum.HumanoidStateType.Jumping
-        if isAirborne then
-            return
-        end
+        if moveDirection.Magnitude < 0.02 then return end
 
         local rayParams = RaycastParams.new()
         rayParams.FilterType = Enum.RaycastFilterType.Exclude
         rayParams.FilterDescendantsInstances = {char}
         rayParams.IgnoreWater = true
 
-        local footRay = Workspace:Raycast(hrp.Position, Vector3.new(0, -6, 0), rayParams)
-        if footRay then
-            lastSafePosition = hrp.Position
-            lastGroundedAt = tick()
-        end
-
-        local probeDirection = moveDirection.Magnitude > 0 and moveDirection.Unit or Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z).Unit
-        local probeDistance = 1.9
-        local probeOrigin = hrp.Position + (probeDirection * probeDistance)
-        local edgeRay = Workspace:Raycast(probeOrigin + Vector3.new(0, 0.5, 0), Vector3.new(0, -math.max(settings.maxDrop or 4.5, 2), 0), rayParams)
-
-        if edgeRay then
-            return
-        end
-
-        if settings.mode == "Normal" then
-            if lastSafePosition then
-                hrp.CFrame = CFrame.new(lastSafePosition)
-                hrp.AssemblyLinearVelocity = Vector3.new(0, hrp.AssemblyLinearVelocity.Y, 0)
-            end
-        else
-            local shouldRescue = tick() - lastGroundedAt > 0.05 or hrp.AssemblyLinearVelocity.Y < -8
-            if shouldRescue and lastSafePosition then
-                hrp.CFrame = CFrame.new(lastSafePosition + Vector3.new(0, 1.5, 0))
-                hrp.AssemblyLinearVelocity = Vector3.zero
-            end
-        end
+        local settings = moduleSettings["SafeWalk"] or {}
+        local maxDrop = math.clamp(tonumber(settings.maxDrop) or 4.5, 1, 20)
+        local probeDirection = Vector3.new(moveDirection.X, 0, moveDirection.Z)
+        if probeDirection.Magnitude < 0.01 then return end
+        local probeOrigin = hrp.Position + (probeDirection.Unit * 1.7) + Vector3.new(0, 0.5, 0)
+        local edgeRay = Workspace:Raycast(probeOrigin, Vector3.new(0, -maxDrop, 0), rayParams)
+        if edgeRay then return end
+        local vel = hrp.AssemblyLinearVelocity
+        hrp.AssemblyLinearVelocity = Vector3.new(0, vel.Y, 0)
     end))
 end
 
