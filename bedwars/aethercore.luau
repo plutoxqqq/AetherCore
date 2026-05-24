@@ -4931,9 +4931,10 @@ end
 
 Aether.UI.ScriptHub.setupDashboardPanel()
 
-setupScriptHubDashboardPanel()
 
-local function setupSettingsDashboardPanel()
+Aether.UI.Settings = Aether.UI.Settings or {}
+
+function Aether.UI.Settings.setupDashboardPanel()
     local settingsHeader = Instance.new("Frame")
     settingsHeader.Size = UDim2.new(1, -20, 0, 84)
     settingsHeader.Position = UDim2.new(0, 10, 0, 12)
@@ -5021,9 +5022,9 @@ local function setupSettingsDashboardPanel()
     infoText.Parent = infoCard
 end
 
-setupSettingsDashboardPanel()
+Aether.UI.Settings.setupDashboardPanel()
 
-local function setupTopBarAndStatusControls()
+function setupTopBarAndStatusControls()
     local refs = {}
 
     refs.searchBox = Instance.new("TextBox")
@@ -5092,7 +5093,7 @@ local function setupTopBarAndStatusControls()
     return refs
 end
 
-local topBarStatusRefs = setupTopBarAndStatusControls()
+topBarStatusRefs = setupTopBarAndStatusControls()
 
 makeDraggable(mainPanel, mainTop)
 makeDraggable(topBar, topBar)
@@ -5234,15 +5235,15 @@ initializeClientSettingsPersistence()
 -- windows and category creation
 --====================================================
 
-local moduleRuntime = {}
+moduleRuntime = {}
 
-local function setScreenGuiEnabled(enabled)
+function setScreenGuiEnabled(enabled)
     if screenGui and screenGui.Parent then
         screenGui.Enabled = enabled
     end
 end
 
-local function toggleFOV(enabled)
+function toggleFOV(enabled)
     cleanupModule("FOV")
     local cam = Workspace.CurrentCamera
     if not cam then return end
@@ -5254,7 +5255,7 @@ local function toggleFOV(enabled)
     end
 end
 
-local function toggleCrosshair(enabled)
+function toggleCrosshair(enabled)
     cleanupModule("Crosshair")
     local current = lplr:GetMouse()
     if enabled then
@@ -5265,7 +5266,7 @@ local function toggleCrosshair(enabled)
     end
 end
 
-local function toggleViewmodel(enabled)
+function toggleViewmodel(enabled)
     cleanupModule("Viewmodel")
     local function applyOffsets()
         local char = lplr.Character
@@ -5283,15 +5284,15 @@ local function toggleViewmodel(enabled)
     end
 end
 
-local function togglePickupRange(enabled)
+function togglePickupRange(enabled)
     if enabled then moduleStates.FastPickup = true; toggleFastPickup(true) else toggleFastPickup(false); moduleStates.FastPickup = false end
 end
 
-local function toggleInterface(enabled)
+function toggleInterface(enabled)
     setScreenGuiEnabled(enabled)
 end
 
-local function toggleUICleanup(enabled)
+function toggleUICleanup(enabled)
     cleanupModule("UI Cleanup")
     if enabled then
         moduleRuntime.UICleanup = {FogEnd = Lighting.FogEnd, Bloom = Lighting:FindFirstChildOfClass("BloomEffect")}
@@ -5303,7 +5304,7 @@ local function toggleUICleanup(enabled)
     end
 end
 
-local function toggleWinEffect(enabled)
+function toggleWinEffect(enabled)
     cleanupModule("WinEffect")
     if not enabled then return end
     addConnection("WinEffect", TextChatService.MessageReceived:Connect(function(msg)
@@ -5320,7 +5321,7 @@ local function toggleWinEffect(enabled)
     end))
 end
 
-local function toggleBedPlates(enabled)
+function toggleBedPlates(enabled)
     cleanupModule("BedPlates")
     if not enabled then
         for _, taggedBed in ipairs(CollectionService:GetTagged("bed")) do
@@ -5353,12 +5354,12 @@ local function toggleBedPlates(enabled)
     addConnection("BedPlates", CollectionService:GetInstanceAddedSignal("bed"):Connect(decorate))
 end
 
-local function toggleBreaker(enabled)
+function toggleBreaker(enabled)
     -- Partial by design: this uses AetherCore Nuker path instead of Vape block-break controller hooks.
     toggleNuker(enabled)
 end
 
-local function toggleAutoPearl(enabled)
+function toggleAutoPearl(enabled)
     cleanupModule("AutoPearl")
     if not enabled then return end
     addConnection("AutoPearl", RunService.Heartbeat:Connect(function()
@@ -5373,7 +5374,7 @@ local function toggleAutoPearl(enabled)
     end))
 end
 
-local function toggleRavenTP(enabled)
+function toggleRavenTP(enabled)
     cleanupModule("RavenTP")
     if not enabled then return end
     addConnection("RavenTP", UserInputService.InputBegan:Connect(function(input, gpe)
@@ -5385,7 +5386,7 @@ local function toggleRavenTP(enabled)
     end))
 end
 
-local function toggleMissileTP(enabled)
+function toggleMissileTP(enabled)
     cleanupModule("MissileTP")
     if not enabled then return end
     addConnection("MissileTP", UserInputService.InputBegan:Connect(function(input, gpe)
@@ -5397,7 +5398,7 @@ local function toggleMissileTP(enabled)
     end))
 end
 
-local function toggleArmorSwitch(enabled)
+function toggleArmorSwitch(enabled)
     cleanupModule("ArmorSwitch")
     if not enabled then return end
     -- Partial by design: inventory-slot swap APIs vary between BedWars versions.
@@ -5406,7 +5407,7 @@ local function toggleArmorSwitch(enabled)
     end))
 end
 
-local function toggleAutoBank(enabled)
+function toggleAutoBank(enabled)
     cleanupModule("AutoBank")
     if not enabled then return end
     -- Partial by design: personal chest deposit remotes are not consistently discoverable.
@@ -5415,7 +5416,7 @@ local function toggleAutoBank(enabled)
     end))
 end
 
-local function toggleAutoConsume(enabled)
+function toggleAutoConsume(enabled)
     cleanupModule("AutoConsume")
     if not enabled then return end
     addConnection("AutoConsume", RunService.Heartbeat:Connect(function()
@@ -5423,7 +5424,7 @@ local function toggleAutoConsume(enabled)
     end))
 end
 
-local function toggleAutoHotbar(enabled)
+function toggleAutoHotbar(enabled)
     cleanupModule("AutoHotbar")
     if not enabled then return end
     addConnection("AutoHotbar", RunService.Heartbeat:Connect(function()
@@ -5431,7 +5432,7 @@ local function toggleAutoHotbar(enabled)
     end))
 end
 
-local function toggleFastDrop(enabled)
+function toggleFastDrop(enabled)
     cleanupModule("FastDrop")
     if not enabled then return end
     addConnection("FastDrop", UserInputService.InputBegan:Connect(function(input, gpe)
@@ -5443,7 +5444,7 @@ local function toggleFastDrop(enabled)
     end))
 end
 
-local function toggleFastConsume(enabled)
+function toggleFastConsume(enabled)
     cleanupModule("FastConsume")
     if not enabled then return end
     addConnection("FastConsume", RunService.Heartbeat:Connect(function()
@@ -5451,7 +5452,7 @@ local function toggleFastConsume(enabled)
     end))
 end
 
-local function toggleStorageESP(enabled)
+function toggleStorageESP(enabled)
     cleanupModule("StorageESP")
     if not enabled then
         for _, chest in ipairs(CollectionService:GetTagged("chest")) do
@@ -5476,7 +5477,7 @@ local function toggleStorageESP(enabled)
     addConnection("StorageESP", CollectionService:GetInstanceAddedSignal("chest"):Connect(mark))
 end
 
-local function toggleKitESP(enabled)
+function toggleKitESP(enabled)
     cleanupModule("KitESP")
     local tags = {"lucky_block", "void_regent", "fisherman_catch"}
     if not enabled then
@@ -5506,7 +5507,7 @@ local function toggleKitESP(enabled)
     end
 end
 
-local function toggleHealth(enabled)
+function toggleHealth(enabled)
     cleanupModule("Health")
     if not enabled then
         if moduleRuntime.HealthLabel then
@@ -5538,23 +5539,23 @@ local function toggleHealth(enabled)
     end))
 end
 
-local function toggleHitBoxes(enabled)
+function toggleHitBoxes(enabled)
     toggleReach(enabled)
 end
 
-local function toggleTriggerBot(enabled)
+function toggleTriggerBot(enabled)
     toggleAutoClicker(enabled)
 end
 
-local function toggleProjectileAura(enabled)
+function toggleProjectileAura(enabled)
     toggleAimbot(enabled)
 end
 
-local function toggleProjectileAimbot(enabled)
+function toggleProjectileAimbot(enabled)
     toggleAimbot(enabled)
 end
 
-local function toggleSoundChanger(enabled)
+function toggleSoundChanger(enabled)
     cleanupModule("SoundChanger")
     if not enabled then return end
     addConnection("SoundChanger", RunService.Heartbeat:Connect(function()
@@ -5562,7 +5563,7 @@ local function toggleSoundChanger(enabled)
     end))
 end
 
-local function toggleSongBeats(enabled)
+function toggleSongBeats(enabled)
     cleanupModule("Song Beats")
     if not enabled then return end
     local sound = Instance.new("Sound")
@@ -5579,7 +5580,7 @@ local function toggleSongBeats(enabled)
     end))
 end
 
-local function toggleKillEffect(enabled)
+function toggleKillEffect(enabled)
     cleanupModule("Kill Effect")
     if not enabled then return end
     addConnection("Kill Effect", TextChatService.MessageReceived:Connect(function(msg)
@@ -5600,7 +5601,7 @@ local function toggleKillEffect(enabled)
     end))
 end
 
-local function toggleReachDisplay(enabled)
+function toggleReachDisplay(enabled)
     cleanupModule("Reach Display")
     if not enabled then
         if moduleRuntime.ReachDisplayLabel then
@@ -5630,7 +5631,7 @@ local function toggleReachDisplay(enabled)
     end))
 end
 
-local function toggleCleanKit(enabled)
+function toggleCleanKit(enabled)
     cleanupModule("Clean Kit")
     if enabled then
         local gui = lplr:FindFirstChildOfClass("PlayerGui")
@@ -5643,7 +5644,7 @@ local function toggleCleanKit(enabled)
     end
 end
 
-local function toggleBedBreakEffect(enabled)
+function toggleBedBreakEffect(enabled)
     cleanupModule("Bed Break Effect")
     if not enabled then return end
     addConnection("Bed Break Effect", TextChatService.MessageReceived:Connect(function(msg)
@@ -5662,7 +5663,7 @@ local function toggleBedBreakEffect(enabled)
     end))
 end
 
-local function toggleDamageIndicator(enabled)
+function toggleDamageIndicator(enabled)
     cleanupModule("Damage Indicator")
     if not enabled then return end
     addConnection("Damage Indicator", Workspace.DescendantAdded:Connect(function(obj)
@@ -5673,7 +5674,7 @@ local function toggleDamageIndicator(enabled)
         end
     end))
 end
-local function toggleAlias(handler)
+function toggleAlias(handler)
     return function(enabled)
         if handler then
             handler(enabled)
@@ -5681,7 +5682,7 @@ local function toggleAlias(handler)
     end
 end
 
-local function toggleAntiAFK(enabled)
+function toggleAntiAFK(enabled)
     if enabled then
         moduleConnections["AntiAFKPulse"] = moduleConnections["AntiAFKPulse"] or RunService.Heartbeat:Connect(function()
             local character = lplr.Character
@@ -5699,7 +5700,7 @@ local function toggleAntiAFK(enabled)
     end
 end
 
-local vapePalette = {
+vapePalette = {
     bg = Color3.fromRGB(18, 18, 18),
     bg2 = Color3.fromRGB(22, 22, 22),
     window = Color3.fromRGB(28, 28, 28),
@@ -5716,7 +5717,7 @@ local vapePalette = {
     danger = palette.danger or Color3.fromRGB(180, 65, 65)
 }
 
-local function clearChildrenExceptLayout(parent)
+function clearChildrenExceptLayout(parent)
     for _, child in ipairs(parent:GetChildren()) do
         if not child:IsA("UIListLayout") and not child:IsA("UIPadding") then
             child:Destroy()
@@ -5724,7 +5725,7 @@ local function clearChildrenExceptLayout(parent)
     end
 end
 
-local function addStroke(target, color, transparency, thickness)
+function addStroke(target, color, transparency, thickness)
     local stroke = Instance.new("UIStroke")
     stroke.Color = color or vapePalette.stroke
     stroke.Transparency = transparency or 0.35
@@ -5733,7 +5734,7 @@ local function addStroke(target, color, transparency, thickness)
     return stroke
 end
 
-local function addGradient(target, colorA, colorB, rotation)
+function addGradient(target, colorA, colorB, rotation)
     local gradient = Instance.new("UIGradient")
     gradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, colorA),
@@ -5744,26 +5745,26 @@ local function addGradient(target, colorA, colorB, rotation)
     return gradient
 end
 
-local function styleVapeWindow(frame)
+function styleVapeWindow(frame)
     frame.BackgroundColor3 = vapePalette.window
     frame.BorderSizePixel = 0
     addCorner(frame, 4)
     addStroke(frame, vapePalette.stroke, 0.25, 1)
 end
 
-local function styleVapeHeader(frame)
+function styleVapeHeader(frame)
     frame.BackgroundColor3 = vapePalette.bg
     frame.BorderSizePixel = 0
     addCorner(frame, 4)
     addGradient(frame, Color3.fromRGB(31, 31, 31), Color3.fromRGB(18, 18, 18), 90)
 end
 
-local function setButtonState(button, active)
+function setButtonState(button, active)
     button.BackgroundColor3 = active and vapePalette.rowOn or vapePalette.row
     button.TextColor3 = active and vapePalette.text or vapePalette.muted
 end
 
-local function createVapeSidebarButton(parent, label, icon, active)
+function createVapeSidebarButton(parent, label, icon, active)
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, 0, 0, 34)
     button.BackgroundColor3 = active and vapePalette.rowOn or vapePalette.row
@@ -5806,7 +5807,7 @@ mainTitle.TextColor3 = vapePalette.text
 mainTitle.Position = UDim2.new(0, 12, 0, 0)
 mainTitle.Size = UDim2.new(1, -24, 1, 0)
 
-local mainAccentLine = Instance.new("Frame")
+mainAccentLine = Instance.new("Frame")
 mainAccentLine.Size = UDim2.new(1, 0, 0, 2)
 mainAccentLine.Position = UDim2.new(0, 0, 1, -2)
 mainAccentLine.BackgroundColor3 = vapePalette.accent
@@ -5846,7 +5847,7 @@ topBarStatusRefs.statusDiscord.TextSize = 14
 topBarStatusRefs.statusTime.Font = Enum.Font.SourceSans
 topBarStatusRefs.statusTime.TextSize = 14
 
-local function createCategoryColumn(categoryName, index)
+function createCategoryColumn(categoryName, index)
     local panel = createPanel(categoryName .. "Column", UDim2.new(0, 220, 0, 520), UDim2.new(0, 295 + ((index - 1) * 228), 0, 155))
     panel.Visible = false
     styleVapeWindow(panel)
@@ -5925,13 +5926,13 @@ local function createCategoryColumn(categoryName, index)
     return panel, list
 end
 
-local categoryLists = {}
+categoryLists = {}
 for i, name in ipairs(categoryOrder) do
     local panel, list = createCategoryColumn(name, i)
     categoryLists[name] = list
 end
 
-local categoryData = {
+categoryData = {
     {name = "Combat", icon = "⚔"},
     {name = "Blatant", icon = "◆"},
     {name = "Render", icon = "◉"},
@@ -5976,7 +5977,7 @@ for _, category in ipairs(categoryData) do
     end)
 end
 
-local settingsTabSeparator = Instance.new("Frame")
+settingsTabSeparator = Instance.new("Frame")
 settingsTabSeparator.Size = UDim2.new(1, 0, 0, 10)
 settingsTabSeparator.BackgroundTransparency = 1
 settingsTabSeparator.Parent = mainList
@@ -5984,7 +5985,7 @@ settingsTabSeparator.Parent = mainList
 settingsTabButton = createVapeSidebarButton(mainList, "Settings", "⚙", false)
 scriptHubTabButton = createVapeSidebarButton(mainList, "ScriptHub", "✦", false)
 
-local function uiCreateSlider(parent, name, min, max, default, callback, options)
+function uiCreateSlider(parent, name, min, max, default, callback, options)
     options = options or {}
 
     local frame = Instance.new("Frame")
@@ -6086,7 +6087,7 @@ local function uiCreateSlider(parent, name, min, max, default, callback, options
     end)
 end
 
-local function uiCreateToggle(parent, name, default, callback)
+function uiCreateToggle(parent, name, default, callback)
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, 0, 0, 28)
     button.BackgroundColor3 = default and vapePalette.rowOn or vapePalette.row
@@ -6113,7 +6114,7 @@ local function uiCreateToggle(parent, name, default, callback)
     end)
 end
 
-local function uiCreateDropdown(parent, name, options, default, callback)
+function uiCreateDropdown(parent, name, options, default, callback)
     local button = Instance.new("TextButton")
     button.Size = UDim2.new(1, 0, 0, 28)
     button.BackgroundColor3 = vapePalette.row
@@ -6141,7 +6142,7 @@ local function uiCreateDropdown(parent, name, options, default, callback)
     end)
 end
 
-local function uiCreateTextBox(parent, name, default, callback)
+function uiCreateTextBox(parent, name, default, callback)
     local holder = Instance.new("Frame")
     holder.Size = UDim2.new(1, 0, 0, 30)
     holder.BackgroundColor3 = vapePalette.row
@@ -6177,7 +6178,7 @@ local function uiCreateTextBox(parent, name, default, callback)
     end)
 end
 
-local function createSettingsContent(parent, moduleName)
+function createSettingsContent(parent, moduleName)
     local defs = moduleDefinitions[moduleName] or {}
     if #defs == 0 then
         local label = Instance.new("TextLabel")
@@ -6223,7 +6224,7 @@ local function createSettingsContent(parent, moduleName)
     end
 end
 
-local function createModule(category, moduleName, defaultEnabled, toggleCallback)
+function createModule(category, moduleName, defaultEnabled, toggleCallback)
     local list = categoryLists[category]
     if not list then return end
 
@@ -6430,13 +6431,13 @@ local function createModule(category, moduleName, defaultEnabled, toggleCallback
 end
 
 
-local function createRegisteredModule(category, name, defaultEnabled, toggleCallback, settingsDefinition)
+function createRegisteredModule(category, name, defaultEnabled, toggleCallback, settingsDefinition)
     moduleDefinitions[name] = settingsDefinition or {}
     createModule(category, name, defaultEnabled, toggleCallback)
 end
 
 -- Added modules from 6872274481.vape and mapped to working AetherCore handlers.
-local function registerAetherModules()
+function registerAetherModules()
 createRegisteredModule("Combat", "TriggerBot", false, toggleTriggerBot, {})
 createRegisteredModule("Blatant", "AntiFall", false, toggleAlias(toggleAntiVoid), {})
 createRegisteredModule("Blatant", "HitBoxes", false, toggleHitBoxes, {})
@@ -6666,7 +6667,7 @@ end
 
 registerAetherModules()
 
-local function refreshSearch()
+function refreshSearch()
     local visibleModulesByCategory = {}
     for _, ui in pairs(moduleUi) do
         local moduleVisible = filterMatches(ui.name)
@@ -6690,7 +6691,7 @@ local function refreshSearch()
     end
 end
 
-local function setActiveSidebarTab(tabName)
+function setActiveSidebarTab(tabName)
     activeSidebarTab = tabName
     homeDashboardPanel.Visible = tabName == "Home"
     settingsDashboardPanel.Visible = tabName == "Settings"
@@ -6709,7 +6710,7 @@ local function setActiveSidebarTab(tabName)
     refreshSearch()
 end
 
-local function setupNavigationAndCloseHandlers()
+function setupNavigationAndCloseHandlers()
     topBarStatusRefs.searchBox:GetPropertyChangedSignal("Text"):Connect(function()
         searchText = topBarStatusRefs.searchBox.Text or ""
         refreshSearch()
