@@ -5104,6 +5104,10 @@ function AetherFilterMatches(name, searchText)
     return q == "" or string.find(string.lower(name), q, 1, true) ~= nil
 end
 
+function filterMatches(name)
+    return AetherFilterMatches(name, searchText)
+end
+
 AetherValidationRules = {
     {"KillAura", "range", 5, 20, 14},
     {"KillAura", "swingSpeed", 1, 20, 18},
@@ -6670,7 +6674,7 @@ registerAetherModules()
 function refreshSearch()
     local visibleModulesByCategory = {}
     for _, ui in pairs(moduleUi) do
-        local moduleVisible = filterMatches(ui.name)
+        local moduleVisible = AetherFilterMatches(ui.name, searchText)
         ui.setVisible(moduleVisible)
         if moduleVisible then
             visibleModulesByCategory[ui.category] = true
