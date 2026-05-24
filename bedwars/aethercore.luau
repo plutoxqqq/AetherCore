@@ -1,6 +1,6 @@
 -- AetherCore :)
 
-local consoleLog = (typeof(console) == "table" and type(console.log) == "function") and console.log or print
+consoleLog = (typeof(console) == "table" and type(console.log) == "function") and console.log or print
 consoleLog("Welcome to AetherCore")
 consoleLog("Script is loading...")
 
@@ -8,7 +8,7 @@ consoleLog("Script is loading...")
 -- aether bootstrap containers / scoped init
 --====================================================
 
-local Aether = {
+Aether = {
     Services = {},
     State = {},
     Settings = {},
@@ -17,7 +17,7 @@ local Aether = {
     Helpers = {}
 }
 
-local function initServices()
+function initServices()
     local Services = Aether.Services
     Services.Players = game:GetService("Players")
     Services.UserInputService = game:GetService("UserInputService")
@@ -39,7 +39,7 @@ local function initServices()
     Services.Camera = Services.Workspace.CurrentCamera
 end
 
-local function initSettings()
+function initSettings()
     Aether.Settings.moduleSettings = {
         KillAura = {range = 14, swingSpeed = 18},
         AutoClicker = {cps = 10},
@@ -82,7 +82,7 @@ local function initSettings()
     }
 end
 
-local function initState()
+function initState()
     local State = Aether.State
     State.moduleStates = {}
     State.moduleConnections = {}
@@ -102,7 +102,7 @@ local function initState()
     State.warnedMissingObjects = {}
 end
 
-local function initHelpers()
+function initHelpers()
     local Helpers = Aether.Helpers
 
     function Helpers.logError(scope, err)
@@ -172,60 +172,60 @@ initSettings()
 initState()
 initHelpers()
 
-local Players = Aether.Services.Players
-local UserInputService = Aether.Services.UserInputService
-local TextChatService = Aether.Services.TextChatService
-local TweenService = Aether.Services.TweenService
-local HttpService = Aether.Services.HttpService
-local ReplicatedStorage = Aether.Services.ReplicatedStorage
-local RunService = Aether.Services.RunService
-local Workspace = Aether.Services.Workspace
-local Debris = Aether.Services.Debris
-local VirtualUser = Aether.Services.VirtualUser
-local CollectionService = Aether.Services.CollectionService
-local Lighting = Aether.Services.Lighting
-local StarterGui = Aether.Services.StarterGui
+Players = Aether.Services.Players
+UserInputService = Aether.Services.UserInputService
+TextChatService = Aether.Services.TextChatService
+TweenService = Aether.Services.TweenService
+HttpService = Aether.Services.HttpService
+ReplicatedStorage = Aether.Services.ReplicatedStorage
+RunService = Aether.Services.RunService
+Workspace = Aether.Services.Workspace
+Debris = Aether.Services.Debris
+VirtualUser = Aether.Services.VirtualUser
+CollectionService = Aether.Services.CollectionService
+Lighting = Aether.Services.Lighting
+StarterGui = Aether.Services.StarterGui
 
-local lplr = Aether.Services.LocalPlayer
-local mouse = Aether.Services.Mouse
-local camera = Aether.Services.Camera
+lplr = Aether.Services.LocalPlayer
+mouse = Aether.Services.Mouse
+camera = Aether.Services.Camera
 
-local moduleSettings = Aether.Settings.moduleSettings
-local moduleStates = Aether.State.moduleStates
-local moduleConnections = Aether.State.moduleConnections
-local moduleKeybinds = Aether.State.moduleKeybinds
-local moduleUi = Aether.State.moduleUi
-local moduleHandlers = Aether.State.moduleHandlers
-local guiEnabled = Aether.State.guiEnabled
-local autoToxicEnabled = Aether.State.autoToxicEnabled
-local originalCharacterValues = Aether.State.originalCharacterValues
-local SETTINGS_STORE_KEY = Aether.State.SETTINGS_STORE_KEY
-local AUTO_TOXIC_CONNECTION_KEY = Aether.State.AUTO_TOXIC_CONNECTION_KEY
-local mouseMoveRelative = Aether.State.mouseMoveRelative
-local clipboardSetter = Aether.State.clipboardSetter
-local sharedEnvironmentGetter = Aether.State.sharedEnvironmentGetter
-local autoToxicMessageConnection = Aether.State.autoToxicMessageConnection
-local moduleConflictMap = Aether.State.moduleConflictMap
+moduleSettings = Aether.Settings.moduleSettings
+moduleStates = Aether.State.moduleStates
+moduleConnections = Aether.State.moduleConnections
+moduleKeybinds = Aether.State.moduleKeybinds
+moduleUi = Aether.State.moduleUi
+moduleHandlers = Aether.State.moduleHandlers
+guiEnabled = Aether.State.guiEnabled
+autoToxicEnabled = Aether.State.autoToxicEnabled
+originalCharacterValues = Aether.State.originalCharacterValues
+SETTINGS_STORE_KEY = Aether.State.SETTINGS_STORE_KEY
+AUTO_TOXIC_CONNECTION_KEY = Aether.State.AUTO_TOXIC_CONNECTION_KEY
+mouseMoveRelative = Aether.State.mouseMoveRelative
+clipboardSetter = Aether.State.clipboardSetter
+sharedEnvironmentGetter = Aether.State.sharedEnvironmentGetter
+autoToxicMessageConnection = Aether.State.autoToxicMessageConnection
+moduleConflictMap = Aether.State.moduleConflictMap
 
-local logError = Aether.Helpers.logError
-local safeCall = Aether.Helpers.safeCall
-local warnMissingOnce = Aether.Helpers.warnMissingOnce
-local getHandleInvItem = Aether.Helpers.getHandleInvItem
-local getHumanoidScaleValue = Aether.Helpers.getHumanoidScaleValue
-local clampSetting = Aether.Helpers.clampSetting
-local sayInChat = Aether.Helpers.sayInChat
+logError = Aether.Helpers.logError
+safeCall = Aether.Helpers.safeCall
+warnMissingOnce = Aether.Helpers.warnMissingOnce
+getHandleInvItem = Aether.Helpers.getHandleInvItem
+getHumanoidScaleValue = Aether.Helpers.getHumanoidScaleValue
+clampSetting = Aether.Helpers.clampSetting
+sayInChat = Aether.Helpers.sayInChat
 
 --====================================================
 -- controller and remote resolvers
 --====================================================
 
-local KnitClient, CombatController, BedwarsShopController, BlockPlacementController, ClientHandler
-local resolvedCombatController, resolvedBlockPlacementController
-local cachedNetManagedFolder
-local cachedDropItemRemote
-local cachedDamageBlockRemote
+KnitClient, CombatController, BedwarsShopController, BlockPlacementController, ClientHandler = nil, nil, nil, nil, nil
+resolvedCombatController, resolvedBlockPlacementController = nil, nil
+cachedNetManagedFolder = nil
+cachedDropItemRemote = nil
+cachedDamageBlockRemote = nil
 
-local function fetchControllers()
+function fetchControllers()
     local knitPaths = {
         ReplicatedStorage:FindFirstChild("Packages") and ReplicatedStorage.Packages:FindFirstChild("Knit"),
         ReplicatedStorage:FindFirstChild("rbxts_include") and ReplicatedStorage.rbxts_include:FindFirstChild("node_modules"):FindFirstChild("@rbxts"):FindFirstChild("net"):FindFirstChild("out")
@@ -247,8 +247,8 @@ local function fetchControllers()
 end
 fetchControllers()
 
-local vapeFunctionTable = {}
-local function refreshVapeFunctionTable()
+vapeFunctionTable = {}
+function refreshVapeFunctionTable()
     for _, value in ipairs(getgc(true)) do
         if type(value) == "table" then
             if rawget(value, "ClientStore") and not vapeFunctionTable.ClientStore then
@@ -271,7 +271,7 @@ local function refreshVapeFunctionTable()
 end
 pcall(refreshVapeFunctionTable)
 
-local function getNetManagedFolder()
+function getNetManagedFolder()
     if cachedNetManagedFolder and cachedNetManagedFolder.Parent then
         return cachedNetManagedFolder
     end
@@ -287,7 +287,7 @@ local function getNetManagedFolder()
     return cachedNetManagedFolder
 end
 
-local function getDropItemRemote()
+function getDropItemRemote()
     if cachedDropItemRemote and cachedDropItemRemote.Parent then
         return cachedDropItemRemote
     end
@@ -296,7 +296,7 @@ local function getDropItemRemote()
     return cachedDropItemRemote
 end
 
-local function getDamageBlockRemote()
+function getDamageBlockRemote()
     if cachedDamageBlockRemote and cachedDamageBlockRemote.Parent then
         return cachedDamageBlockRemote
     end
@@ -311,11 +311,11 @@ end
 -- character helpers
 --====================================================
 
-local function getCharacter(player)
+function getCharacter(player)
     return player and player.Character
 end
 
-local function isPlayerCharacterModel(model)
+function isPlayerCharacterModel(model)
     if not model or not model:IsA("Model") then
         return false
     end
@@ -327,15 +327,15 @@ local function isPlayerCharacterModel(model)
     return false
 end
 
-local function getHumanoid(char)
+function getHumanoid(char)
     return char and char:FindFirstChildOfClass("Humanoid")
 end
 
-local function getHRP(char)
+function getHRP(char)
     return char and char:FindFirstChild("HumanoidRootPart")
 end
 
-local function getHumanoidScale(humanoid, scaleName, defaultValue)
+function getHumanoidScale(humanoid, scaleName, defaultValue)
     local fallback = defaultValue or 1
     if not humanoid then
         return fallback
@@ -347,7 +347,7 @@ local function getHumanoidScale(humanoid, scaleName, defaultValue)
     return fallback
 end
 
-local function getCharacterAndHumanoid(player)
+function getCharacterAndHumanoid(player)
     local character = player and (player.Character or player.CharacterAdded:Wait())
     if not character then
         return nil, nil
@@ -360,14 +360,14 @@ end
 -- movement/raycast helpers
 --====================================================
 
-local function raycastToGround(origin, ignoreList, castDistance)
+function raycastToGround(origin, ignoreList, castDistance)
     local params = RaycastParams.new()
     params.FilterType = Enum.RaycastFilterType.Exclude
     params.FilterDescendantsInstances = ignoreList or {}
     return Workspace:Raycast(origin, Vector3.new(0, -(castDistance or 400), 0), params)
 end
 
-local function findNearestGroundPosition(origin, character, sampleRadius, sampleStep, verticalOffset)
+function findNearestGroundPosition(origin, character, sampleRadius, sampleStep, verticalOffset)
     local bestPosition = nil
     local closestPlanar = math.huge
     local radius = sampleRadius or 14
@@ -392,7 +392,7 @@ local function findNearestGroundPosition(origin, character, sampleRadius, sample
     return bestPosition
 end
 
-local function getCombatController()
+function getCombatController()
     if resolvedCombatController then
         return resolvedCombatController
     end
@@ -404,7 +404,7 @@ local function getCombatController()
     return resolvedCombatController
 end
 
-local function getBlockPlacementController()
+function getBlockPlacementController()
     if resolvedBlockPlacementController then
         return resolvedBlockPlacementController
     end
@@ -421,7 +421,7 @@ end
 -- item and tool helpers
 --====================================================
 
-local function doesToolNameMatch(tool, query)
+function doesToolNameMatch(tool, query)
     if not tool or not tool:IsA("Tool") or type(query) ~= "string" then
         return false
     end
@@ -430,7 +430,7 @@ local function doesToolNameMatch(tool, query)
     return normalizedToolName == normalizedQuery or normalizedToolName:find(normalizedQuery, 1, true) ~= nil
 end
 
-local function findToolInContainer(container, query)
+function findToolInContainer(container, query)
     if not container then
         return nil
     end
@@ -449,7 +449,7 @@ local function findToolInContainer(container, query)
     return nil
 end
 
-local function hasItem(itemName)
+function hasItem(itemName)
     if type(itemName) ~= "string" or itemName == "" then
         return false, nil
     end
@@ -469,7 +469,7 @@ local function hasItem(itemName)
     return false, nil
 end
 
-local function getHeldOrBackpackToolByKeywords(keywords)
+function getHeldOrBackpackToolByKeywords(keywords)
     if type(keywords) ~= "table" or #keywords == 0 then
         return nil
     end
@@ -513,20 +513,20 @@ local function getHeldOrBackpackToolByKeywords(keywords)
     return nil
 end
 
-local function getHeldOrBackpackBlockTool()
+function getHeldOrBackpackBlockTool()
     return getHeldOrBackpackToolByKeywords({"wool", "clay", "stone", "plank", "obsidian", "concrete", "glass"})
 end
 
-local function getHeldOrBackpackVoidDropTool()
+function getHeldOrBackpackVoidDropTool()
     return getHeldOrBackpackToolByKeywords({"diamond", "emerald", "iron", "gold"})
 end
 
-local function getHeldOrBackpackDaoTool()
+function getHeldOrBackpackDaoTool()
     local _, tool = hasItem("dao")
     return tool
 end
 
-local function equipToolIfNeeded(tool)
+function equipToolIfNeeded(tool)
     local char = getCharacter(lplr)
     local hum = getHumanoid(char)
     if not tool or not hum or not char then
@@ -546,7 +546,7 @@ local function equipToolIfNeeded(tool)
     return false
 end
 
-local function isDaoTool(tool)
+function isDaoTool(tool)
     if not tool or not tool:IsA("Tool") then
         return false
     end
@@ -554,7 +554,7 @@ local function isDaoTool(tool)
     return lowered:find("dao") ~= nil
 end
 
-local function useDaoAbility()
+function useDaoAbility()
     local char = getCharacter(lplr)
     if not char then return false end
     local dao = getHeldOrBackpackDaoTool()
@@ -593,7 +593,7 @@ end
 -- targeting helpers
 --====================================================
 
-local function getTargetByFilters(range, attackPlayers, attackNPCs, ignoreTeammates)
+function getTargetByFilters(range, attackPlayers, attackNPCs, ignoreTeammates)
     local myChar = getCharacter(lplr)
     local myHRP = getHRP(myChar)
     if not myHRP then
@@ -643,7 +643,7 @@ local function getTargetByFilters(range, attackPlayers, attackNPCs, ignoreTeamma
 end
 
 
-local function getNearestEnemy(range, ignoreTeam)
+function getNearestEnemy(range, ignoreTeam)
     local myChar = getCharacter(lplr)
     if not myChar then return nil, nil end
     local myTeam = ignoreTeam and lplr.Team or nil
@@ -691,7 +691,7 @@ local function getNearestEnemy(range, ignoreTeam)
     return nearest, shortest
 end
 
-local function getPlayerBedwarsTeamId(player)
+function getPlayerBedwarsTeamId(player)
     if not player then
         return nil
     end
@@ -717,7 +717,7 @@ local function getPlayerBedwarsTeamId(player)
     return nil
 end
 
-local function arePlayersTeammates(playerA, playerB)
+function arePlayersTeammates(playerA, playerB)
     if not playerA or not playerB then
         return false
     end
@@ -729,7 +729,7 @@ local function arePlayersTeammates(playerA, playerB)
     return teamA ~= nil and teamB ~= nil and teamA == teamB
 end
 
-local function attackTargetWithBedwarsApi(targetCharacter)
+function attackTargetWithBedwarsApi(targetCharacter)
     if not targetCharacter then
         return false
     end
@@ -768,7 +768,7 @@ local function attackTargetWithBedwarsApi(targetCharacter)
     return false
 end
 
-local function getEffectiveCombatRange(baseRange)
+function getEffectiveCombatRange(baseRange)
     local effectiveRange = baseRange or 0
     if moduleStates["Reach"] and moduleSettings["Reach"] then
         effectiveRange = math.max(effectiveRange, moduleSettings["Reach"].hitRange or effectiveRange)
@@ -776,11 +776,11 @@ local function getEffectiveCombatRange(baseRange)
     return effectiveRange
 end
 
-local function getTargetAimPart(targetCharacter)
+function getTargetAimPart(targetCharacter)
     return targetCharacter and (targetCharacter:FindFirstChild("Head") or getHRP(targetCharacter))
 end
 
-local function isTargetWithinFov(targetCharacter, fovRadius)
+function isTargetWithinFov(targetCharacter, fovRadius)
     local myChar = getCharacter(lplr)
     local myHRP = getHRP(myChar)
     local targetPart = getTargetAimPart(targetCharacter)
@@ -803,7 +803,7 @@ local function isTargetWithinFov(targetCharacter, fovRadius)
     return angle <= (clampedFov / 2)
 end
 
-local function hasLineOfSight(targetCharacter)
+function hasLineOfSight(targetCharacter)
     local myChar = getCharacter(lplr)
     local myHRP = getHRP(myChar)
     local targetPart = getTargetAimPart(targetCharacter)
@@ -825,7 +825,7 @@ local function hasLineOfSight(targetCharacter)
     return raycastResult.Instance and raycastResult.Instance:IsDescendantOf(targetCharacter)
 end
 
-local function faceCharacterTarget(targetCharacter)
+function faceCharacterTarget(targetCharacter)
     local myChar = getCharacter(lplr)
     local myHRP = getHRP(myChar)
     local targetPart = getTargetAimPart(targetCharacter)
@@ -843,14 +843,14 @@ end
 -- module manager
 --====================================================
 
-local function addConnection(moduleName, connection)
+function addConnection(moduleName, connection)
     if not moduleConnections[moduleName] then
         moduleConnections[moduleName] = {}
     end
     table.insert(moduleConnections[moduleName], connection)
 end
 
-local function cleanupModule(moduleName)
+function cleanupModule(moduleName)
     if moduleConnections[moduleName] then
         for _, conn in ipairs(moduleConnections[moduleName]) do
             pcall(function() conn:Disconnect() end)
@@ -859,7 +859,7 @@ local function cleanupModule(moduleName)
     end
 end
 
-local function disableConflictingModules(moduleName)
+function disableConflictingModules(moduleName)
     local conflicts = moduleConflictMap[moduleName]
     if type(conflicts) ~= "table" then
         return
@@ -877,7 +877,7 @@ local function disableConflictingModules(moduleName)
     end
 end
 
-local function setModuleEnabled(moduleName, enabled)
+function setModuleEnabled(moduleName, enabled)
     moduleStates[moduleName] = enabled
     if moduleName == "AutoToxic" then
         autoToxicEnabled = enabled
@@ -897,7 +897,7 @@ end
 
 -- ui colors stay the same as original look
 
-local function performPrimaryClick()
+function performPrimaryClick()
     return safeCall("PrimaryClick", function()
         local mouseLocation = UserInputService:GetMouseLocation()
         local currentCamera = Workspace.CurrentCamera or camera
@@ -918,7 +918,7 @@ end
 -- ui components
 --====================================================
 
-local function legacyCreateSlider(parent, name, min, max, default, callback)
+function legacyCreateSlider(parent, name, min, max, default, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -8, 0, 42)
     frame.BackgroundTransparency = 1
@@ -1038,7 +1038,7 @@ local function legacyCreateSlider(parent, name, min, max, default, callback)
     }
 end
 
-local function legacyCreateToggle(parent, name, default, callback)
+function legacyCreateToggle(parent, name, default, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -8, 0, 30)
     frame.BackgroundTransparency = 1
@@ -1110,7 +1110,7 @@ local function legacyCreateToggle(parent, name, default, callback)
     }
 end
 
-local function legacyCreateDropdown(parent, name, options, default, callback)
+function legacyCreateDropdown(parent, name, options, default, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -8, 0, 30)
     frame.BackgroundTransparency = 1
@@ -1157,7 +1157,7 @@ local function legacyCreateDropdown(parent, name, options, default, callback)
     }
 end
 
-local function legacyCreateTextBox(parent, name, default, callback)
+function legacyCreateTextBox(parent, name, default, callback)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(1, -8, 0, 30)
     frame.BackgroundTransparency = 1
@@ -1227,9 +1227,9 @@ moduleSettings["KillAura"] = {
     targetSwitchDelay = 0.2
 }
 
-local killAuraLastSwing = 0
+killAuraLastSwing = 0
 
-local function isSwordTool(tool)
+function isSwordTool(tool)
     if not tool or not tool:IsA("Tool") then
         return false
     end
@@ -1241,7 +1241,7 @@ local function isSwordTool(tool)
         or n:find("dao") ~= nil
 end
 
-local function getHeldSword()
+function getHeldSword()
     local char = getCharacter(lplr)
     if not char then
         return nil
@@ -1255,7 +1255,7 @@ local function getHeldSword()
     return nil
 end
 
-local function getHeldOrBackpackSword()
+function getHeldOrBackpackSword()
     local char = getCharacter(lplr)
     if char then
         local heldTool = char:FindFirstChildOfClass("Tool")
@@ -1278,7 +1278,7 @@ local function getHeldOrBackpackSword()
     return nil
 end
 
-local function getKillAuraTarget(range, settings)
+function getKillAuraTarget(range, settings)
     local myChar = getCharacter(lplr)
     local myHRP = getHRP(myChar)
     if not myHRP then
@@ -1353,7 +1353,7 @@ local function getKillAuraTarget(range, settings)
     return bestTarget
 end
 
-local function toggleKillAura(enabled)
+function toggleKillAura(enabled)
     cleanupModule("KillAura")
     if not enabled then
         return
@@ -1477,7 +1477,7 @@ moduleSettings["Reach"] = {
     placeRange = 12
 }
 
-local function toggleReach(enabled)
+function toggleReach(enabled)
     cleanupModule("Reach")
 
     local function resetToolReach(tool)
@@ -1596,7 +1596,7 @@ end
 -- purpose: applies custom movement speed.
 moduleSettings["Speed"] = { speed = 24 }
 
-local function toggleSpeed(enabled)
+function toggleSpeed(enabled)
     cleanupModule("Speed")
     if not enabled then
         local char = getCharacter(lplr)
@@ -1628,7 +1628,7 @@ local function toggleSpeed(enabled)
     end))
 end
 
-local function toggleSprint(enabled)
+function toggleSprint(enabled)
     cleanupModule("Sprint")
     if not enabled then return end
     local function applySprint()
@@ -1671,7 +1671,7 @@ moduleSettings["Step"] = {
     stepCooldown = 0.09
 }
 
-local function toggleStep(enabled)
+function toggleStep(enabled)
     cleanupModule("Step")
     moduleSettings["Step"].lastStepAt = 0
 
@@ -1749,7 +1749,7 @@ moduleSettings["SafeWalk"] = {
     maxDrop = 4.5
 }
 
-local function toggleSafeWalk(enabled)
+function toggleSafeWalk(enabled)
     cleanupModule("SafeWalk")
     if not enabled then return end
 
@@ -1817,7 +1817,7 @@ moduleSettings["HighJump"] = {
     boost = 40
 }
 
-local function toggleHighJump(enabled)
+function toggleHighJump(enabled)
     cleanupModule("HighJump")
     if not enabled then
         return
@@ -1850,7 +1850,7 @@ moduleSettings["Fly"] = {
     tpDownReturnDelay = 0.2
 }
 
-local function toggleFly(enabled)
+function toggleFly(enabled)
     cleanupModule("Fly")
     if not enabled then
         local char = getCharacter(lplr)
@@ -1971,7 +1971,7 @@ moduleSettings["VerticalFly"] = {
     antiKickSink = 1.4
 }
 
-local function toggleVerticalFly(enabled)
+function toggleVerticalFly(enabled)
     cleanupModule("VerticalFly")
     local state = moduleSettings["VerticalFly"]
 
@@ -2071,7 +2071,7 @@ moduleSettings["AntiDeath"] = {
     voidOffset = 130
 }
 
-local function floorSnapPosition(origin, character, yOffset)
+function floorSnapPosition(origin, character, yOffset)
     local offset = yOffset or 3
     local ray = raycastToGround(origin + Vector3.new(0, 80, 0), {character}, 420)
     if ray then
@@ -2081,7 +2081,7 @@ local function floorSnapPosition(origin, character, yOffset)
     return sampled, sampled and (sampled.Y - offset) or nil
 end
 
-local function toggleAntiDeath(enabled)
+function toggleAntiDeath(enabled)
     cleanupModule("AntiDeath")
     if not enabled then
         local char = getCharacter(lplr)
@@ -2173,7 +2173,7 @@ moduleSettings["AntiHit"] = {
     antiDamageJitter = 2.2
 }
 
-local function toggleAntiHit(enabled)
+function toggleAntiHit(enabled)
     cleanupModule("AntiHit")
     if not enabled then
         local char = getCharacter(lplr)
@@ -2265,7 +2265,7 @@ moduleSettings["FastBreak"] = {
     attemptsPerPulse = 2
 }
 
-local function toggleFastBreak(enabled)
+function toggleFastBreak(enabled)
     cleanupModule("FastBreak")
     if not enabled then return end
 
@@ -2300,7 +2300,7 @@ moduleSettings["AutoVoidDrop"] = {
     dropInterval = 0.45
 }
 
-local function toggleAutoVoidDrop(enabled)
+function toggleAutoVoidDrop(enabled)
     cleanupModule("AutoVoidDrop")
     if not enabled then return end
 
@@ -2347,7 +2347,7 @@ local function toggleAutoVoidDrop(enabled)
 end
 
 
-local function toggleESP(enabled)
+function toggleESP(enabled)
     cleanupModule("ESP")
     if not enabled then
         for _, obj in ipairs(Workspace:GetDescendants()) do
@@ -2443,7 +2443,7 @@ end
 
 moduleSettings["Tracers"] = { transparency = 0.5 }
 
-local function clearTracerArtifacts()
+function clearTracerArtifacts()
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("Beam") and obj.Name == "TracerBeam" then
             obj:Destroy()
@@ -2455,7 +2455,7 @@ local function clearTracerArtifacts()
     end
 end
 
-local function toggleTracers(enabled)
+function toggleTracers(enabled)
     cleanupModule("Tracers")
     if not enabled then
         clearTracerArtifacts()
@@ -2539,7 +2539,7 @@ local function toggleTracers(enabled)
     end))
 end
 
-local function toggleBedESP(enabled)
+function toggleBedESP(enabled)
     cleanupModule("BedESP")
     if not enabled then return end
     local folder = Instance.new("Folder")
@@ -2563,7 +2563,7 @@ local function toggleBedESP(enabled)
     end))
 end
 
-local function toggleNameTags(enabled)
+function toggleNameTags(enabled)
     cleanupModule("NameTags")
     if not enabled then return end
     local tags = {}
@@ -2629,7 +2629,7 @@ moduleSettings["AutoToxic"] = {
     customPhrases = "outplayed|too easy|nt"
 }
 
-local function setupAutoToxic()
+function setupAutoToxic()
     local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
     local existingConnection = sharedEnvironment and sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY]
     if existingConnection then
@@ -2691,7 +2691,7 @@ end
 setupAutoToxic()
 
 
-local function toggleAutoPlay(enabled)
+function toggleAutoPlay(enabled)
     cleanupModule("AutoPlay")
     if not enabled then return end
     addConnection("AutoPlay", task.spawn(function()
@@ -2708,7 +2708,7 @@ local function toggleAutoPlay(enabled)
     end))
 end
 
-local function toggleAutoShoot(enabled)
+function toggleAutoShoot(enabled)
     cleanupModule("AutoShoot")
     if not enabled then return end
     addConnection("AutoShoot", UserInputService.InputBegan:Connect(function(input, gpe)
@@ -2719,7 +2719,7 @@ local function toggleAutoShoot(enabled)
     end))
 end
 
-local function toggleStaffDetector(enabled)
+function toggleStaffDetector(enabled)
     cleanupModule("StaffDetector")
     if not enabled then return end
     addConnection("StaffDetector", Players.PlayerAdded:Connect(function(player)
@@ -2735,11 +2735,11 @@ local function toggleStaffDetector(enabled)
     end))
 end
 
-local function toggleTrapDisabler(enabled)
+function toggleTrapDisabler(enabled)
     moduleStates["TrapDisabler"] = enabled and true or false
 end
 
-local function toggleShopTierBypass(enabled)
+function toggleShopTierBypass(enabled)
     cleanupModule("ShopTierBypass")
     local state = rawget(_G, "AetherCoreShopTierBypassState") or {tiered = {}, nextTier = {}}
     _G.AetherCoreShopTierBypassState = state
@@ -2760,7 +2760,7 @@ local function toggleShopTierBypass(enabled)
     end
 end
 
-local function toggleAutoSuffocate(enabled)
+function toggleAutoSuffocate(enabled)
     cleanupModule("AutoSuffocate")
     if not enabled then return end
     addConnection("AutoSuffocate", task.spawn(function()
@@ -2788,7 +2788,7 @@ local function toggleAutoSuffocate(enabled)
     end))
 end
 
-local function toggleFPSBoost(enabled)
+function toggleFPSBoost(enabled)
     cleanupModule("FPSBoost")
     if enabled then
         Workspace.GlobalShadows = false
@@ -2798,7 +2798,7 @@ local function toggleFPSBoost(enabled)
     end
 end
 
-local function toggleHitColor(enabled)
+function toggleHitColor(enabled)
     cleanupModule("HitColor")
     if not enabled then return end
     addConnection("HitColor", RunService.Heartbeat:Connect(function()
@@ -2814,7 +2814,7 @@ local function toggleHitColor(enabled)
     end))
 end
 
-local function toggleNoClickDelay(enabled)
+function toggleNoClickDelay(enabled)
     cleanupModule("NoClickDelay")
     if not enabled then
         return
@@ -2829,7 +2829,7 @@ local function toggleNoClickDelay(enabled)
     end))
 end
 
-local function toggleFastPickup(enabled)
+function toggleFastPickup(enabled)
     cleanupModule("FastPickup")
     if not enabled then
         return
@@ -2866,7 +2866,7 @@ local function toggleFastPickup(enabled)
     end))
 end
 
-local function toggleAntiCrash(enabled)
+function toggleAntiCrash(enabled)
     cleanupModule("AntiCrash")
     if not enabled then
         return
@@ -2881,7 +2881,7 @@ local function toggleAntiCrash(enabled)
     end))
 end
 
-local function toggleAutoLeave(enabled)
+function toggleAutoLeave(enabled)
     cleanupModule("AutoLeave")
     if not enabled then
         return
@@ -2918,7 +2918,7 @@ moduleSettings["ProximityEditor"] = {
     affectNewPrompts = false
 }
 
-local function toggleProximityEditor(enabled)
+function toggleProximityEditor(enabled)
     cleanupModule("ProximityEditor")
     if not enabled then
         return
@@ -2955,7 +2955,7 @@ moduleSettings["Nuker"] = {
     mineRadius = 10
 }
 
-local function toggleNuker(enabled)
+function toggleNuker(enabled)
     cleanupModule("Nuker")
     if not enabled then return end
 
@@ -3020,7 +3020,7 @@ moduleSettings["Scaffold"] = {
     placeAhead = 1
 }
 
-local function getTeamWoolName()
+function getTeamWoolName()
     local team = lplr.Team
     if not team then return "wool_white" end
     local teamName = team.Name:lower()
@@ -3035,7 +3035,7 @@ local function getTeamWoolName()
     else return "wool_white" end
 end
 
-local function toggleScaffold(enabled)
+function toggleScaffold(enabled)
     cleanupModule("Scaffold")
     if not enabled then return end
 
@@ -3213,7 +3213,7 @@ moduleSettings["Aimbot"] = {
     gravity = Workspace.Gravity
 }
 
-local function getAimbotTargetPart(character, requestedPart)
+function getAimbotTargetPart(character, requestedPart)
     if not character then
         return nil
     end
@@ -3226,7 +3226,7 @@ local function getAimbotTargetPart(character, requestedPart)
     return character:FindFirstChild(requestedPart) or character:FindFirstChild("Head") or getHRP(character)
 end
 
-local function getProjectileVelocityEstimate(targetCharacter)
+function getProjectileVelocityEstimate(targetCharacter)
     local hrp = getHRP(targetCharacter)
     if not hrp then
         return Vector3.zero
@@ -3239,7 +3239,7 @@ local function getProjectileVelocityEstimate(targetCharacter)
     return velocity
 end
 
-local function solveProjectileLead(origin, targetPosition, targetVelocity, projectileSpeed, gravity, predictionStrength)
+function solveProjectileLead(origin, targetPosition, targetVelocity, projectileSpeed, gravity, predictionStrength)
     projectileSpeed = math.max(projectileSpeed or 185, 1)
     local gravityVector = Vector3.new(0, -(gravity or Workspace.Gravity), 0)
     local estimatedTime = math.clamp((targetPosition - origin).Magnitude / projectileSpeed, 0.05, 4)
@@ -3256,7 +3256,7 @@ local function solveProjectileLead(origin, targetPosition, targetVelocity, proje
     return finalFuture - gravityCompensation
 end
 
-local function isVisibleForAimbot(targetCharacter, requestedPart)
+function isVisibleForAimbot(targetCharacter, requestedPart)
     local myChar = getCharacter(lplr)
     local myHRP = getHRP(myChar)
     local targetPart = getAimbotTargetPart(targetCharacter, requestedPart)
@@ -3277,7 +3277,7 @@ local function isVisibleForAimbot(targetCharacter, requestedPart)
     return raycastResult.Instance and raycastResult.Instance:IsDescendantOf(targetCharacter)
 end
 
-local function getAimbotCandidates(includeNPCs)
+function getAimbotCandidates(includeNPCs)
     local candidates = {}
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= lplr then
@@ -3302,7 +3302,7 @@ local function getAimbotCandidates(includeNPCs)
     return candidates
 end
 
-local function toggleAimbot(enabled)
+function toggleAimbot(enabled)
     cleanupModule("Aimbot")
     if not enabled then return end
 
@@ -3398,7 +3398,7 @@ moduleSettings["AimAssist"] = {
     mode = "Smooth"
 }
 
-local function toggleAimAssist(enabled)
+function toggleAimAssist(enabled)
     cleanupModule("AimAssist")
     if not enabled then return end
 
@@ -3485,7 +3485,7 @@ end
 
 moduleSettings["AutoClicker"] = { cps = 10 }
 
-local function toggleAutoClicker(enabled)
+function toggleAutoClicker(enabled)
     cleanupModule("AutoClicker")
     if not enabled then return end
 
@@ -3537,7 +3537,7 @@ moduleSettings["Velocity"] = {
     verticalReduction = 100
 }
 
-local function rotateYVector(v, deg)
+function rotateYVector(v, deg)
     local r = math.rad(deg)
     return Vector3.new(
         v.X * math.cos(r) - v.Z * math.sin(r),
@@ -3546,7 +3546,7 @@ local function rotateYVector(v, deg)
     )
 end
 
-local function toggleVelocity(enabled)
+function toggleVelocity(enabled)
     cleanupModule("Velocity")
     if not enabled then return end
 
@@ -3611,7 +3611,7 @@ moduleSettings["LongJump"] = {
     cameraDirection = false
 }
 
-local function toggleLongJump(enabled)
+function toggleLongJump(enabled)
     cleanupModule("LongJump")
 
     local Value = {Value = math.clamp(tonumber(moduleSettings["LongJump"].speed) or 37, 1, 37)}
@@ -3753,7 +3753,7 @@ local function toggleLongJump(enabled)
     end))
 end
 
-local function toggleBlink(enabled)
+function toggleBlink(enabled)
     cleanupModule("Blink")
     if not enabled then return end
     local remoteCache = {}
@@ -3801,7 +3801,7 @@ local function toggleBlink(enabled)
     end
 end
 
-local function toggleAutoQueue(enabled)
+function toggleAutoQueue(enabled)
     cleanupModule("AutoQueue")
     if not enabled then return end
     addConnection("AutoQueue", task.spawn(function()
@@ -3817,7 +3817,7 @@ local function toggleAutoQueue(enabled)
     end))
 end
 
-local function toggleBedNuker(enabled)
+function toggleBedNuker(enabled)
     cleanupModule("BedNuker")
     if not enabled then return end
     addConnection("BedNuker", RunService.Heartbeat:Connect(function()
@@ -3839,7 +3839,7 @@ local function toggleBedNuker(enabled)
     end))
 end
 
-local function toggleAutoBuy(enabled)
+function toggleAutoBuy(enabled)
     cleanupModule("AutoBuy")
     if not enabled then return end
     addConnection("AutoBuy", task.spawn(function()
@@ -3921,7 +3921,7 @@ local function toggleAutoBuy(enabled)
     end))
 end
 
-local function toggleOpenShop(enabled)
+function toggleOpenShop(enabled)
     cleanupModule("OpenShop")
     if enabled then
         pcall(function()
@@ -3934,7 +3934,7 @@ local function toggleOpenShop(enabled)
     end
 end
 
-local function toggleOpenTeamUpgrades(enabled)
+function toggleOpenTeamUpgrades(enabled)
     cleanupModule("OpenTeamUpgrades")
     if enabled then
         pcall(function()
@@ -3952,7 +3952,7 @@ moduleSettings["NoFallDamage"] = {
     method = "Landing"
 }
 
-local function toggleNoFallDamage(enabled)
+function toggleNoFallDamage(enabled)
     cleanupModule("NoFallDamage")
     if not enabled then return end
 
@@ -4037,7 +4037,7 @@ local function toggleNoFallDamage(enabled)
     addConnection("NoFallDamage", lplr.CharacterAdded:Connect(applyNoFall))
 end
 
-local function toggleNoFall(enabled)
+function toggleNoFall(enabled)
     toggleNoFallDamage(enabled)
 end
 
@@ -4047,7 +4047,7 @@ moduleSettings["AntiVoid"] = {
     bouncePower = 100
 }
 
-local function createAntiVoidVisual()
+function createAntiVoidVisual()
     local indicator = Instance.new("Part")
     indicator.Name = "AntiVoidIndicator"
     indicator.Anchored = true
@@ -4060,7 +4060,7 @@ local function createAntiVoidVisual()
     return indicator
 end
 
-local function toggleAntiVoid(enabled)
+function toggleAntiVoid(enabled)
     cleanupModule("AntiVoid")
     if not enabled then
         local indicator = Workspace:FindFirstChild("AntiVoidIndicator")
@@ -4180,7 +4180,7 @@ local function toggleAntiVoid(enabled)
 end
 
 
-local function toggleInfiniteJump(enabled)
+function toggleInfiniteJump(enabled)
     cleanupModule("InfiniteJump")
     if not enabled then
         if lplr.Character then
@@ -4223,7 +4223,7 @@ end
 
 
 
-local palette = {
+palette = {
     deep = Color3.fromRGB(15, 15, 15),
     panel = Color3.fromRGB(24, 24, 24),
     module = Color3.fromRGB(31, 31, 31),
@@ -4235,31 +4235,31 @@ local palette = {
     danger = Color3.fromRGB(180, 65, 65)
 }
 
-local screenGui = Instance.new("ScreenGui")
+screenGui = Instance.new("ScreenGui")
 screenGui.Name = "AetherCoreUI"
 screenGui.ResetOnSpawn = false
 screenGui.IgnoreGuiInset = true
 screenGui.Parent = lplr:WaitForChild("PlayerGui")
 
-local panelFrames = {}
-local moduleDefinitions = {}
-local categoryPanels = {}
-local categoryToggleButtons = {}
-local categoryManualVisibility = {}
-local categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Legend"}
-local homeTabButton
-local settingsTabButton
-local scriptHubTabButton
-local homeDashboardPanel
-local settingsDashboardPanel
-local scriptHubDashboardPanel
-local activeSidebarTab = "Home"
-local keybindListening = false
-local searchText = ""
-local settingsOpenByModule = {}
-local loadedCategoryPositions = {}
-local loadedModuleStates = {}
-local saveClientSettings
+panelFrames = {}
+moduleDefinitions = {}
+categoryPanels = {}
+categoryToggleButtons = {}
+categoryManualVisibility = {}
+categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Legend"}
+homeTabButton = nil
+settingsTabButton = nil
+scriptHubTabButton = nil
+homeDashboardPanel = nil
+settingsDashboardPanel = nil
+scriptHubDashboardPanel = nil
+activeSidebarTab = "Home"
+keybindListening = false
+searchText = ""
+settingsOpenByModule = {}
+loadedCategoryPositions = {}
+loadedModuleStates = {}
+saveClientSettings = nil
 
 moduleHandlers = {
     KillAura = toggleKillAura,
@@ -4312,13 +4312,13 @@ moduleHandlers = {
     OpenTeamUpgrades = toggleOpenTeamUpgrades
 }
 
-local function addCorner(target, radius)
+function addCorner(target, radius)
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(0, radius)
     corner.Parent = target
 end
 
-local function stylePanel(panel)
+function stylePanel(panel)
     panel.BackgroundColor3 = palette.panel
     panel.BorderSizePixel = 0
     addCorner(panel, 8)
@@ -4330,7 +4330,7 @@ local function stylePanel(panel)
     stroke.Parent = panel
 end
 
-local function styleDashboardCard(card)
+function styleDashboardCard(card)
     card.BackgroundColor3 = Color3.fromRGB(20, 20, 32)
     card.BorderSizePixel = 0
     addCorner(card, 10)
@@ -4342,7 +4342,7 @@ local function styleDashboardCard(card)
     stroke.Parent = card
 end
 
-local function createDashboardSectionTitle(parent, text)
+function createDashboardSectionTitle(parent, text)
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, -24, 0, 24)
     title.Position = UDim2.new(0, 12, 0, 10)
@@ -4356,7 +4356,7 @@ local function createDashboardSectionTitle(parent, text)
     return title
 end
 
-local function createPanel(name, size, position)
+function createPanel(name, size, position)
     local panel = Instance.new("Frame")
     panel.Name = name
     panel.Size = size
@@ -4367,7 +4367,7 @@ local function createPanel(name, size, position)
     return panel
 end
 
-local function makeDraggable(frame, dragBar)
+function makeDraggable(frame, dragBar)
     local dragging = false
     local dragStart
     local startPos
@@ -4406,18 +4406,18 @@ local function makeDraggable(frame, dragBar)
     end)
 end
 
-local mainPanel = createPanel("MainPanel", UDim2.new(0, 190, 0, 430), UDim2.new(0, 80, 0, 120))
-local topBar = createPanel("TopBar", UDim2.new(0, 350, 0, 40), UDim2.new(0, 285, 0, 120))
-local statusPanel = createPanel("StatusPanel", UDim2.new(0, 265, 0, 24), UDim2.new(0, 80, 0, 560))
+mainPanel = createPanel("MainPanel", UDim2.new(0, 190, 0, 430), UDim2.new(0, 80, 0, 120))
+topBar = createPanel("TopBar", UDim2.new(0, 350, 0, 40), UDim2.new(0, 285, 0, 120))
+statusPanel = createPanel("StatusPanel", UDim2.new(0, 265, 0, 24), UDim2.new(0, 80, 0, 560))
 
-local mainTop = Instance.new("Frame")
+mainTop = Instance.new("Frame")
 mainTop.Size = UDim2.new(1, 0, 0, 40)
 mainTop.BackgroundColor3 = palette.deep
 mainTop.BorderSizePixel = 0
 mainTop.Parent = mainPanel
 addCorner(mainTop, 8)
 
-local mainTitle = Instance.new("TextLabel")
+mainTitle = Instance.new("TextLabel")
 mainTitle.Size = UDim2.new(1, -16, 1, 0)
 mainTitle.Position = UDim2.new(0, 12, 0, 0)
 mainTitle.BackgroundTransparency = 1
@@ -4428,24 +4428,24 @@ mainTitle.TextSize = 18
 mainTitle.TextColor3 = palette.accent
 mainTitle.Parent = mainTop
 
-local mainList = Instance.new("Frame")
+mainList = Instance.new("Frame")
 mainList.Size = UDim2.new(1, -10, 1, -50)
 mainList.Position = UDim2.new(0, 5, 0, 45)
 mainList.BackgroundTransparency = 1
 mainList.Parent = mainPanel
 
-local mainListLayout = Instance.new("UIListLayout")
+mainListLayout = Instance.new("UIListLayout")
 mainListLayout.Padding = UDim.new(0, 6)
 mainListLayout.Parent = mainList
 
-local dashboardContent = Instance.new("Frame")
+dashboardContent = Instance.new("Frame")
 dashboardContent.Name = "DashboardContent"
 dashboardContent.Size = UDim2.new(1, -295, 1, -170)
 dashboardContent.Position = UDim2.new(0, 285, 0, 120)
 dashboardContent.BackgroundTransparency = 1
 dashboardContent.Parent = screenGui
 
-local function createDashboardBase(name)
+function createDashboardBase(name)
     local panel = Instance.new("Frame")
     panel.Name = name
     panel.Size = UDim2.new(1, 0, 1, 0)
@@ -4476,7 +4476,7 @@ homeDashboardPanel = createDashboardBase("HomeDashboard")
 settingsDashboardPanel = createDashboardBase("SettingsDashboard")
 scriptHubDashboardPanel = createDashboardBase("ScriptHubDashboard")
 
-local function setupHomeDashboardPanel()
+function setupHomeDashboardPanel()
     local welcomeCard = Instance.new("Frame")
     welcomeCard.Size = UDim2.new(1, -20, 0, 84)
     welcomeCard.Position = UDim2.new(0, 10, 0, 12)
