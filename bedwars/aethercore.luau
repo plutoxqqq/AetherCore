@@ -6690,6 +6690,86 @@ function setActiveSidebarTab(tabName)
     refreshSearch()
 end
 
+selfDestructing = false
+
+function selfDestructAether()
+    if selfDestructing then return end
+    selfDestructing = true
+
+    safeCall("SelfDestruct", function()
+        if autoToxicMessageConnection then
+            autoToxicMessageConnection:Disconnect()
+            autoToxicMessageConnection = nil
+        end
+
+        local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
+        if sharedEnvironment then
+            sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
+        end
+
+        for moduleName, _ in pairs(moduleStates) do
+            moduleStates[moduleName] = false
+
+            if moduleHandlers[moduleName] then
+                safeCall(moduleName .. "SelfDestructDisable", moduleHandlers[moduleName], false)
+            end
+
+            cleanupModule(moduleName)
+
+            if moduleUi[moduleName] then
+                safeCall(moduleName .. "SelfDestructUI", function()
+                    moduleUi[moduleName].setEnabled(false)
+                end)
+            end
+        end
+
+        for moduleName, connections in pairs(moduleConnections) do
+            if typeof(connections) == "RBXScriptConnection" then
+                pcall(function()
+                    connections:Disconnect()
+                end)
+            elseif type(connections) == "table" then
+                for _, connection in ipairs(connections) do
+                    if typeof(connection) == "RBXScriptConnection" then
+                        pcall(function()
+                            connection:Disconnect()
+                        end)
+                    end
+                end
+            end
+
+            moduleConnections[moduleName] = nil
+        end
+
+        for key, value in pairs(moduleRuntime) do
+            if typeof(value) == "Instance" then
+                pcall(function()
+                    value:Destroy()
+                end)
+            elseif type(value) == "table" then
+                for _, nestedValue in pairs(value) do
+                    if typeof(nestedValue) == "Instance" then
+                        pcall(function()
+                            nestedValue:Destroy()
+                        end)
+                    end
+                end
+            end
+
+            moduleRuntime[key] = nil
+        end
+
+        if screenGui then
+            pcall(function()
+                screenGui:Destroy()
+            end)
+            screenGui = nil
+        end
+
+        warn("[AetherCore] Self Destruct complete")
+    end)
+end
+
 function setupNavigationAndCloseHandlers()
     topBarStatusRefs.searchBox:GetPropertyChangedSignal("Text"):Connect(function()
         searchText = topBarStatusRefs.searchBox.Text or ""
@@ -6725,29 +6805,8 @@ function setupNavigationAndCloseHandlers()
     setActiveSidebarTab("Home")
 
     topBarStatusRefs.closeButton.MouseButton1Click:Connect(function()
-        if autoToxicMessageConnection then
-            autoToxicMessageConnection:Disconnect()
-            autoToxicMessageConnection = nil
-        end
-        local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
-        if sharedEnvironment and sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] then
-            sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
-        end
-
-        for name, enabled in pairs(moduleStates) do
-            if enabled then
-                moduleStates[name] = false
-                if moduleHandlers[name] then
-                    safeCall(name .. "Disable", moduleHandlers[name], false)
-                end
-                if moduleUi[name] then
-                    moduleUi[name].setEnabled(false)
-                end
-            end
-        end
-        screenGui:Destroy()
+        selfDestructAether()
     end)
-end
 
 setupNavigationAndCloseHandlers()
 
@@ -6756,6 +6815,7 @@ setupNavigationAndCloseHandlers()
 --====================================================
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if selfDestructing then return end
     if gameProcessed or keybindListening then return end
 
     if input.KeyCode == Enum.KeyCode.RightShift then
@@ -6788,9 +6848,6 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
 end)
 
 lplr.CharacterAdded:Connect(function()
+    if selfDestructing then return end
+
     for name, enabled in pairs(moduleStates) do
-        if enabled and moduleHandlers[name] then
-            safeCall(name .. "CharacterAddedToggle", moduleHandlers[name], true)
-        end
-    end
-end)
