@@ -6859,3 +6859,8 @@ lplr.CharacterAdded:Connect(function()
     if selfDestructing then return end
 
     for name, enabled in pairs(moduleStates) do
+        if enabled and moduleHandlers[name] then
+            safeCall(name .. "CharacterAddedToggle", moduleHandlers[name], true)
+        end
+    end
+end)
