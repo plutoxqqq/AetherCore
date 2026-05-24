@@ -4610,9 +4610,9 @@ end
 
 setupHomeDashboardPanel()
 
-local ScriptHubUI = {}
+Aether.UI.ScriptHub = Aether.UI.ScriptHub or {}
 
-function ScriptHubUI.createHeader(parentPanel)
+function Aether.UI.ScriptHub.createHeader(parentPanel)
     local scriptHubHeader = Instance.new("Frame")
     scriptHubHeader.Size = UDim2.new(1, -20, 0, 84)
     scriptHubHeader.Position = UDim2.new(0, 10, 0, 12)
@@ -4642,7 +4642,7 @@ function ScriptHubUI.createHeader(parentPanel)
     scriptHubSubtitle.Parent = scriptHubHeader
 end
 
-function ScriptHubUI.createChatPanel(parentPanel)
+function Aether.UI.ScriptHub.createChatPanel(parentPanel)
     local chatCard = Instance.new("Frame")
     chatCard.Size = UDim2.new(1, -20, 1, -120)
     chatCard.Position = UDim2.new(0, 10, 0, 106)
@@ -4694,7 +4694,7 @@ function ScriptHubUI.createChatPanel(parentPanel)
     return chatLog, chatLayout, chatInput, sendButton
 end
 
-local function createScriptHubKnowledge()
+function Aether.UI.ScriptHub.createKnowledge()
     local moduleKnowledge = {
         ["killaura"] = "KillAura automatically attacks nearby valid targets while active.",
         ["autoclicker"] = "AutoClicker repeatedly performs clicks at the configured rate.",
@@ -4753,8 +4753,8 @@ local function createScriptHubKnowledge()
     return moduleKnowledge, moduleAliases, moduleCategoriesReply
 end
 
-local function setupScriptHubChatBehavior(chatLog, chatLayout, chatInput, sendButton)
-    local moduleKnowledge, moduleAliases, moduleCategoriesReply = createScriptHubKnowledge()
+function Aether.UI.ScriptHub.setupChatBehavior(chatLog, chatLayout, chatInput, sendButton)
+    local moduleKnowledge, moduleAliases, moduleCategoriesReply = Aether.UI.ScriptHub.createKnowledge()
 
     local function normalizeText(text)
         local value = (text or ""):lower()
@@ -4920,11 +4920,16 @@ local function setupScriptHubChatBehavior(chatLog, chatLayout, chatInput, sendBu
     addChatBubble("Hello. I am your AetherCore assistant. Ask me what a module does, how a module works, or how to use the script.", false)
 end
 
-local function setupScriptHubDashboardPanel()
-    ScriptHubUI.createHeader(scriptHubDashboardPanel)
-    local chatLog, chatLayout, chatInput, sendButton = ScriptHubUI.createChatPanel(scriptHubDashboardPanel)
-    setupScriptHubChatBehavior(chatLog, chatLayout, chatInput, sendButton)
+function Aether.UI.ScriptHub.setupDashboardPanel()
+    Aether.UI.ScriptHub.createHeader(scriptHubDashboardPanel)
+
+    local chatLog, chatLayout, chatInput, sendButton =
+        Aether.UI.ScriptHub.createChatPanel(scriptHubDashboardPanel)
+
+    Aether.UI.ScriptHub.setupChatBehavior(chatLog, chatLayout, chatInput, sendButton)
 end
+
+Aether.UI.ScriptHub.setupDashboardPanel()
 
 setupScriptHubDashboardPanel()
 
