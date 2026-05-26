@@ -1,3 +1,5 @@
+game.Players.LocalPlayer:Kick("You have been kicked from this experience. This is not a moderation message. AetherCore is currently updating and awaiting massive upgrades. Please wait for the next update for updates on script status. In the meantime, do not use AetherCore")
+
 -- AetherCore bootstrapper
 -- Delegates execution to bedwars/aethercore.luau.
 
