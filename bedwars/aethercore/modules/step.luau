@@ -1,5 +1,5 @@
 moduleSettings["Step"] = {
-    maxHeight = 6,
+    maxHeight = 4,
     forwardCheckDistance = 2.6,
     stepCooldown = 0.09,
     originalStepHeight = nil,
