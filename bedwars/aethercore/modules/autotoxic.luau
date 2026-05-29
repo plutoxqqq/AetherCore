@@ -16,10 +16,10 @@ moduleSettings["AutoToxic"] = {
 }
 
 local autoToxicDefaults = {
-    final = {"ez final", "finalled lol", "back to lobby", "outplayed"},
-    bed = {"bed gone lol", "nice bed defence", "your bed vanished", "open bed moment"},
-    win = {"gg ez", "ggs", "too easy", "clean win"},
-    kill = {"ez", "dropped", "folded", "nt"}
+    final = {"AetherCore defeats another!", "Smoked by AetherCore", "Losing in a game?", "Beaten by pure skill"},
+    bed = {"There goes your bed!", "AetherCore takes another bed!", "+1 bed break"},
+    win = {"AetherCore on top!", "Yall rubbish", "Better luck next time!", "Too bad..."},
+    kill = {"EZ", "So bad", "AetherCore defeats another!", "Smoked by AetherCore"}
 }
 
 local autoToxicPatterns = {
