@@ -4222,7 +4222,7 @@ moduleDefinitions = {}
 categoryPanels = {}
 categoryToggleButtons = {}
 categoryManualVisibility = {}
-categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Legend"}
+categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Inventory", "Kits", "Minigames", "BoostFPS", "Legit", "Legend"}
 homeTabButton = nil
 settingsTabButton = nil
 scriptHubTabButton = nil
@@ -5918,6 +5918,11 @@ categoryData = {
     {name = "Render", icon = "◉"},
     {name = "Utility", icon = "◈"},
     {name = "World", icon = "◇"},
+    {name = "Inventory", icon = "▣"},
+    {name = "Kits", icon = "✦"},
+    {name = "Minigames", icon = "◎"},
+    {name = "BoostFPS", icon = "△"},
+    {name = "Legit", icon = "✓"},
     {name = "Legend", icon = "★"}
 }
 
@@ -6177,6 +6182,9 @@ function createSettingsContent(parent, moduleName)
         if setting.type == "slider" then
             uiCreateSlider(parent, setting.name, setting.min, setting.max, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if setting.onChange then
+                    safeCall(moduleName .. "SettingChange", setting.onChange, val)
+                end
                 if moduleStates[moduleName] and moduleHandlers[moduleName] then
                     safeCall(moduleName .. "SettingsSliderUpdate", moduleHandlers[moduleName], true)
                 end
@@ -6185,6 +6193,9 @@ function createSettingsContent(parent, moduleName)
         elseif setting.type == "toggle" then
             uiCreateToggle(parent, setting.name, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if setting.onChange then
+                    safeCall(moduleName .. "SettingChange", setting.onChange, val)
+                end
                 if moduleStates[moduleName] and moduleHandlers[moduleName] then
                     safeCall(moduleName .. "SettingsToggleUpdate", moduleHandlers[moduleName], true)
                 end
@@ -6193,11 +6204,23 @@ function createSettingsContent(parent, moduleName)
         elseif setting.type == "dropdown" then
             uiCreateDropdown(parent, setting.name, setting.options, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if setting.onChange then
+                    safeCall(moduleName .. "SettingChange", setting.onChange, val)
+                end
+                if moduleStates[moduleName] and moduleHandlers[moduleName] then
+                    safeCall(moduleName .. "SettingsDropdownUpdate", moduleHandlers[moduleName], true)
+                end
                 saveClientSettings()
             end)
         elseif setting.type == "textbox" then
             uiCreateTextBox(parent, setting.name, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if setting.onChange then
+                    safeCall(moduleName .. "SettingChange", setting.onChange, val)
+                end
+                if moduleStates[moduleName] and moduleHandlers[moduleName] then
+                    safeCall(moduleName .. "SettingsTextUpdate", moduleHandlers[moduleName], true)
+                end
                 saveClientSettings()
             end)
         end
@@ -6411,12 +6434,336 @@ function createModule(category, moduleName, defaultEnabled, toggleCallback)
 end
 
 
+--====================================================
+-- external module source bridge
+--====================================================
+
+Aether.ProviderModules = Aether.ProviderModules or {}
+Aether.ProviderModuleLookup = Aether.ProviderModuleLookup or {}
+Aether.ProviderStats = Aether.ProviderStats or {loaded = 0, skipped = 0, failed = 0}
+
+PROVIDER_SOURCE_FILES = {
+    {name = "CatVape", path = "bedwars/catvape.luau", url = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/bedwars/catvape.luau"},
+    {name = "AeroV4", path = "bedwars/aerov4.luau", url = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/bedwars/aerov4.luau"}
+}
+
+function normalizeModuleName(name)
+    return string.lower(tostring(name or ""):gsub("[^%w]", ""))
+end
+
+function createAetherProviderObject()
+    local provider = {
+        Loaded = true,
+        Connections = {},
+        Libraries = {},
+        Categories = {}
+    }
+
+    local dummyObject = {Visible = true}
+    local function cleanConnection(conn)
+        if typeof(conn) == "RBXScriptConnection" then
+            pcall(function() conn:Disconnect() end)
+        elseif type(conn) == "thread" then
+            pcall(task.cancel, conn)
+        elseif type(conn) == "function" then
+            pcall(conn)
+        end
+    end
+
+    function provider:Clean(conn)
+        if conn then
+            table.insert(self.Connections, conn)
+        end
+        return conn
+    end
+
+    function provider:Remove(module)
+        if module and module.SetState then
+            module:SetState(false)
+        end
+        return module
+    end
+
+    provider.Libraries.entity = {
+        List = {},
+        Connections = {},
+        PlayerConnections = {},
+        EntityThreads = {},
+        Events = setmetatable({}, {__index = function(self, key)
+            self[key] = Instance.new("BindableEvent")
+            return self[key]
+        end}),
+        isAlive = false,
+        character = {},
+        EntityPosition = function() return nil end,
+        EntityMouse = function() return nil end,
+        Wallcheck = function() return false end,
+        getUpdateConnections = function() return {} end,
+        targetCheck = function() return true end,
+        refreshEntity = function() end,
+        addEntity = function() end,
+        removeEntity = function() end,
+        addPlayer = function() end,
+        start = function() end
+    }
+    provider.Libraries.targetinfo = {Targets = {}}
+    provider.Libraries.sessioninfo = {AddItem = function(_, itemName)
+        return {Name = itemName, Value = 0, Increment = function(self) self.Value = (self.Value or 0) + 1 end, SetValue = function(self, value) self.Value = value end}
+    end}
+    provider.Libraries.uipallet = {}
+    provider.Libraries.tween = function(...) return TweenService:Create(...) end
+    provider.Libraries.color = {}
+    provider.Libraries.whitelist = {}
+    provider.Libraries.prediction = {SolveTrajectory = function() return nil end}
+    provider.Libraries.getfontsize = function(_, size) return size end
+    provider.Libraries.getcustomasset = function(path) return path end
+
+    local function coerceSettingName(options, fallback)
+        local name = tostring((options and options.Name) or fallback or "Setting")
+        return name:gsub("%s+", "")
+    end
+
+    local function addSetting(module, definition, object, onChange)
+        module.Settings = module.Settings or {}
+        table.insert(module.Settings, object)
+        table.insert(module.SettingsDefinition, definition)
+        if definition.settingName then
+            moduleSettings[module.Name] = moduleSettings[module.Name] or {}
+            if moduleSettings[module.Name][definition.settingName] == nil then
+                moduleSettings[module.Name][definition.settingName] = definition.default
+            end
+            definition.onChange = onChange
+        end
+        return object
+    end
+
+    local function buildModule(categoryName, config)
+        config = config or {}
+        local moduleName = tostring(config.Name or "Unnamed")
+        local normalized = normalizeModuleName(moduleName)
+        if Aether.ProviderModuleLookup[normalized] then
+            Aether.ProviderStats.skipped += 1
+            return Aether.ProviderModuleLookup[normalized].object
+        end
+
+        moduleSettings[moduleName] = moduleSettings[moduleName] or {}
+        local module = {
+            Name = moduleName,
+            Category = categoryName,
+            Tooltip = config.Tooltip,
+            Enabled = false,
+            Connections = {},
+            Settings = {},
+            SettingsDefinition = {},
+            Function = config.Function
+        }
+
+        function module:Clean(conn)
+            if conn then
+                table.insert(self.Connections, conn)
+            end
+            return conn
+        end
+
+        function module:SetState(state)
+            self.Enabled = state == true
+            if self.Function then
+                safeCall(self.Name .. "ProviderToggle", self.Function, self.Enabled)
+            end
+            if not self.Enabled then
+                for _, conn in ipairs(self.Connections) do
+                    cleanConnection(conn)
+                end
+                table.clear(self.Connections)
+            end
+        end
+
+        function module:CreateToggle(options)
+            options = options or {}
+            local settingName = coerceSettingName(options, "Toggle")
+            local object = {Name = options.Name or settingName, Enabled = options.Default == true, Object = dummyObject, Function = options.Function}
+            return addSetting(self, {type = "toggle", name = object.Name, settingName = settingName, default = object.Enabled}, object, function(value)
+                object.Enabled = value == true
+                if object.Function then safeCall(self.Name .. settingName, object.Function, object.Enabled) end
+            end)
+        end
+
+        function module:CreateSlider(options)
+            options = options or {}
+            local settingName = coerceSettingName(options, "Slider")
+            local minValue = tonumber(options.Min) or 0
+            local maxValue = tonumber(options.Max) or math.max(minValue + 1, tonumber(options.Default) or 100)
+            local defaultValue = tonumber(options.Default) or minValue
+            local object = {Name = options.Name or settingName, Value = defaultValue, Min = minValue, Max = maxValue, Object = dummyObject, Function = options.Function}
+            return addSetting(self, {type = "slider", name = object.Name, min = minValue, max = maxValue, settingName = settingName, default = defaultValue, allowTextInputBeyondMax = true}, object, function(value)
+                object.Value = tonumber(value) or object.Value
+                if object.Function then safeCall(self.Name .. settingName, object.Function, object.Value) end
+            end)
+        end
+
+        function module:CreateDropdown(options)
+            options = options or {}
+            local settingName = coerceSettingName(options, "Dropdown")
+            local list = options.List or options.Options or {}
+            local defaultValue = options.Default or list[1] or ""
+            local object = {Name = options.Name or settingName, Value = defaultValue, List = list, Object = dummyObject, Function = options.Function}
+            return addSetting(self, {type = "dropdown", name = object.Name, options = list, settingName = settingName, default = defaultValue}, object, function(value)
+                object.Value = value
+                if object.Function then safeCall(self.Name .. settingName, object.Function, object.Value) end
+            end)
+        end
+
+        function module:CreateTextBox(options)
+            options = options or {}
+            local settingName = coerceSettingName(options, "Text")
+            local defaultValue = tostring(options.Default or "")
+            local object = {Name = options.Name or settingName, Value = defaultValue, Object = dummyObject, Function = options.Function}
+            return addSetting(self, {type = "textbox", name = object.Name, settingName = settingName, default = defaultValue}, object, function(value)
+                object.Value = tostring(value or "")
+                if object.Function then safeCall(self.Name .. settingName, object.Function, object.Value) end
+            end)
+        end
+
+        function module:CreateTwoSlider(options)
+            options = options or {}
+            local first = self:CreateSlider({Name = (options.Name or "Range") .. " Min", Min = options.Min or 0, Max = options.Max or 100, Default = options.DefaultMin or options.Min or 0, Function = options.Function})
+            local second = self:CreateSlider({Name = (options.Name or "Range") .. " Max", Min = options.Min or 0, Max = options.Max or 100, Default = options.DefaultMax or options.Max or 100, Function = options.Function})
+            return {Min = first, Max = second, Object = dummyObject}
+        end
+
+        function module:CreateColorSlider(options)
+            return self:CreateSlider(options)
+        end
+
+        function module:CreateTargets(options)
+            options = options or {}
+            local object = {Object = dummyObject}
+            for _, targetName in ipairs({"Players", "NPCs", "Walls", "Friends"}) do
+                object[targetName] = {Enabled = options[targetName] == true, Object = dummyObject}
+                self:CreateToggle({Name = targetName, Default = object[targetName].Enabled, Function = function(value)
+                    object[targetName].Enabled = value
+                end})
+            end
+            return object
+        end
+
+        function module:CreateTextList(options)
+            options = options or {}
+            return {Name = options.Name or "List", ListEnabled = {}, Object = dummyObject, Add = function(self, value) table.insert(self.ListEnabled, value) end}
+        end
+
+        function module:CreateHotbarList(options)
+            return self:CreateTextList(options)
+        end
+
+        function module:CreateButton(options)
+            options = options or {}
+            local object = {Name = options.Name or "Button", Object = dummyObject, Function = options.Function}
+            if options.Function then
+                task.defer(function() safeCall(self.Name .. object.Name .. "ButtonInit", options.Function) end)
+            end
+            return object
+        end
+
+        function module:CreateFont(options)
+            return self:CreateDropdown({Name = (options and options.Name) or "Font", List = {"SourceSans", "Gotham", "Arial"}, Default = (options and options.Default) or "SourceSans", Function = options and options.Function})
+        end
+
+        function module:CreateNotification(options)
+            return self:CreateToggle(options)
+        end
+
+        Aether.ProviderModuleLookup[normalized] = {name = moduleName, object = module}
+        table.insert(Aether.ProviderModules, module)
+        Aether.ProviderStats.loaded += 1
+
+        createRegisteredModule(categoryName, moduleName, false, function(enabled)
+            module:SetState(enabled)
+        end, module.SettingsDefinition)
+        return module
+    end
+
+    setmetatable(provider.Categories, {__index = function(self, categoryName)
+        local category = rawget(self, categoryName)
+        if not category then
+            category = {Name = categoryName}
+            function category:CreateModule(config)
+                return buildModule(self.Name, config)
+            end
+            rawset(self, categoryName, category)
+        end
+        return category
+    end})
+
+    return provider
+end
+
+function readProviderSource(providerInfo)
+    if type(readfile) == "function" then
+        local ok, source = pcall(readfile, providerInfo.path)
+        if ok and type(source) == "string" and source ~= "" then
+            return source
+        end
+    end
+    local ok, source = pcall(function()
+        return game:HttpGet(providerInfo.url)
+    end)
+    if ok and type(source) == "string" and source ~= "" then
+        return source
+    end
+    return nil
+end
+
+function normalizeProviderSource(source)
+    return source:gsub("local run = function%(%s*func%s*%)%s*\n%s*func%(%s*%)%s*\nend", "local run = function(func) local ok, err = pcall(func) if not ok then warn('[AetherCore] provider module failed: ' .. tostring(err)) end end")
+end
+
+function loadExternalModuleSources()
+    if type(getgenv) ~= "function" then
+        getgenv = function()
+            return _G
+        end
+    end
+    local originalSharedVape = shared and shared.vape or nil
+    shared = shared or {}
+    local provider = createAetherProviderObject()
+    shared.vape = provider
+
+    for _, providerInfo in ipairs(PROVIDER_SOURCE_FILES) do
+        local source = readProviderSource(providerInfo)
+        if source then
+            local compiled, compileError = loadstring(normalizeProviderSource(source))
+            if compiled then
+                local ok, runtimeError = pcall(compiled)
+                if not ok then
+                    Aether.ProviderStats.failed += 1
+                    warn(string.format("[AetherCore] %s source bridge stopped early: %s", providerInfo.name, tostring(runtimeError)))
+                end
+            else
+                Aether.ProviderStats.failed += 1
+                warn(string.format("[AetherCore] %s source bridge could not compile: %s", providerInfo.name, tostring(compileError)))
+            end
+        else
+            Aether.ProviderStats.failed += 1
+            warn(string.format("[AetherCore] Could not read provider source: %s", providerInfo.path))
+        end
+    end
+
+    shared.vape = originalSharedVape or provider
+    consoleLog(string.format("AetherCore imported %d modules from CatVape/AeroV4 (%d duplicates skipped).", Aether.ProviderStats.loaded, Aether.ProviderStats.skipped))
+end
+
 function createRegisteredModule(category, name, defaultEnabled, toggleCallback, settingsDefinition)
+    local normalized = normalizeModuleName(name)
+    if Aether.ProviderModuleLookup[normalized] and not (Aether.ProviderModuleLookup[normalized].name == name and moduleUi[name] == nil) then
+        return
+    end
     moduleDefinitions[name] = settingsDefinition or {}
+    moduleHandlers[name] = toggleCallback
     createModule(category, name, defaultEnabled, toggleCallback)
 end
 
--- Added modules from 6872274481.vape and mapped to working AetherCore handlers.
+-- AetherCore-only fallback modules. Provider matches are skipped so CatVape/AeroV4 remain authoritative.
 function registerAetherModules()
 createRegisteredModule("Combat", "TriggerBot", false, toggleTriggerBot, {})
 createRegisteredModule("Blatant", "AntiFall", false, toggleAlias(toggleAntiVoid), {})
@@ -6645,6 +6992,7 @@ createRegisteredModule("World", "Nuker", false, toggleNuker, {
 })
 end
 
+loadExternalModuleSources()
 registerAetherModules()
 
 function refreshSearch()
