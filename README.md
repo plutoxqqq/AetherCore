@@ -24,11 +24,11 @@ AetherCore comes with many custom features in which other scripts do not have
 ```ansi
 AetherCore v2.1.0
 
-[2;32m[+][0m Redesigned internal UI structure
-[2;32m[+][0m Fixed lots of modules
-[2;32m[+][0m Added lots of modules
-[2;32m[+][0m Fixed Self Destruct button not working
-[2;32m[+][0m Other minor GUI bug fixes
+[0;32m[+] Redesigned internal UI structure
+[0;32m[+] Fixed lots of modules
+[0;32m[+] Added lots of modules
+[0;32m[+] Fixed Self Destruct button not working
+[0;32m[+] Other minor GUI bug fixes
 
 Join our Discord server for the latest updates, announcements, and changes
 
