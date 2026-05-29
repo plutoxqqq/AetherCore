@@ -563,6 +563,168 @@ function attackTargetWithBedwarsApi(targetCharacter)
     return false
 end
 
+
+
+--====================================================
+-- BedWars compatibility helpers inspired by CatVape
+--====================================================
+
+function getNearestRemoteByKeywords(keywords, classNames)
+    if type(keywords) ~= "table" then
+        return nil
+    end
+
+    local allowed = {}
+    if type(classNames) == "table" then
+        for _, className in ipairs(classNames) do
+            allowed[className] = true
+        end
+    end
+
+    local roots = {ReplicatedStorage}
+    local netManaged = getNetManagedFolder()
+    if netManaged then
+        table.insert(roots, 1, netManaged)
+    end
+
+    for _, root in ipairs(roots) do
+        for _, obj in ipairs(root:GetDescendants()) do
+            local classAllowed = next(allowed) == nil or allowed[obj.ClassName] == true
+            if classAllowed and (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) then
+                local loweredName = obj.Name:lower()
+                local matched = true
+                for _, keyword in ipairs(keywords) do
+                    local loweredKeyword = tostring(keyword):lower()
+                    if loweredKeyword ~= "" and not loweredName:find(loweredKeyword, 1, true) then
+                        matched = false
+                        break
+                    end
+                end
+                if matched then
+                    return obj
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+function invokeBedwarsRemote(remote, payload)
+    if not remote then
+        return false
+    end
+
+    if remote:IsA("RemoteFunction") then
+        return safeCall("InvokeBedwarsRemote", function()
+            remote:InvokeServer(payload)
+            return true
+        end) or false
+    end
+
+    return safeCall("FireBedwarsRemote", function()
+        remote:FireServer(payload)
+        return true
+    end) or false
+end
+
+function getToolItemType(tool)
+    if not tool then
+        return nil
+    end
+    return tool:GetAttribute("ItemType")
+        or tool:GetAttribute("itemType")
+        or tool:GetAttribute("Name")
+        or tool.Name
+end
+
+function getBestToolForBlock(block)
+    local lowered = block and block.Name:lower() or ""
+    local keywords = {"pickaxe", "axe", "shears"}
+    if lowered:find("wool", 1, true) then
+        keywords = {"shears", "axe", "pickaxe"}
+    elseif lowered:find("wood", 1, true) or lowered:find("plank", 1, true) then
+        keywords = {"axe", "pickaxe", "shears"}
+    elseif lowered:find("stone", 1, true) or lowered:find("ore", 1, true) or lowered:find("obsidian", 1, true) then
+        keywords = {"pickaxe", "axe", "shears"}
+    end
+
+    local bestTool = nil
+    local bestRank = math.huge
+    local containers = {getCharacter(lplr), lplr:FindFirstChildOfClass("Backpack")}
+    for _, container in ipairs(containers) do
+        if container then
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") then
+                    local name = tool.Name:lower()
+                    for rank, keyword in ipairs(keywords) do
+                        if name:find(keyword, 1, true) and rank < bestRank then
+                            bestTool = tool
+                            bestRank = rank
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return bestTool
+end
+
+function getNearestTaggedOrNamedObject(searchTerms, range, predicate)
+    local char = getCharacter(lplr)
+    local root = getHRP(char)
+    if not root then
+        return nil, nil
+    end
+
+    local loweredTerms = {}
+    for _, term in ipairs(searchTerms or {}) do
+        table.insert(loweredTerms, tostring(term):lower())
+    end
+
+    local nearest, nearestDistance = nil, range or math.huge
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        local name = obj.Name:lower()
+        local matched = #loweredTerms == 0
+        for _, term in ipairs(loweredTerms) do
+            if name:find(term, 1, true) or CollectionService:HasTag(obj, term) then
+                matched = true
+                break
+            end
+        end
+        if matched and (not predicate or predicate(obj)) then
+            local part = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart", true)
+            if part then
+                local distance = (part.Position - root.Position).Magnitude
+                if distance < nearestDistance then
+                    nearest = obj
+                    nearestDistance = distance
+                end
+            end
+        end
+    end
+
+    return nearest, nearestDistance
+end
+
+function getObjectPivotPosition(obj)
+    if not obj then
+        return nil
+    end
+    if obj:IsA("BasePart") then
+        return obj.Position
+    end
+    local ok, pivot = pcall(function()
+        return obj:GetPivot()
+    end)
+    if ok and pivot then
+        return pivot.Position
+    end
+    local part = obj:FindFirstChildWhichIsA("BasePart", true)
+    return part and part.Position or nil
+end
+
 function getEffectiveCombatRange(baseRange)
     local effectiveRange = baseRange or 0
     if moduleStates["Reach"] and moduleSettings["Reach"] then

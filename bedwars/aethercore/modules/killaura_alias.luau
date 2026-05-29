@@ -1,4 +1,4 @@
--- Alias module preserved from the legacy AetherCore module list.
+-- Compatibility registration for the legacy Killaura casing; implementation lives in KillAura.
 local function toggleKillaura(enabled)
     toggleKillAura(enabled)
 end
