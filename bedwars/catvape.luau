@@ -1,3 +1,4 @@
+--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 --!nocheck
 local cloneref = cloneref or function(obj)
 	return obj
@@ -1046,8 +1047,6 @@ run(function()
 			}
 		elseif remoteName == 'StepOnSnapTrap' and TrapDisabler.Enabled then
 			return {SendToServer = function() end}
-		elseif remoteName == 'GroundHit' then
-			return {SendToServer = function() print('attempt call') end}
 		end
 
 		return call
@@ -1151,14 +1150,12 @@ run(function()
         end
 
         if pos then
-			if not closestPosition then
-				cache[blockpos] = {
-					pos,
-					cost,
-					path,
-					tick() + 1
-				}
-			end
+			cache[blockpos] = {
+				pos,
+				cost,
+				path,
+				tick() + 1
+			}
             return pos, cost, path
         end
 
@@ -1562,6 +1559,228 @@ run(function()
 		storeChanged:disconnect()
 		storeChanged = nil
 	end)
+end)
+
+run(function()
+	local AutoDrill
+	local AutoCollect
+	local Notify
+	local AutoAttack
+	local Legit
+	local Range
+	local AttackDelay
+	local CollectDelay
+	local Targets
+	local Sort
+	local currentDrill
+	local attackDebounce = {}
+	local collectDebounce = {}
+
+	local function getDrillPart(drill)
+		return drill and (drill.PrimaryPart or drill:FindFirstChild('RootPart') or drill:FindFirstChildWhichIsA('BasePart'))
+	end
+
+	local function addDrill(drills, added, drill)
+		if typeof(drill) ~= 'Instance' or added[drill] or drill:GetAttribute('PlacedByUserId') ~= lplr.UserId then return end
+		if getDrillPart(drill) then
+			added[drill] = true
+			table.insert(drills, drill)
+		end
+	end
+
+	local function getDrills(tagged)
+		local drills, added = {}, {}
+		for _, drill in tagged do
+			addDrill(drills, added, drill)
+		end
+
+		for _, drill in (bedwars.DrillTabletController and bedwars.DrillTabletController.drillList or {}) do
+			addDrill(drills, added, drill)
+		end
+
+		return drills
+	end
+
+	local function getResourceAmount(drill)
+		return (drill:GetAttribute('diamond') or 0) + (drill:GetAttribute('emerald') or 0)
+	end
+
+	local function collectDrill(drill)
+		local suc = pcall(function()
+			bedwars.Client:Get('ExtractFromDrill'):SendToServer({
+				drill = drill
+			})
+		end)
+		return suc
+	end
+
+	local function useDrill(drill)
+		if currentDrill == drill then
+			return true
+		end
+
+		local suc, res = pcall(function()
+			return bedwars.Client:Get('PlayerUseDrillController'):CallServer({
+				drill = drill
+			})
+		end)
+
+		if suc and res ~= false then
+			currentDrill = drill
+			return true
+		end
+
+		return false
+	end
+
+	local function attackDrill(drill, target)
+		if not useDrill(drill) then
+			return false
+		end
+
+		local suc = pcall(function()
+			bedwars.Client:Get('DrillAttack'):SendToServer({
+				targetPosition = target.RootPart.Position
+			})
+		end)
+		return suc
+	end
+
+	local function getTarget(position)
+		return entitylib.EntityPosition({
+			Origin = position,
+			Range = Legit.Enabled and 10 or Range.Value,
+			Part = 'RootPart',
+			Players = Targets.Players.Enabled,
+			NPCs = Targets.NPCs.Enabled,
+			Sort = sortmethods[Sort.Value]
+		})
+	end
+
+	local function updateAttackControls()
+		pcall(function()
+			local enabled = AutoAttack.Enabled
+			Legit.Object.Visible = enabled
+			Range.Object.Visible = enabled and not Legit.Enabled
+			AttackDelay.Object.Visible = enabled
+			Targets.Object.Visible = enabled
+			Sort.Object.Visible = enabled
+		end)
+	end
+
+	AutoDrill = vape.Categories.Kits:CreateModule({
+		Name = 'Auto Drill',
+		Function = function(callback)
+			if callback then
+				local tagged = collection('Drill', AutoDrill)
+				repeat task.wait() until store.matchState ~= 0 and store.equippedKit == 'drill' or not AutoDrill.Enabled
+
+				repeat
+					if entitylib.isAlive and store.equippedKit == 'drill' then
+						local now = tick()
+						for _, drill in getDrills(tagged) do
+							local part = getDrillPart(drill)
+							if not part then continue end
+
+							if AutoCollect.Enabled and getResourceAmount(drill) > 0 and now > (collectDebounce[drill] or 0) then
+								if collectDrill(drill) and Notify.Enabled then
+									notif('Auto Drill', 'Collected drill resources', 4, 'info')
+								end
+								collectDebounce[drill] = now + CollectDelay.Value
+							end
+
+							if AutoAttack.Enabled and now > (attackDebounce[drill] or 0) then
+								local target = getTarget(part.Position)
+								if target then
+									targetinfo.Targets[target] = tick() + 1
+									if attackDrill(drill, target) then
+										attackDebounce[drill] = now + AttackDelay.Value
+									end
+								end
+							end
+						end
+					end
+
+					task.wait(0.1)
+				until not AutoDrill.Enabled
+			else
+				currentDrill = nil
+				table.clear(attackDebounce)
+				table.clear(collectDebounce)
+			end
+		end,
+		Tooltip = 'Automatically collects resources and attacks with placed drills.'
+	})
+	AutoCollect = AutoDrill:CreateToggle({
+		Name = 'Auto collect',
+		Default = true,
+		Function = function(callback)
+			pcall(function()
+				Notify.Object.Visible = callback
+				CollectDelay.Object.Visible = callback
+			end)
+		end
+	})
+	Notify = AutoDrill:CreateToggle({
+		Name = 'Notify on collect',
+		Darker = true
+	})
+	AutoAttack = AutoDrill:CreateToggle({
+		Name = 'Auto attack',
+		Default = true,
+		Function = updateAttackControls
+	})
+	Range = AutoDrill:CreateSlider({
+		Name = 'Range',
+		Min = 1,
+		Max = 10,
+		Default = 10,
+		Suffix = function(value)
+			return value == 1 and 'stud' or 'studs'
+		end
+	})
+	Legit = AutoDrill:CreateToggle({
+		Name = 'Legit Range',
+		Default = true,
+		Function = updateAttackControls
+	})
+	AttackDelay = AutoDrill:CreateSlider({
+		Name = 'Attack delay',
+		Min = 0.1,
+		Max = 1,
+		Default = 0.3,
+		Decimal = 100,
+		Suffix = function(value)
+			return value == 1 and 'sec' or 'secs'
+		end
+	})
+	CollectDelay = AutoDrill:CreateSlider({
+		Name = 'Collect delay',
+		Min = 0.1,
+		Max = 3,
+		Default = 0.5,
+		Decimal = 10,
+		Suffix = function(value)
+			return value == 1 and 'sec' or 'secs'
+		end
+	})
+	Targets = AutoDrill:CreateTargets({
+		Players = true,
+		NPCs = false
+	})
+
+	local methods = {'Distance', 'Health', 'Damage'}
+	for name in sortmethods do
+		if not table.find(methods, name) then
+			table.insert(methods, name)
+		end
+	end
+	Sort = AutoDrill:CreateDropdown({
+		Name = 'Sort',
+		List = methods,
+		Default = 'Distance'
+	})
+	updateAttackControls()
 end)
 
 for _, v in {'Anti Ragdoll', 'Trigger Bot', 'Silent Aim', 'Auto Rejoin', 'Rejoin', 'Disabler', 'Timer', 'Server Hop', 'Mouse TP', 'Murder Mystery'} do
@@ -2322,6 +2541,76 @@ run(function()
 		Max = 9,
 		DefaultMin = 7,
 		DefaultMax = 7
+	})
+end)
+
+run(function()
+	local VelocityPlus
+	local Mode
+	local Chance
+	local TargetCheck
+	local rand = Random.new()
+	local old = nil
+
+	local function rotateY(v, deg)
+		local r = math.rad(deg)
+		return Vector3.new(
+			v.X * math.cos(r) - v.Z * math.sin(r),
+			0,
+			v.X * math.sin(r) + v.Z * math.cos(r)
+		)
+	end
+
+	VelocityPlus = vape.Categories.Combat:CreateModule({
+		Name = 'Velocity Plus',
+		Tooltip = 'Redirects knockback you receive in a chosen direction.',
+		Function = function(callback)
+			if callback then
+				old = bedwars.KnockbackUtil.applyKnockback
+				bedwars.KnockbackUtil.applyKnockback = function(root, mass, dir, knockback, ...)
+					if rand:NextNumber(0, 100) > Chance.Value then
+						return old(root, mass, dir, knockback, ...)
+					end
+					if TargetCheck.Enabled and not entitylib.EntityPosition({
+						Range = 22, Part = 'RootPart', Players = true
+					}) then
+						return old(root, mass, dir, knockback, ...)
+					end
+					
+					local velocity = (root.Position * Vector3.new(1, 0, 1)) - Vector3.new(dir.X, 0, dir.Z)
+					if velocity.Magnitude < 0.001 then
+						return old(root, mass, dir, knockback, ...)
+					end
+					velocity = velocity.Unit
+					local chosen = Mode.Value == 'Random' and ({'Left', 'Right', 'Pull'})[rand:NextInteger(1, 3)] or Mode.Value
+					local rdir = chosen == 'Pull' and -velocity or table.find({'Left', 'Right'}, chosen) and rotateY(velocity, chosen == 'Left' and 90 or 90) or velocity
+					return old(root, mass, Vector3.new(root.Position.X - rdir.X * 100, dir.Y, root.Position.Z - rdir.Z * 100), knockback, ...)
+				end
+			else
+				bedwars.KnockbackUtil.applyKnockback = old or bedwars.KnockbackUtil.applyKnockback
+				old = nil
+			end
+		end,
+		Tags = {'new'}
+	})
+
+	Mode = VelocityPlus:CreateDropdown({
+		Name = 'Direction',
+		List = {'Left', 'Right', 'Pull', 'Random'},
+		Default = 'Random',
+		Tooltip = 'Left/Right: deflect sideways 90dg\nPull: go past the attacker\nRandom: pick one each hit'
+	})
+	Chance = VelocityPlus:CreateSlider({
+		Name = 'Chance',
+		Min = 0,
+		Max = 100,
+		Default = 100,
+		Suffix = '%',
+		Tooltip = 'Probability the redirect applies per knockback event'
+	})
+	TargetCheck = VelocityPlus:CreateToggle({
+		Name = 'Only when targeting',
+		Tooltip = 'Only redirects knockback when an enemy is within 22 studs'
 	})
 end)
 	
@@ -3506,7 +3795,6 @@ run(function() --> by max
 						entitylib.character.RootPart.CFrame = CFrame.lookAt(entitylib.character.RootPart.Position, Vector3.new(vec.X, entitylib.character.RootPart.Position.Y + 0.001, vec.Z))
 					end
 
-					--#attacked > 0 and #attacked * 0.02 or
 					task.wait(1 / UpdateRate.Value)
 				until not Killaura.Enabled
 			else
@@ -4809,6 +5097,122 @@ run(function()
 	})
 end)
 	
+run(function() -- code is so buns, i may rethink accepting custom features LOL
+	local CustomTags
+	local Color
+	local TAG
+	local old, old2
+	local tagRenderConn
+	local tagGuiConn
+
+	local function Color3ToHex(r, g, b)
+		return string.lower(string.format("#%02X%02X%02X", r, g, b))
+	end
+
+	local function CompleteTagEffect()
+		if not lplr:FindFirstChild("Tags") then return end
+		local tagObj = lplr.Tags:FindFirstChild("0")
+		if not tagObj then return end
+
+		if not old then
+			old = tagObj.Value
+			old2 = tagObj:GetAttribute("Text")
+		end
+
+		local color = Color3.fromHSV(Color.Hue, Color.Sat, Color.Value)
+		local R = math.floor(color.R * 255)
+		local G = math.floor(color.G * 255)
+		local B = math.floor(color.B * 255)
+
+		tagObj.Value = string.format("<font color='rgb(%d,%d,%d)'>[%s]</font>",R, G, B, TAG.Value)
+		tagObj:SetAttribute("Text", TAG.Value)
+		lplr:SetAttribute("ClanTag", TAG.Value)
+
+		if tagRenderConn then
+			tagRenderConn:Disconnect()
+			tagRenderConn = nil
+		end
+		if tagGuiConn then
+			tagGuiConn:Disconnect()
+			tagGuiConn = nil
+		end
+
+		tagGuiConn = lplr.PlayerGui.ChildAdded:Connect(function(child)
+			if child.Name ~= "TabListScreenGui" or not child:IsA("ScreenGui") then return end
+			tagRenderConn = runService.RenderStepped:Connect(function()
+				local nameToFind = (lplr.DisplayName == "" or lplr.DisplayName == lplr.Name) and lplr.Name or lplr.DisplayName
+				for _, v in ipairs(child:GetDescendants()) do
+					if v:IsA("TextLabel") and string.find(string.lower(v.Text), string.lower(nameToFind)) then
+						v.Text = string.format('<font transparency="0.3" color="%s">[%s]</font> %s',Color3ToHex(R, G, B),TAG.Value,nameToFind)
+					end
+				end
+			end)
+		end)
+	end
+	
+	local function RemoveTagEffect()
+		if tagRenderConn then
+			tagRenderConn:Disconnect()
+			tagRenderConn = nil
+		end
+
+		if tagGuiConn then
+			tagGuiConn:Disconnect()
+			tagGuiConn = nil
+		end
+
+		if lplr:FindFirstChild("Tags") then
+			local tagObj = lplr.Tags:FindFirstChild("0")
+			if tagObj then
+				if old then
+					tagObj.Value = old
+				end
+				if old2 then
+					tagObj:SetAttribute("Text", old2)
+				end
+			end
+		end
+
+		if lplr:GetAttribute("ClanTag") then
+			lplr:SetAttribute("ClanTag", old)
+		end
+
+		old = nil
+		old2 = nil
+	end
+
+	CustomTags = vape.Categories.Render:CreateModule({
+		Name = "Custom Tags",
+		Tooltip = "Client-Sided visual custom clan tag on-chat",
+		Function = function(callback) 
+			if callback then
+				CompleteTagEffect()
+			else
+ 				RemoveTagEffect()
+			end
+		end
+	})
+
+	Color = CustomTags:CreateColorSlider({
+		Name = 'Color',
+		Function = function()
+			if CustomTags.Enabled then
+				CompleteTagEffect()
+			end
+		end
+	})
+
+	TAG = CustomTags:CreateTextBox({
+		Name = 'Tag',
+		Default = "gg",
+		Function = function()
+			if CustomTags.Enabled then
+				CompleteTagEffect()
+			end
+		end
+	})
+end)
+
 run(function()
 	local BedESP
 	local Reference = {}
@@ -7361,7 +7765,77 @@ run(function()
 		Tooltip = 'Refuses to drop items if being picked up by an owl'
 	})
 end)
-	
+
+ run(function()
+	local KnockbackDelay
+	local Chance
+	local AirDelay
+	local GroundDelay
+	local TargetCheck
+
+	local old, rand
+	local function apply(type, env, ...)
+		local root, mass, dir, knockback = ...
+		knockback = knockback and table.clone(knockback) or {}
+		knockback[type] = env[type] and knockback[type] or 0
+		return old(root, mass, dir, knockback, select(5, ...))
+	end
+		
+	KnockbackDelay = vape.Categories.Utility:CreateModule({
+		Name = 'Knockback Delay',
+		Tooltip = 'Delays incoming knockback packets',
+		Function = function(callback) 
+			if callback then
+				old, rand = bedwars.KnockbackUtil.applyKnockback, Random.new()
+				bedwars.KnockbackUtil.applyKnockback = function(...)
+					if rand:NextNumber(0, 100) > Chance.Value then
+						return old(...)
+					end
+
+					local root, mass, dir, knockback = ...
+					if (not TargetCheck.Enabled) or entitylib.EntityPosition({
+						Range = 50,
+						Part = 'RootPart',
+						Players = true
+					}) then 
+						local env = {}
+						task.delay(AirDelay:GetRandomValue() / 1000, apply, 'horizontal', env, root, mass, dir, knockback, select(5, ...))
+						task.delay(GroundDelay:GetRandomValue() / 1000, apply, 'vertical', env, root, mass, dir, knockback, select(5, ...))
+						return
+					end
+					return old(...)
+				end
+			else
+				bedwars.KnockbackUtil.applyKnockback = old or bedwars.KnockbackUtil.applyKnockback
+			end
+		end,
+		Tags = {'new'},
+	})
+
+	Chance = KnockbackDelay:CreateSlider({
+		Name = 'Chance',
+		Min = 1,
+		Max = 100,
+		Default = 40,
+		Suffix = '%'
+	})
+	AirDelay = KnockbackDelay:CreateTwoSlider({
+		Name = 'Air delay',
+		Min = 0,
+		Max = 500,
+		DefaultMin = 50,
+		DefaultMax = 200
+	})
+	GroundDelay = KnockbackDelay:CreateTwoSlider({
+		Name = 'Ground delay',
+		Min = 0,
+		Max = 500,
+		DefaultMin = 50,
+		DefaultMax = 200
+	})
+	TargetCheck = KnockbackDelay:CreateToggle({Name = 'Target check'})
+end)
+
 run(function()
 	local MissileTP
 	
