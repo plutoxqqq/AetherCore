@@ -22,7 +22,7 @@ AetherCore comes with many custom features in which other scripts do not have
 
 ## Latest Change
 
-```lua
+```luau
 AetherCore v2.1.0
 [+] Redesigned internal UI structure
 [+] Fixed lots of modules
