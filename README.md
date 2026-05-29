@@ -18,11 +18,12 @@ AetherCore comes with many custom features in which other scripts do not have
 ## Latest Change
 
 ```lua
-AetherCore v2.1
+AetherCore v2.1.0
 [+] Redesigned internal UI structure
 [+] Fixed lots of modules
 [+] Added lots of modules
 [+] Fixed Self Festruct button not working
+[+] Other minor GUI bug fixes
 
 Join our Discord server for the latest updates, announcements, and changes
 
