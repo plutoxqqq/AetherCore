@@ -21,7 +21,7 @@ AetherCore comes with many custom features in which other scripts do not have
  > Please note that AetherCore is still relatively new, so expect performance issues, bugs, and module inconsistencies
 
 ## Latest Change
-```
+
 ### AetherCore v2.1.0
 
 $${\color{lightgreen}\text{[+] Redesigned internal UI structure}}$$
@@ -33,7 +33,6 @@ $${\color{lightgreen}\text{[+] Other minor GUI bug fixes}}$$
 Join our Discord server for the latest updates, announcements, and changes
 
 _Fri, 29 May, 2026_
-```
 
 ---
 
