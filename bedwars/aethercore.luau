@@ -4222,7 +4222,7 @@ moduleDefinitions = {}
 categoryPanels = {}
 categoryToggleButtons = {}
 categoryManualVisibility = {}
-categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Inventory", "Kits", "Minigames", "BoostFPS", "Legit", "Legend"}
+categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Inventory", "Kits", "Minigames", "BoostFPS", "Legit"}
 homeTabButton = nil
 settingsTabButton = nil
 scriptHubTabButton = nil
@@ -4404,10 +4404,14 @@ mainTitle.TextSize = 18
 mainTitle.TextColor3 = palette.accent
 mainTitle.Parent = mainTop
 
-mainList = Instance.new("Frame")
+mainList = Instance.new("ScrollingFrame")
 mainList.Size = UDim2.new(1, -10, 1, -50)
 mainList.Position = UDim2.new(0, 5, 0, 45)
 mainList.BackgroundTransparency = 1
+mainList.BorderSizePixel = 0
+mainList.CanvasSize = UDim2.new(0, 0, 0, 0)
+mainList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+mainList.ScrollBarThickness = 3
 mainList.Parent = mainPanel
 
 mainListLayout = Instance.new("UIListLayout")
@@ -5797,6 +5801,11 @@ mainAccentLine.Parent = mainTop
 mainList.Size = UDim2.new(1, -14, 1, -58)
 mainList.Position = UDim2.new(0, 7, 0, 50)
 mainList.BackgroundTransparency = 1
+mainList.BorderSizePixel = 0
+mainList.CanvasSize = UDim2.new(0, 0, 0, 0)
+mainList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+mainList.ScrollBarThickness = 3
+mainList.ScrollBarImageColor3 = vapePalette.accent
 mainListLayout.Padding = UDim.new(0, 5)
 
 -- Top bar restyle to match Vape's simple utility strip.
@@ -5922,8 +5931,7 @@ categoryData = {
     {name = "Kits", icon = "✦"},
     {name = "Minigames", icon = "◎"},
     {name = "BoostFPS", icon = "△"},
-    {name = "Legit", icon = "✓"},
-    {name = "Legend", icon = "★"}
+    {name = "Legit", icon = "✓"}
 }
 
 homeTabButton = createVapeSidebarButton(mainList, "Home", "⌂", true)
@@ -6718,6 +6726,190 @@ function normalizeProviderSource(source)
     return source:gsub("local run = function%(%s*func%s*%)%s*\n%s*func%(%s*%)%s*\nend", "local run = function(func) local ok, err = pcall(func) if not ok then warn('[AetherCore] provider module failed: ' .. tostring(err)) end end")
 end
 
+function getQuotedProviderValue(block, key)
+    local singleQuoted = block:match(key .. "%s*=%s*'([^']*)'")
+    if singleQuoted then
+        return singleQuoted
+    end
+    return block:match(key .. '%s*=%s*"([^"]*)"')
+end
+
+function getNumericProviderValue(block, key, fallback)
+    local value = block:match(key .. "%s*=%s*([%-%.%d]+)")
+    return tonumber(value) or fallback
+end
+
+function getBooleanProviderValue(block, key, fallback)
+    local value = block:match(key .. "%s*=%s*(true)") or block:match(key .. "%s*=%s*(false)")
+    if value == "true" then
+        return true
+    elseif value == "false" then
+        return false
+    end
+    return fallback
+end
+
+function sanitizeProviderSettingName(name, fallback)
+    local cleaned = tostring(name or fallback or "Setting"):gsub("[^%w]", "")
+    return cleaned ~= "" and cleaned or tostring(fallback or "Setting")
+end
+
+function getProviderDropdownOptions(block)
+    local listBlock = block:match("List%s*=%s*{(.-)}") or block:match("Options%s*=%s*{(.-)}")
+    local options = {}
+    if listBlock then
+        for option in listBlock:gmatch("'([^']*)'") do
+            table.insert(options, option)
+        end
+        for option in listBlock:gmatch('"([^"]*)"') do
+            table.insert(options, option)
+        end
+    end
+    if #options == 0 then
+        table.insert(options, getQuotedProviderValue(block, "Default") or "Default")
+    end
+    return options
+end
+
+function getStaticProviderHandler(moduleName)
+    local normalized = normalizeModuleName(moduleName)
+    for handlerName, handler in pairs(moduleHandlers) do
+        if normalizeModuleName(handlerName) == normalized then
+            return handler
+        end
+    end
+
+    local aliases = {
+        killaura = "KillAura",
+        aimassist = "AimAssist",
+        autoclicker = "AutoClicker",
+        triggerbot = "TriggerBot",
+        velocityplus = "Velocity",
+        antifall = "AntiVoid",
+        fastbreak = "FastBreak",
+        hitboxes = "HitBoxes",
+        keepsprint = "Sprint",
+        noslow = "Sprint",
+        noslowdown = "Sprint",
+        projectileaimbot = "Aimbot",
+        speed = "Speed",
+        bedesp = "BedESP",
+        nametags = "NameTags",
+        storageesp = "StorageESP",
+        fpsboost = "FPS Boost",
+        hitcolor = "Hit Color",
+        hitfix = "Reach",
+        viewmodel = "Viewmodel",
+        nofalldamage = "NoFallDamage",
+        nofall = "NoFall",
+        autovoiddrop = "AutoVoidDrop",
+        autobuy = "AutoBuy",
+        staffdetector = "StaffDetector",
+        trapdisabler = "TrapDisabler",
+        pickuprange = "PickupRange",
+        scaffold = "Scaffold",
+        nuker = "Nuker"
+    }
+
+    local alias = aliases[normalized]
+    return alias and moduleHandlers[alias] or nil
+end
+
+function addStaticProviderSetting(settings, moduleName, definition)
+    moduleSettings[moduleName] = moduleSettings[moduleName] or {}
+    if definition.settingName and moduleSettings[moduleName][definition.settingName] == nil then
+        moduleSettings[moduleName][definition.settingName] = definition.default
+    end
+    table.insert(settings, definition)
+end
+
+function importStaticProviderSettings(segment, variableName, moduleName)
+    local settings = {}
+    local escapedVariable = variableName:gsub("([^%w])", "%%%1")
+
+    for block in segment:gmatch(escapedVariable .. ":CreateSlider%s*%(%s*{(.-)}%)") do
+        local name = getQuotedProviderValue(block, "Name") or "Slider"
+        local minValue = getNumericProviderValue(block, "Min", 0)
+        local maxValue = getNumericProviderValue(block, "Max", math.max(minValue + 1, getNumericProviderValue(block, "Default", 100)))
+        local defaultValue = getNumericProviderValue(block, "Default", minValue)
+        addStaticProviderSetting(settings, moduleName, {
+            type = "slider",
+            name = name,
+            min = minValue,
+            max = maxValue,
+            settingName = sanitizeProviderSettingName(name, "Slider"),
+            default = defaultValue,
+            allowTextInputBeyondMax = true
+        })
+    end
+
+    for block in segment:gmatch(escapedVariable .. ":CreateToggle%s*%(%s*{(.-)}%)") do
+        local name = getQuotedProviderValue(block, "Name") or "Toggle"
+        addStaticProviderSetting(settings, moduleName, {
+            type = "toggle",
+            name = name,
+            settingName = sanitizeProviderSettingName(name, "Toggle"),
+            default = getBooleanProviderValue(block, "Default", false)
+        })
+    end
+
+    for block in segment:gmatch(escapedVariable .. ":CreateDropdown%s*%(%s*{(.-)}%)") do
+        local name = getQuotedProviderValue(block, "Name") or "Dropdown"
+        local options = getProviderDropdownOptions(block)
+        addStaticProviderSetting(settings, moduleName, {
+            type = "dropdown",
+            name = name,
+            options = options,
+            settingName = sanitizeProviderSettingName(name, "Dropdown"),
+            default = getQuotedProviderValue(block, "Default") or options[1]
+        })
+    end
+
+    for block in segment:gmatch(escapedVariable .. ":CreateTextBox%s*%(%s*{(.-)}%)") do
+        local name = getQuotedProviderValue(block, "Name") or "Text"
+        addStaticProviderSetting(settings, moduleName, {
+            type = "textbox",
+            name = name,
+            settingName = sanitizeProviderSettingName(name, "Text"),
+            default = getQuotedProviderValue(block, "Default") or ""
+        })
+    end
+
+    return settings
+end
+
+function importStaticProviderModules(providerInfo, source)
+    local imported = 0
+    local position = 1
+
+    while true do
+        local moduleStart, moduleEnd, variableName, categoryName = source:find("([%w_]+)%s*=%s*vape%.Categories%.([%w_]+):CreateModule%s*%(%s*{", position)
+        if not moduleStart then
+            break
+        end
+
+        local nextModuleStart = source:find("[%w_]+%s*=%s*vape%.Categories%.[%w_]+:CreateModule%s*%(%s*{", moduleEnd + 1) or (#source + 1)
+        local segment = source:sub(moduleEnd + 1, nextModuleStart - 1)
+        local moduleName = getQuotedProviderValue(segment:sub(1, 1200), "Name")
+
+        if moduleName and moduleName ~= "" then
+            local normalized = normalizeModuleName(moduleName)
+            if not Aether.ProviderModuleLookup[normalized] then
+                Aether.ProviderModuleLookup[normalized] = {name = moduleName, source = providerInfo.name, static = true}
+                local settings = importStaticProviderSettings(segment, variableName, moduleName)
+                createRegisteredModule(categoryName, moduleName, false, getStaticProviderHandler(moduleName), settings)
+                imported += 1
+            end
+        end
+
+        position = moduleEnd + 1
+    end
+
+    if imported > 0 then
+        consoleLog(string.format("AetherCore statically imported %d modules from %s.", imported, providerInfo.name))
+    end
+end
+
 function loadExternalModuleSources()
     if type(getgenv) ~= "function" then
         getgenv = function()
@@ -6727,11 +6919,13 @@ function loadExternalModuleSources()
     local originalSharedVape = shared and shared.vape or nil
     shared = shared or {}
     local provider = createAetherProviderObject()
+    local providerSources = {}
     shared.vape = provider
 
     for _, providerInfo in ipairs(PROVIDER_SOURCE_FILES) do
         local source = readProviderSource(providerInfo)
         if source then
+            table.insert(providerSources, {info = providerInfo, source = source})
             local compiled, compileError = loadstring(normalizeProviderSource(source))
             if compiled then
                 local ok, runtimeError = pcall(compiled)
@@ -6747,6 +6941,10 @@ function loadExternalModuleSources()
             Aether.ProviderStats.failed += 1
             warn(string.format("[AetherCore] Could not read provider source: %s", providerInfo.path))
         end
+    end
+
+    for _, providerSource in ipairs(providerSources) do
+        importStaticProviderModules(providerSource.info, providerSource.source)
     end
 
     shared.vape = originalSharedVape or provider
@@ -7047,55 +7245,63 @@ function selfDestructAether()
 
     selfDestructing = true
 
-    pcall(function()
-        if autoToxicMessageConnection then
+    if screenGui then
+        pcall(function()
+            screenGui.Enabled = false
+        end)
+    end
+
+    if autoToxicMessageConnection then
+        pcall(function()
             autoToxicMessageConnection:Disconnect()
-            autoToxicMessageConnection = nil
-        end
+        end)
+        autoToxicMessageConnection = nil
+    end
 
-        local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
-        if sharedEnvironment then
-            sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
-        end
+    local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
+    if sharedEnvironment then
+        sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
+    end
 
-        for moduleName, _ in pairs(moduleStates) do
-            moduleStates[moduleName] = false
+    for moduleName, _ in pairs(moduleStates) do
+        moduleStates[moduleName] = false
 
-            if moduleHandlers[moduleName] then
-                pcall(function()
-                    moduleHandlers[moduleName](false)
-                end)
-            end
-
+        if moduleHandlers[moduleName] then
             pcall(function()
-                cleanupModule(moduleName)
+                moduleHandlers[moduleName](false)
             end)
-
-            if moduleUi[moduleName] then
-                pcall(function()
-                    moduleUi[moduleName].setEnabled(false)
-                end)
-            end
         end
 
-        for moduleName, connections in pairs(moduleConnections) do
-            if typeof(connections) == "RBXScriptConnection" then
-                pcall(function()
-                    connections:Disconnect()
-                end)
-            elseif type(connections) == "table" then
-                for _, connection in pairs(connections) do
-                    if typeof(connection) == "RBXScriptConnection" then
-                        pcall(function()
-                            connection:Disconnect()
-                        end)
-                    end
+        pcall(function()
+            cleanupModule(moduleName)
+        end)
+
+        if moduleUi[moduleName] then
+            pcall(function()
+                moduleUi[moduleName].setEnabled(false)
+            end)
+        end
+    end
+
+    for moduleName, connections in pairs(moduleConnections) do
+        if typeof(connections) == "RBXScriptConnection" then
+            pcall(function()
+                connections:Disconnect()
+            end)
+        elseif type(connections) == "table" then
+            for _, connection in pairs(connections) do
+                if typeof(connection) == "RBXScriptConnection" then
+                    pcall(function()
+                        connection:Disconnect()
+                    end)
                 end
             end
-
-            moduleConnections[moduleName] = nil
         end
 
+        moduleConnections[moduleName] = nil
+    end
+
+    if type(moduleRuntime) == "table" then
         for key, value in pairs(moduleRuntime) do
             if typeof(value) == "Instance" then
                 pcall(function()
@@ -7113,17 +7319,16 @@ function selfDestructAether()
 
             moduleRuntime[key] = nil
         end
+    end
 
-        if screenGui then
-            pcall(function()
-                screenGui:Destroy()
-            end)
+    if screenGui then
+        pcall(function()
+            screenGui:Destroy()
+        end)
+        screenGui = nil
+    end
 
-            screenGui = nil
-        end
-
-        warn("[AetherCore] Self Destruct complete")
-    end)
+    warn("[AetherCore] Self Destruct complete")
 end
 
 function setupNavigationAndCloseHandlers()
