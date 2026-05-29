@@ -1,8 +1,8 @@
 -- AetherCore bootstrapper
--- Delegates execution to bedwars/aethercore.luau.
+-- Delegates execution to bedwars/aethercore/aethercore.luau.
 
-local BEDWARS_ENTRY_PATH = "bedwars/aethercore.luau"
-local BEDWARS_ENTRY_URL = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/bedwars/aethercore.luau"
+local BEDWARS_ENTRY_PATH = "bedwars/aethercore/aethercore.luau"
+local BEDWARS_ENTRY_URL = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/bedwars/aethercore/aethercore.luau"
 
 local function compileAndRun(source)
     if type(loadstring) ~= "function" then
