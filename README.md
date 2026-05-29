@@ -14,3 +14,21 @@ AetherCore comes with many custom features in which other scripts do not have
 
  AetherCore is planning to evolve with more modules, less bugs, better UI, and stronger modules
  > Please note that AetherCore is still relatively new, so expect performance issues, bugs, and module inconsistencies
+
+## Latest Change
+
+```lua
+AetherCore v2.1
+[+] Redesigned internal UI structure
+[+] Fixed lots of modules
+[+] Added lots of modules
+[+] FIxed Self Festruct button not working
+
+Join our Discord server for the latest updates, announcements, and changes
+
+Fri, 29 May, 2026
+```
+
+---
+
+Made for the Roblox exploiting community <3
