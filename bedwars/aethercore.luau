@@ -4222,7 +4222,7 @@ moduleDefinitions = {}
 categoryPanels = {}
 categoryToggleButtons = {}
 categoryManualVisibility = {}
-categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Legend"}
+categoryOrder = {"Combat", "Blatant", "Render", "Utility", "World", "Inventory", "Kits", "Minigames", "BoostFPS", "Legit"}
 homeTabButton = nil
 settingsTabButton = nil
 scriptHubTabButton = nil
@@ -4404,10 +4404,14 @@ mainTitle.TextSize = 18
 mainTitle.TextColor3 = palette.accent
 mainTitle.Parent = mainTop
 
-mainList = Instance.new("Frame")
+mainList = Instance.new("ScrollingFrame")
 mainList.Size = UDim2.new(1, -10, 1, -50)
 mainList.Position = UDim2.new(0, 5, 0, 45)
 mainList.BackgroundTransparency = 1
+mainList.BorderSizePixel = 0
+mainList.CanvasSize = UDim2.new(0, 0, 0, 0)
+mainList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+mainList.ScrollBarThickness = 3
 mainList.Parent = mainPanel
 
 mainListLayout = Instance.new("UIListLayout")
@@ -5797,6 +5801,11 @@ mainAccentLine.Parent = mainTop
 mainList.Size = UDim2.new(1, -14, 1, -58)
 mainList.Position = UDim2.new(0, 7, 0, 50)
 mainList.BackgroundTransparency = 1
+mainList.BorderSizePixel = 0
+mainList.CanvasSize = UDim2.new(0, 0, 0, 0)
+mainList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+mainList.ScrollBarThickness = 3
+mainList.ScrollBarImageColor3 = vapePalette.accent
 mainListLayout.Padding = UDim.new(0, 5)
 
 -- Top bar restyle to match Vape's simple utility strip.
@@ -5918,7 +5927,11 @@ categoryData = {
     {name = "Render", icon = "◉"},
     {name = "Utility", icon = "◈"},
     {name = "World", icon = "◇"},
-    {name = "Legend", icon = "★"}
+    {name = "Inventory", icon = "▣"},
+    {name = "Kits", icon = "✦"},
+    {name = "Minigames", icon = "◎"},
+    {name = "BoostFPS", icon = "△"},
+    {name = "Legit", icon = "✓"}
 }
 
 homeTabButton = createVapeSidebarButton(mainList, "Home", "⌂", true)
@@ -6177,6 +6190,9 @@ function createSettingsContent(parent, moduleName)
         if setting.type == "slider" then
             uiCreateSlider(parent, setting.name, setting.min, setting.max, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if setting.onChange then
+                    safeCall(moduleName .. "SettingChange", setting.onChange, val)
+                end
                 if moduleStates[moduleName] and moduleHandlers[moduleName] then
                     safeCall(moduleName .. "SettingsSliderUpdate", moduleHandlers[moduleName], true)
                 end
@@ -6185,6 +6201,9 @@ function createSettingsContent(parent, moduleName)
         elseif setting.type == "toggle" then
             uiCreateToggle(parent, setting.name, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if setting.onChange then
+                    safeCall(moduleName .. "SettingChange", setting.onChange, val)
+                end
                 if moduleStates[moduleName] and moduleHandlers[moduleName] then
                     safeCall(moduleName .. "SettingsToggleUpdate", moduleHandlers[moduleName], true)
                 end
@@ -6193,11 +6212,23 @@ function createSettingsContent(parent, moduleName)
         elseif setting.type == "dropdown" then
             uiCreateDropdown(parent, setting.name, setting.options, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if setting.onChange then
+                    safeCall(moduleName .. "SettingChange", setting.onChange, val)
+                end
+                if moduleStates[moduleName] and moduleHandlers[moduleName] then
+                    safeCall(moduleName .. "SettingsDropdownUpdate", moduleHandlers[moduleName], true)
+                end
                 saveClientSettings()
             end)
         elseif setting.type == "textbox" then
             uiCreateTextBox(parent, setting.name, moduleSettings[moduleName][setting.settingName], function(val)
                 moduleSettings[moduleName][setting.settingName] = val
+                if setting.onChange then
+                    safeCall(moduleName .. "SettingChange", setting.onChange, val)
+                end
+                if moduleStates[moduleName] and moduleHandlers[moduleName] then
+                    safeCall(moduleName .. "SettingsTextUpdate", moduleHandlers[moduleName], true)
+                end
                 saveClientSettings()
             end)
         end
@@ -6411,12 +6442,746 @@ function createModule(category, moduleName, defaultEnabled, toggleCallback)
 end
 
 
+--====================================================
+-- external module source bridge
+--====================================================
+
+Aether.ProviderModules = Aether.ProviderModules or {}
+Aether.ProviderModuleLookup = Aether.ProviderModuleLookup or {}
+Aether.ProviderStats = Aether.ProviderStats or {loaded = 0, skipped = 0, failed = 0}
+
+PROVIDER_SOURCE_FILES = {
+    {name = "CatVape", path = "bedwars/catvape.luau", url = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/bedwars/catvape.luau"},
+    {name = "AeroV4", path = "bedwars/aerov4.luau", url = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/bedwars/aerov4.luau"}
+}
+
+AETHER_PROVIDER_MODULE_MANIFEST = {
+    {source = "CatVape", category = "Kits", name = "Auto Drill"},
+    {source = "CatVape", category = "Combat", name = "Aim Assist"},
+    {source = "CatVape", category = "Combat", name = "Bow Assist"},
+    {source = "CatVape", category = "Combat", name = "Auto Clicker"},
+    {source = "CatVape", category = "Combat", name = "Reach"},
+    {source = "CatVape", category = "Combat", name = "Sprint"},
+    {source = "CatVape", category = "Combat", name = "Trigger Bot"},
+    {source = "CatVape", category = "Combat", name = "Velocity Plus"},
+    {source = "CatVape", category = "Combat", name = "Velocity"},
+    {source = "CatVape", category = "Blatant", name = "Auto Dodge"},
+    {source = "CatVape", category = "Blatant", name = "Anti Fall"},
+    {source = "CatVape", category = "Blatant", name = "Fast Break"},
+    {source = "CatVape", category = "Blatant", name = "Fly"},
+    {source = "CatVape", category = "Blatant", name = "Hit Boxes"},
+    {source = "CatVape", category = "Blatant", name = "Keep Sprint"},
+    {source = "CatVape", category = "Blatant", name = "Killaura"},
+    {source = "CatVape", category = "Blatant", name = "Long Jump"},
+    {source = "CatVape", category = "Blatant", name = "Mouse TP"},
+    {source = "CatVape", category = "Blatant", name = "No Slow"},
+    {source = "CatVape", category = "Blatant", name = "Projectile Aimbot"},
+    {source = "CatVape", category = "Blatant", name = "Projectile Aura"},
+    {source = "CatVape", category = "Blatant", name = "Speed"},
+    {source = "CatVape", category = "Blatant", name = "Damage Boost"},
+    {source = "CatVape", category = "Render", name = "Custom Tags"},
+    {source = "CatVape", category = "Render", name = "Bed ESP"},
+    {source = "CatVape", category = "Render", name = "Projectile Tracers"},
+    {source = "CatVape", category = "Render", name = "Stream Remover"},
+    {source = "CatVape", category = "Render", name = "Health"},
+    {source = "CatVape", category = "Render", name = "Beehive ESP"},
+    {source = "CatVape", category = "Render", name = "Kit ESP"},
+    {source = "CatVape", category = "Render", name = "Generator ESP"},
+    {source = "CatVape", category = "Render", name = "Item ESP"},
+    {source = "CatVape", category = "Render", name = "Name Tags"},
+    {source = "CatVape", category = "Render", name = "Storage ESP"},
+    {source = "CatVape", category = "Utility", name = "Auto Balloon"},
+    {source = "CatVape", category = "Utility", name = "Auto Kit"},
+    {source = "CatVape", category = "Kits", name = "Auto Hannah"},
+    {source = "CatVape", category = "Kits", name = "Auto Gingerbread Man"},
+    {source = "CatVape", category = "Utility", name = "Auto Pearl"},
+    {source = "CatVape", category = "Utility", name = "Auto Play"},
+    {source = "CatVape", category = "Utility", name = "Anti Suffocate"},
+    {source = "CatVape", category = "Utility", name = "Auto Release"},
+    {source = "CatVape", category = "Utility", name = "Auto Shoot"},
+    {source = "CatVape", category = "Utility", name = "Auto Toxic"},
+    {source = "CatVape", category = "Utility", name = "Auto Void Drop"},
+    {source = "CatVape", category = "Utility", name = "Knockback Delay"},
+    {source = "CatVape", category = "Utility", name = "Missile TP"},
+    {source = "CatVape", category = "Utility", name = "Pickup Range"},
+    {source = "CatVape", category = "Utility", name = "Raven TP"},
+    {source = "CatVape", category = "Utility", name = "Scaffold"},
+    {source = "CatVape", category = "Utility", name = "Shop Tier Bypass"},
+    {source = "CatVape", category = "Utility", name = "Staff Detector"},
+    {source = "CatVape", category = "Utility", name = "Trap Disabler"},
+    {source = "CatVape", category = "Utility", name = "Anti-AFK"},
+    {source = "CatVape", category = "World", name = "Auto Suffocate"},
+    {source = "CatVape", category = "World", name = "Auto Tool"},
+    {source = "CatVape", category = "World", name = "Block-In"},
+    {source = "CatVape", category = "World", name = "Chest Steal"},
+    {source = "CatVape", category = "World", name = "Schematica"},
+    {source = "CatVape", category = "World", name = "Fast Place"},
+    {source = "CatVape", category = "Inventory", name = "Auto Steal"},
+    {source = "CatVape", category = "Inventory", name = "Auto Fish"},
+    {source = "CatVape", category = "Inventory", name = "Armor Switch"},
+    {source = "CatVape", category = "Inventory", name = "Auto Bank"},
+    {source = "CatVape", category = "Inventory", name = "Auto Buy"},
+    {source = "CatVape", category = "Inventory", name = "Auto Consume"},
+    {source = "CatVape", category = "Inventory", name = "Auto Hotbar"},
+    {source = "CatVape", category = "Inventory", name = "Fast Consume"},
+    {source = "CatVape", category = "Inventory", name = "Fast Drop"},
+    {source = "CatVape", category = "Render", name = "Trap ESP"},
+    {source = "CatVape", category = "Minigames", name = "Bed Plates"},
+    {source = "CatVape", category = "Minigames", name = "Breaker"},
+    {source = "CatVape", category = "Blatant", name = "Auto Kaida"},
+    {source = "CatVape", category = "Kits", name = "Auto Ember"},
+    {source = "CatVape", category = "Kits", name = "Auto Uma"},
+    {source = "CatVape", category = "Kits", name = "Auto Adetunde"},
+    {source = "CatVape", category = "Kits", name = "Auto Pyro"},
+    {source = "CatVape", category = "Kits", name = "Auto Lani"},
+    {source = "CatVape", category = "Kits", name = "Auto Noelle"},
+    {source = "CatVape", category = "Kits", name = "Auto Marina"},
+    {source = "CatVape", category = "Kits", name = "Auto Builder"},
+    {source = "CatVape", category = "Kits", name = "Auto Nyx"},
+    {source = "CatVape", category = "Kits", name = "Auto Sheep Herder"},
+    {source = "CatVape", category = "Kits", name = "Auto Melody"},
+    {source = "CatVape", category = "Kits", name = "Auto Ramil"},
+    {source = "CatVape", category = "Kits", name = "Auto Caitlyn"},
+    {source = "CatVape", category = "Kits", name = "Auto Zeno"},
+    {source = "CatVape", category = "Kits", name = "Auto Metal"},
+    {source = "CatVape", category = "Kits", name = "Auto Kaliyah"},
+    {source = "CatVape", category = "Kits", name = "Auto Elder"},
+    {source = "CatVape", category = "Kits", name = "Auto Taliyah"},
+    {source = "CatVape", category = "Kits", name = "Auto Star Collector"},
+    {source = "CatVape", category = "Kits", name = "Auto Whisper"},
+    {source = "CatVape", category = "Kits", name = "Auto Beekeeper"},
+    {source = "CatVape", category = "Kits", name = "Fisherman Spy"},
+    {source = "CatVape", category = "Kits", name = "Auto Davey"},
+    {source = "CatVape", category = "Kits", name = "Davey Aim"},
+    {source = "CatVape", category = "Kits", name = "Infinite Sigrid"},
+    {source = "CatVape", category = "Kits", name = "Infinite Krystal"},
+    {source = "CatVape", category = "Legit", name = "Bed Alarm"},
+    {source = "CatVape", category = "Legit", name = "Bed Break Effect"},
+    {source = "CatVape", category = "Legit", name = "Clean Kit"},
+    {source = "CatVape", category = "Legit", name = "Crosshair"},
+    {source = "CatVape", category = "Legit", name = "Damage Indicator"},
+    {source = "CatVape", category = "Legit", name = "FOV"},
+    {source = "CatVape", category = "Legit", name = "FPS Boost"},
+    {source = "CatVape", category = "Legit", name = "Hit Color"},
+    {source = "CatVape", category = "Legit", name = "Hit Fix"},
+    {source = "CatVape", category = "Legit", name = "Interface"},
+    {source = "CatVape", category = "Render", name = "Kit Display"},
+    {source = "CatVape", category = "Legit", name = "Kill Effect"},
+    {source = "CatVape", category = "Legit", name = "Reach Display"},
+    {source = "CatVape", category = "Legit", name = "Song Beats"},
+    {source = "CatVape", category = "Legit", name = "Sound Changer"},
+    {source = "CatVape", category = "Legit", name = "Texture Pack"},
+    {source = "CatVape", category = "Legit", name = "No Click Delay"},
+    {source = "CatVape", category = "Legit", name = "UI Cleanup"},
+    {source = "CatVape", category = "Legit", name = "Viewmodel"},
+    {source = "CatVape", category = "Legit", name = "Win Effect"},
+    {source = "AeroV4", category = "Utility", name = "KitRender"},
+    {source = "AeroV4", category = "Blatant", name = "GrandKillaura"},
+    {source = "AeroV4", category = "Utility", name = "ProximityPromptDuration"},
+    {source = "AeroV4", category = "Blatant", name = "NoSlowdown"},
+    {source = "AeroV4", category = "Kits", name = "AutoVanessa"},
+    {source = "AeroV4", category = "Blatant", name = "TaxRemover"},
+    {source = "AeroV4", category = "World", name = "Leave Party"},
+    {source = "AeroV4", category = "Utility", name = "AutoChargeBow"},
+    {source = "AeroV4", category = "Render", name = "LootESP"},
+    {source = "AeroV4", category = "World", name = "NightmareEmote"},
+    {source = "AeroV4", category = "World", name = "AutoCounter"},
+    {source = "AeroV4", category = "Utility", name = "ProximityExtender"},
+    {source = "AeroV4", category = "Utility", name = "AutoReset"},
+    {source = "AeroV4", category = "Utility", name = "ProjAura"},
+    {source = "AeroV4", category = "World", name = "AutoBuildUp"},
+    {source = "AeroV4", category = "Utility", name = "Headless"},
+    {source = "AeroV4", category = "Utility", name = "ClearMatchHistory"},
+    {source = "AeroV4", category = "Utility", name = "ViewMatchHistory"},
+    {source = "AeroV4", category = "Utility", name = "InvisibleCursor"},
+    {source = "AeroV4", category = "Blatant", name = "BlockCPSRemover"},
+    {source = "AeroV4", category = "Utility", name = "SetPlayerLevel"},
+    {source = "AeroV4", category = "Utility", name = "StaffHUD"},
+    {source = "AeroV4", category = "Render", name = "RemovePlayerLevelUI"},
+    {source = "AeroV4", category = "Render", name = "OG4v4v4v4"},
+    {source = "AeroV4", category = "Utility", name = "NoNameTag"},
+    {source = "AeroV4", category = "Render", name = "OGNametags"},
+    {source = "AeroV4", category = "Kits", name = "PromptUnlock"},
+    {source = "AeroV4", category = "World", name = "NoCollision"},
+    {source = "AeroV4", category = "BoostFPS", name = "ShadowRemover"},
+    {source = "AeroV4", category = "Legit", name = "WhiteHits"},
+    {source = "AeroV4", category = "Blatant", name = "NoFall"},
+    {source = "AeroV4", category = "BoostFPS", name = "RemoveNeon"},
+    {source = "AeroV4", category = "Utility", name = "MiloDisguise"},
+    {source = "AeroV4", category = "Kits", name = "AutoFisher"},
+    {source = "AeroV4", category = "Kits", name = "AutoEldertree"},
+    {source = "AeroV4", category = "Kits", name = "AutoStar"},
+    {source = "AeroV4", category = "Kits", name = "AutoGinger"},
+    {source = "AeroV4", category = "Legit", name = "DisableStreamer"},
+    {source = "AeroV4", category = "Kits", name = "AutoGrove"},
+    {source = "AeroV4", category = "World", name = "AC MOD View"},
+    {source = "AeroV4", category = "Kits", name = "AutoLucia"},
+    {source = "AeroV4", category = "Kits", name = "AutoNahila"},
+    {source = "AeroV4", category = "Kits", name = "AutoWarden"},
+    {source = "AeroV4", category = "Kits", name = "BeehiveSpy"},
+    {source = "AeroV4", category = "Kits", name = "LuciaSpy"},
+    {source = "AeroV4", category = "Render", name = "SkinChanger"},
+    {source = "AeroV4", category = "Minigames", name = "AutoHonor"},
+    {source = "AeroV4", category = "Kits", name = "ElektraExtender"},
+    {source = "AeroV4", category = "Kits", name = "JadeCooldown"},
+    {source = "AeroV4", category = "Kits", name = "RegentCooldown"},
+    {source = "AeroV4", category = "Kits", name = "YuziDasher"},
+    {source = "AeroV4", category = "Kits", name = "InfKrystal"},
+    {source = "AeroV4", category = "World", name = "AntiEffects"},
+    {source = "AeroV4", category = "World", name = "AutoMushroom"},
+    {source = "AeroV4", category = "Kits", name = "AutoPotion"},
+    {source = "AeroV4", category = "Kits", name = "AutoMartin"},
+    {source = "AeroV4", category = "BoostFPS", name = "PotatoMode"},
+    {source = "AeroV4", category = "Blatant", name = "FrameBuffer"},
+    {source = "AeroV4", category = "Render", name = "LegacyAnimation"},
+    {source = "AeroV4", category = "Utility", name = "FishermanESP"},
+    {source = "AeroV4", category = "Kits", name = "BetterDavey"},
+    {source = "AeroV4", category = "World", name = "AntiMagma"},
+    {source = "AeroV4", category = "Blatant", name = "PlayerAttach"},
+    {source = "AeroV4", category = "Combat", name = "SilentAura"},
+    {source = "AeroV4", category = "Legit", name = "MotionBlur"},
+    {source = "AeroV4", category = "Utility", name = "GrimReaperFix"},
+    {source = "AeroV4", category = "Kits", name = "AutoFarmer"},
+    {source = "AeroV4", category = "World", name = "Fullbright"},
+    {source = "AeroV4", category = "Utility", name = "Clutch"},
+    {source = "AeroV4", category = "Utility", name = "BedAssist"},
+    {source = "AeroV4", category = "Utility", name = "CustomCursor"},
+    {source = "AeroV4", category = "Kits", name = "AutoLasso"},
+    {source = "AeroV4", category = "Utility", name = "AutoEmote"},
+    {source = "AeroV4", category = "Utility", name = "DRBedAlarm"},
+    {source = "AeroV4", category = "Combat", name = "KnockbackDisplace"},
+    {source = "AeroV4", category = "Combat", name = "AnimChopper"},
+    {source = "AeroV4", category = "Render", name = "NameTagSpoofer"},
+    {source = "AeroV4", category = "World", name = "AutoFarm"},
+}
+
+function normalizeModuleName(name)
+    return string.lower(tostring(name or ""):gsub("[^%w]", ""))
+end
+
+function createAetherProviderObject()
+    local provider = {
+        Loaded = true,
+        Connections = {},
+        Libraries = {},
+        Categories = {}
+    }
+
+    local dummyObject = {Visible = true}
+    local function cleanConnection(conn)
+        if typeof(conn) == "RBXScriptConnection" then
+            pcall(function() conn:Disconnect() end)
+        elseif type(conn) == "thread" then
+            pcall(task.cancel, conn)
+        elseif type(conn) == "function" then
+            pcall(conn)
+        end
+    end
+
+    function provider:Clean(conn)
+        if conn then
+            table.insert(self.Connections, conn)
+        end
+        return conn
+    end
+
+    function provider:Remove(module)
+        if module and module.SetState then
+            module:SetState(false)
+        end
+        return module
+    end
+
+    provider.Libraries.entity = {
+        List = {},
+        Connections = {},
+        PlayerConnections = {},
+        EntityThreads = {},
+        Events = setmetatable({}, {__index = function(self, key)
+            self[key] = Instance.new("BindableEvent")
+            return self[key]
+        end}),
+        isAlive = false,
+        character = {},
+        EntityPosition = function() return nil end,
+        EntityMouse = function() return nil end,
+        Wallcheck = function() return false end,
+        getUpdateConnections = function() return {} end,
+        targetCheck = function() return true end,
+        refreshEntity = function() end,
+        addEntity = function() end,
+        removeEntity = function() end,
+        addPlayer = function() end,
+        start = function() end
+    }
+    provider.Libraries.targetinfo = {Targets = {}}
+    provider.Libraries.sessioninfo = {AddItem = function(_, itemName)
+        return {Name = itemName, Value = 0, Increment = function(self) self.Value = (self.Value or 0) + 1 end, SetValue = function(self, value) self.Value = value end}
+    end}
+    provider.Libraries.uipallet = {}
+    provider.Libraries.tween = function(...) return TweenService:Create(...) end
+    provider.Libraries.color = {}
+    provider.Libraries.whitelist = {}
+    provider.Libraries.prediction = {SolveTrajectory = function() return nil end}
+    provider.Libraries.getfontsize = function(_, size) return size end
+    provider.Libraries.getcustomasset = function(path) return path end
+
+    local function coerceSettingName(options, fallback)
+        local name = tostring((options and options.Name) or fallback or "Setting")
+        return name:gsub("%s+", "")
+    end
+
+    local function addSetting(module, definition, object, onChange)
+        module.Settings = module.Settings or {}
+        table.insert(module.Settings, object)
+        table.insert(module.SettingsDefinition, definition)
+        if definition.settingName then
+            moduleSettings[module.Name] = moduleSettings[module.Name] or {}
+            if moduleSettings[module.Name][definition.settingName] == nil then
+                moduleSettings[module.Name][definition.settingName] = definition.default
+            end
+            definition.onChange = onChange
+        end
+        return object
+    end
+
+    local function buildModule(categoryName, config)
+        config = config or {}
+        local moduleName = tostring(config.Name or "Unnamed")
+        local normalized = normalizeModuleName(moduleName)
+        if Aether.ProviderModuleLookup[normalized] then
+            Aether.ProviderStats.skipped += 1
+            return Aether.ProviderModuleLookup[normalized].object
+        end
+
+        moduleSettings[moduleName] = moduleSettings[moduleName] or {}
+        local module = {
+            Name = moduleName,
+            Category = categoryName,
+            Tooltip = config.Tooltip,
+            Enabled = false,
+            Connections = {},
+            Settings = {},
+            SettingsDefinition = {},
+            Function = config.Function
+        }
+
+        function module:Clean(conn)
+            if conn then
+                table.insert(self.Connections, conn)
+            end
+            return conn
+        end
+
+        function module:SetState(state)
+            self.Enabled = state == true
+            if self.Function then
+                safeCall(self.Name .. "ProviderToggle", self.Function, self.Enabled)
+            end
+            if not self.Enabled then
+                for _, conn in ipairs(self.Connections) do
+                    cleanConnection(conn)
+                end
+                table.clear(self.Connections)
+            end
+        end
+
+        function module:CreateToggle(options)
+            options = options or {}
+            local settingName = coerceSettingName(options, "Toggle")
+            local object = {Name = options.Name or settingName, Enabled = options.Default == true, Object = dummyObject, Function = options.Function}
+            return addSetting(self, {type = "toggle", name = object.Name, settingName = settingName, default = object.Enabled}, object, function(value)
+                object.Enabled = value == true
+                if object.Function then safeCall(self.Name .. settingName, object.Function, object.Enabled) end
+            end)
+        end
+
+        function module:CreateSlider(options)
+            options = options or {}
+            local settingName = coerceSettingName(options, "Slider")
+            local minValue = tonumber(options.Min) or 0
+            local maxValue = tonumber(options.Max) or math.max(minValue + 1, tonumber(options.Default) or 100)
+            local defaultValue = tonumber(options.Default) or minValue
+            local object = {Name = options.Name or settingName, Value = defaultValue, Min = minValue, Max = maxValue, Object = dummyObject, Function = options.Function}
+            return addSetting(self, {type = "slider", name = object.Name, min = minValue, max = maxValue, settingName = settingName, default = defaultValue, allowTextInputBeyondMax = true}, object, function(value)
+                object.Value = tonumber(value) or object.Value
+                if object.Function then safeCall(self.Name .. settingName, object.Function, object.Value) end
+            end)
+        end
+
+        function module:CreateDropdown(options)
+            options = options or {}
+            local settingName = coerceSettingName(options, "Dropdown")
+            local list = options.List or options.Options or {}
+            local defaultValue = options.Default or list[1] or ""
+            local object = {Name = options.Name or settingName, Value = defaultValue, List = list, Object = dummyObject, Function = options.Function}
+            return addSetting(self, {type = "dropdown", name = object.Name, options = list, settingName = settingName, default = defaultValue}, object, function(value)
+                object.Value = value
+                if object.Function then safeCall(self.Name .. settingName, object.Function, object.Value) end
+            end)
+        end
+
+        function module:CreateTextBox(options)
+            options = options or {}
+            local settingName = coerceSettingName(options, "Text")
+            local defaultValue = tostring(options.Default or "")
+            local object = {Name = options.Name or settingName, Value = defaultValue, Object = dummyObject, Function = options.Function}
+            return addSetting(self, {type = "textbox", name = object.Name, settingName = settingName, default = defaultValue}, object, function(value)
+                object.Value = tostring(value or "")
+                if object.Function then safeCall(self.Name .. settingName, object.Function, object.Value) end
+            end)
+        end
+
+        function module:CreateTwoSlider(options)
+            options = options or {}
+            local first = self:CreateSlider({Name = (options.Name or "Range") .. " Min", Min = options.Min or 0, Max = options.Max or 100, Default = options.DefaultMin or options.Min or 0, Function = options.Function})
+            local second = self:CreateSlider({Name = (options.Name or "Range") .. " Max", Min = options.Min or 0, Max = options.Max or 100, Default = options.DefaultMax or options.Max or 100, Function = options.Function})
+            return {Min = first, Max = second, Object = dummyObject}
+        end
+
+        function module:CreateColorSlider(options)
+            return self:CreateSlider(options)
+        end
+
+        function module:CreateTargets(options)
+            options = options or {}
+            local object = {Object = dummyObject}
+            for _, targetName in ipairs({"Players", "NPCs", "Walls", "Friends"}) do
+                object[targetName] = {Enabled = options[targetName] == true, Object = dummyObject}
+                self:CreateToggle({Name = targetName, Default = object[targetName].Enabled, Function = function(value)
+                    object[targetName].Enabled = value
+                end})
+            end
+            return object
+        end
+
+        function module:CreateTextList(options)
+            options = options or {}
+            return {Name = options.Name or "List", ListEnabled = {}, Object = dummyObject, Add = function(self, value) table.insert(self.ListEnabled, value) end}
+        end
+
+        function module:CreateHotbarList(options)
+            return self:CreateTextList(options)
+        end
+
+        function module:CreateButton(options)
+            options = options or {}
+            local object = {Name = options.Name or "Button", Object = dummyObject, Function = options.Function}
+            if options.Function then
+                task.defer(function() safeCall(self.Name .. object.Name .. "ButtonInit", options.Function) end)
+            end
+            return object
+        end
+
+        function module:CreateFont(options)
+            return self:CreateDropdown({Name = (options and options.Name) or "Font", List = {"SourceSans", "Gotham", "Arial"}, Default = (options and options.Default) or "SourceSans", Function = options and options.Function})
+        end
+
+        function module:CreateNotification(options)
+            return self:CreateToggle(options)
+        end
+
+        Aether.ProviderModuleLookup[normalized] = {name = moduleName, object = module}
+        table.insert(Aether.ProviderModules, module)
+        Aether.ProviderStats.loaded += 1
+
+        createRegisteredModule(categoryName, moduleName, false, function(enabled)
+            module:SetState(enabled)
+        end, module.SettingsDefinition)
+        return module
+    end
+
+    setmetatable(provider.Categories, {__index = function(self, categoryName)
+        local category = rawget(self, categoryName)
+        if not category then
+            category = {Name = categoryName}
+            function category:CreateModule(config)
+                return buildModule(self.Name, config)
+            end
+            rawset(self, categoryName, category)
+        end
+        return category
+    end})
+
+    return provider
+end
+
+function readProviderSource(providerInfo)
+    if type(readfile) == "function" then
+        local ok, source = pcall(readfile, providerInfo.path)
+        if ok and type(source) == "string" and source ~= "" then
+            return source
+        end
+    end
+    local ok, source = pcall(function()
+        return game:HttpGet(providerInfo.url)
+    end)
+    if ok and type(source) == "string" and source ~= "" then
+        return source
+    end
+    return nil
+end
+
+function normalizeProviderSource(source)
+    return source:gsub("local run = function%(%s*func%s*%)%s*\n%s*func%(%s*%)%s*\nend", "local run = function(func) local ok, err = pcall(func) if not ok then warn('[AetherCore] provider module failed: ' .. tostring(err)) end end")
+end
+
+function getQuotedProviderValue(block, key)
+    local singleQuoted = block:match(key .. "%s*=%s*'([^']*)'")
+    if singleQuoted then
+        return singleQuoted
+    end
+    return block:match(key .. '%s*=%s*"([^"]*)"')
+end
+
+function getNumericProviderValue(block, key, fallback)
+    local value = block:match(key .. "%s*=%s*([%-%.%d]+)")
+    return tonumber(value) or fallback
+end
+
+function getBooleanProviderValue(block, key, fallback)
+    local value = block:match(key .. "%s*=%s*(true)") or block:match(key .. "%s*=%s*(false)")
+    if value == "true" then
+        return true
+    elseif value == "false" then
+        return false
+    end
+    return fallback
+end
+
+function sanitizeProviderSettingName(name, fallback)
+    local cleaned = tostring(name or fallback or "Setting"):gsub("[^%w]", "")
+    return cleaned ~= "" and cleaned or tostring(fallback or "Setting")
+end
+
+function getProviderDropdownOptions(block)
+    local listBlock = block:match("List%s*=%s*{(.-)}") or block:match("Options%s*=%s*{(.-)}")
+    local options = {}
+    if listBlock then
+        for option in listBlock:gmatch("'([^']*)'") do
+            table.insert(options, option)
+        end
+        for option in listBlock:gmatch('"([^"]*)"') do
+            table.insert(options, option)
+        end
+    end
+    if #options == 0 then
+        table.insert(options, getQuotedProviderValue(block, "Default") or "Default")
+    end
+    return options
+end
+
+function getStaticProviderHandler(moduleName)
+    local normalized = normalizeModuleName(moduleName)
+    for handlerName, handler in pairs(moduleHandlers) do
+        if normalizeModuleName(handlerName) == normalized then
+            return handler
+        end
+    end
+
+    local aliases = {
+        killaura = "KillAura",
+        aimassist = "AimAssist",
+        autoclicker = "AutoClicker",
+        triggerbot = "TriggerBot",
+        velocityplus = "Velocity",
+        antifall = "AntiVoid",
+        fastbreak = "FastBreak",
+        hitboxes = "HitBoxes",
+        keepsprint = "Sprint",
+        noslow = "Sprint",
+        noslowdown = "Sprint",
+        projectileaimbot = "Aimbot",
+        speed = "Speed",
+        bedesp = "BedESP",
+        nametags = "NameTags",
+        storageesp = "StorageESP",
+        fpsboost = "FPS Boost",
+        hitcolor = "Hit Color",
+        hitfix = "Reach",
+        viewmodel = "Viewmodel",
+        nofalldamage = "NoFallDamage",
+        nofall = "NoFall",
+        autovoiddrop = "AutoVoidDrop",
+        autobuy = "AutoBuy",
+        staffdetector = "StaffDetector",
+        trapdisabler = "TrapDisabler",
+        pickuprange = "PickupRange",
+        scaffold = "Scaffold",
+        nuker = "Nuker"
+    }
+
+    local alias = aliases[normalized]
+    return alias and moduleHandlers[alias] or nil
+end
+
+function addStaticProviderSetting(settings, moduleName, definition)
+    moduleSettings[moduleName] = moduleSettings[moduleName] or {}
+    if definition.settingName and moduleSettings[moduleName][definition.settingName] == nil then
+        moduleSettings[moduleName][definition.settingName] = definition.default
+    end
+    table.insert(settings, definition)
+end
+
+function importStaticProviderSettings(segment, variableName, moduleName)
+    local settings = {}
+    local escapedVariable = variableName:gsub("([^%w])", "%%%1")
+
+    for block in segment:gmatch(escapedVariable .. ":CreateSlider%s*%(%s*{(.-)}%)") do
+        local name = getQuotedProviderValue(block, "Name") or "Slider"
+        local minValue = getNumericProviderValue(block, "Min", 0)
+        local maxValue = getNumericProviderValue(block, "Max", math.max(minValue + 1, getNumericProviderValue(block, "Default", 100)))
+        local defaultValue = getNumericProviderValue(block, "Default", minValue)
+        addStaticProviderSetting(settings, moduleName, {
+            type = "slider",
+            name = name,
+            min = minValue,
+            max = maxValue,
+            settingName = sanitizeProviderSettingName(name, "Slider"),
+            default = defaultValue,
+            allowTextInputBeyondMax = true
+        })
+    end
+
+    for block in segment:gmatch(escapedVariable .. ":CreateToggle%s*%(%s*{(.-)}%)") do
+        local name = getQuotedProviderValue(block, "Name") or "Toggle"
+        addStaticProviderSetting(settings, moduleName, {
+            type = "toggle",
+            name = name,
+            settingName = sanitizeProviderSettingName(name, "Toggle"),
+            default = getBooleanProviderValue(block, "Default", false)
+        })
+    end
+
+    for block in segment:gmatch(escapedVariable .. ":CreateDropdown%s*%(%s*{(.-)}%)") do
+        local name = getQuotedProviderValue(block, "Name") or "Dropdown"
+        local options = getProviderDropdownOptions(block)
+        addStaticProviderSetting(settings, moduleName, {
+            type = "dropdown",
+            name = name,
+            options = options,
+            settingName = sanitizeProviderSettingName(name, "Dropdown"),
+            default = getQuotedProviderValue(block, "Default") or options[1]
+        })
+    end
+
+    for block in segment:gmatch(escapedVariable .. ":CreateTextBox%s*%(%s*{(.-)}%)") do
+        local name = getQuotedProviderValue(block, "Name") or "Text"
+        addStaticProviderSetting(settings, moduleName, {
+            type = "textbox",
+            name = name,
+            settingName = sanitizeProviderSettingName(name, "Text"),
+            default = getQuotedProviderValue(block, "Default") or ""
+        })
+    end
+
+    return settings
+end
+
+function importStaticProviderModules(providerInfo, source)
+    local imported = 0
+    local position = 1
+
+    while true do
+        local moduleStart, moduleEnd, variableName, categoryName = source:find("([%w_]+)%s*=%s*vape%.Categories%.([%w_]+):CreateModule%s*%(%s*{", position)
+        if not moduleStart then
+            break
+        end
+
+        local nextModuleStart = source:find("[%w_]+%s*=%s*vape%.Categories%.[%w_]+:CreateModule%s*%(%s*{", moduleEnd + 1) or (#source + 1)
+        local segment = source:sub(moduleEnd + 1, nextModuleStart - 1)
+        local moduleName = getQuotedProviderValue(segment:sub(1, 1200), "Name")
+
+        if moduleName and moduleName ~= "" then
+            local normalized = normalizeModuleName(moduleName)
+            if not Aether.ProviderModuleLookup[normalized] then
+                Aether.ProviderModuleLookup[normalized] = {name = moduleName, source = providerInfo.name, static = true}
+                local settings = importStaticProviderSettings(segment, variableName, moduleName)
+                createRegisteredModule(categoryName, moduleName, false, getStaticProviderHandler(moduleName), settings)
+                imported += 1
+            end
+        end
+
+        position = moduleEnd + 1
+    end
+
+    if imported > 0 then
+        consoleLog(string.format("AetherCore statically imported %d modules from %s.", imported, providerInfo.name))
+    end
+end
+
+function importEmbeddedProviderManifest()
+    local imported = 0
+
+    for _, moduleInfo in ipairs(AETHER_PROVIDER_MODULE_MANIFEST) do
+        local moduleName = moduleInfo.name
+        local normalized = normalizeModuleName(moduleName)
+        if not Aether.ProviderModuleLookup[normalized] then
+            createRegisteredModule(moduleInfo.category, moduleName, false, getStaticProviderHandler(moduleName), {})
+            Aether.ProviderModuleLookup[normalized] = {name = moduleName, source = moduleInfo.source, manifest = true}
+            imported += 1
+        end
+    end
+
+    if imported > 0 then
+        consoleLog(string.format("AetherCore imported %d embedded CatVape/AeroV4 modules.", imported))
+    end
+end
+
+function loadExternalModuleSources()
+    if type(getgenv) ~= "function" then
+        getgenv = function()
+            return _G
+        end
+    end
+    local originalSharedVape = shared and shared.vape or nil
+    shared = shared or {}
+    local provider = createAetherProviderObject()
+    local providerSources = {}
+    shared.vape = provider
+
+    for _, providerInfo in ipairs(PROVIDER_SOURCE_FILES) do
+        local source = readProviderSource(providerInfo)
+        if source then
+            table.insert(providerSources, {info = providerInfo, source = source})
+            local compiled, compileError = loadstring(normalizeProviderSource(source))
+            if compiled then
+                local ok, runtimeError = pcall(compiled)
+                if not ok then
+                    Aether.ProviderStats.failed += 1
+                    warn(string.format("[AetherCore] %s source bridge stopped early: %s", providerInfo.name, tostring(runtimeError)))
+                end
+            else
+                Aether.ProviderStats.failed += 1
+                warn(string.format("[AetherCore] %s source bridge could not compile: %s", providerInfo.name, tostring(compileError)))
+            end
+        else
+            Aether.ProviderStats.failed += 1
+            warn(string.format("[AetherCore] Could not read provider source: %s", providerInfo.path))
+        end
+    end
+
+    for _, providerSource in ipairs(providerSources) do
+        importStaticProviderModules(providerSource.info, providerSource.source)
+    end
+
+    importEmbeddedProviderManifest()
+
+    shared.vape = originalSharedVape or provider
+    consoleLog(string.format("AetherCore imported %d modules from CatVape/AeroV4 (%d duplicates skipped).", Aether.ProviderStats.loaded, Aether.ProviderStats.skipped))
+end
+
 function createRegisteredModule(category, name, defaultEnabled, toggleCallback, settingsDefinition)
+    local normalized = normalizeModuleName(name)
+    if Aether.ProviderModuleLookup[normalized] and not (Aether.ProviderModuleLookup[normalized].name == name and moduleUi[name] == nil) then
+        return
+    end
     moduleDefinitions[name] = settingsDefinition or {}
+    moduleHandlers[name] = toggleCallback
     createModule(category, name, defaultEnabled, toggleCallback)
 end
 
--- Added modules from 6872274481.vape and mapped to working AetherCore handlers.
+-- AetherCore-only fallback modules. Provider matches are skipped so CatVape/AeroV4 remain authoritative.
 function registerAetherModules()
 createRegisteredModule("Combat", "TriggerBot", false, toggleTriggerBot, {})
 createRegisteredModule("Blatant", "AntiFall", false, toggleAlias(toggleAntiVoid), {})
@@ -6645,6 +7410,7 @@ createRegisteredModule("World", "Nuker", false, toggleNuker, {
 })
 end
 
+loadExternalModuleSources()
 registerAetherModules()
 
 function refreshSearch()
@@ -6699,55 +7465,63 @@ function selfDestructAether()
 
     selfDestructing = true
 
-    pcall(function()
-        if autoToxicMessageConnection then
+    if screenGui then
+        pcall(function()
+            screenGui.Enabled = false
+        end)
+    end
+
+    if autoToxicMessageConnection then
+        pcall(function()
             autoToxicMessageConnection:Disconnect()
-            autoToxicMessageConnection = nil
-        end
+        end)
+        autoToxicMessageConnection = nil
+    end
 
-        local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
-        if sharedEnvironment then
-            sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
-        end
+    local sharedEnvironment = sharedEnvironmentGetter and sharedEnvironmentGetter() or nil
+    if sharedEnvironment then
+        sharedEnvironment[AUTO_TOXIC_CONNECTION_KEY] = nil
+    end
 
-        for moduleName, _ in pairs(moduleStates) do
-            moduleStates[moduleName] = false
+    for moduleName, _ in pairs(moduleStates) do
+        moduleStates[moduleName] = false
 
-            if moduleHandlers[moduleName] then
-                pcall(function()
-                    moduleHandlers[moduleName](false)
-                end)
-            end
-
+        if moduleHandlers[moduleName] then
             pcall(function()
-                cleanupModule(moduleName)
+                moduleHandlers[moduleName](false)
             end)
-
-            if moduleUi[moduleName] then
-                pcall(function()
-                    moduleUi[moduleName].setEnabled(false)
-                end)
-            end
         end
 
-        for moduleName, connections in pairs(moduleConnections) do
-            if typeof(connections) == "RBXScriptConnection" then
-                pcall(function()
-                    connections:Disconnect()
-                end)
-            elseif type(connections) == "table" then
-                for _, connection in pairs(connections) do
-                    if typeof(connection) == "RBXScriptConnection" then
-                        pcall(function()
-                            connection:Disconnect()
-                        end)
-                    end
+        pcall(function()
+            cleanupModule(moduleName)
+        end)
+
+        if moduleUi[moduleName] then
+            pcall(function()
+                moduleUi[moduleName].setEnabled(false)
+            end)
+        end
+    end
+
+    for moduleName, connections in pairs(moduleConnections) do
+        if typeof(connections) == "RBXScriptConnection" then
+            pcall(function()
+                connections:Disconnect()
+            end)
+        elseif type(connections) == "table" then
+            for _, connection in pairs(connections) do
+                if typeof(connection) == "RBXScriptConnection" then
+                    pcall(function()
+                        connection:Disconnect()
+                    end)
                 end
             end
-
-            moduleConnections[moduleName] = nil
         end
 
+        moduleConnections[moduleName] = nil
+    end
+
+    if type(moduleRuntime) == "table" then
         for key, value in pairs(moduleRuntime) do
             if typeof(value) == "Instance" then
                 pcall(function()
@@ -6765,17 +7539,16 @@ function selfDestructAether()
 
             moduleRuntime[key] = nil
         end
+    end
 
-        if screenGui then
-            pcall(function()
-                screenGui:Destroy()
-            end)
+    if screenGui then
+        pcall(function()
+            screenGui:Destroy()
+        end)
+        screenGui = nil
+    end
 
-            screenGui = nil
-        end
-
-        warn("[AetherCore] Self Destruct complete")
-    end)
+    warn("[AetherCore] Self Destruct complete")
 end
 
 function setupNavigationAndCloseHandlers()
@@ -6811,6 +7584,7 @@ function setupNavigationAndCloseHandlers()
     end
 
     setActiveSidebarTab("Home")
+end
 
 topBarStatusRefs.closeButton.MouseButton1Click:Connect(function()
     selfDestructAether()
