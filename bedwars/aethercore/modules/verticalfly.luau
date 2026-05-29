@@ -100,7 +100,7 @@ end
 
 
 Aether.RegisterModule({
-    Name = "VerticalFly",
+    Name = "VerticalFly [bro this thing cooked]",
     Category = "Blatant",
     Default = false,
     Settings = moduleSettings["VerticalFly"] or {},
