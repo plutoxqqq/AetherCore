@@ -24,15 +24,20 @@ AetherCore comes with many custom features in which other scripts do not have
 
 ### AetherCore v2.1.0
 
+<div align="left">
+
 $${\color{lightgreen}\text{[+] Redesigned internal UI structure}}$$
 $${\color{lightgreen}\text{[+] Fixed lots of modules}}$$
 $${\color{lightgreen}\text{[+] Added lots of modules}}$$
 $${\color{lightgreen}\text{[+] Fixed Self Destruct button not working}}$$
 $${\color{lightgreen}\text{[+] Other minor GUI bug fixes}}$$
 
+</div>
+
 Join our Discord server for the latest updates, announcements, and changes
 
 _Fri, 29 May, 2026_
+
 
 ---
 
