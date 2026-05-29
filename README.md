@@ -22,7 +22,7 @@ AetherCore v2.1
 [+] Redesigned internal UI structure
 [+] Fixed lots of modules
 [+] Added lots of modules
-[+] FIxed Self Festruct button not working
+[+] Fixed Self Festruct button not working
 
 Join our Discord server for the latest updates, announcements, and changes
 
