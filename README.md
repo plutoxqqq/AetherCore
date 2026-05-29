@@ -1,6 +1,12 @@
-# AetherCore
+# AetherCore – Modern BedWars Exploiting
 
 AetherCore is a new Roblox BedWars script. It features instant execution, lots of features, dedicated updates, and sleek UI
+
+**Loadstring:**
+```luau
+loadstring(game:HttpGet("https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/AetherCoreMain/AetherCore.lua"))()
+```
+
 
 ## AetherCore Features
 
@@ -11,7 +17,6 @@ AetherCore comes with many custom features in which other scripts do not have
 - Settings Tab: customise your AetherCore experience with its high customisation
 
 ## Plan for AetherCore
-
  AetherCore is planning to evolve with more modules, less bugs, better UI, and stronger modules
  > Please note that AetherCore is still relatively new, so expect performance issues, bugs, and module inconsistencies
 
