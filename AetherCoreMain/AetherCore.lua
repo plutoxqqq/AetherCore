@@ -1,8 +1,9 @@
 -- AetherCore bootstrapper
--- Delegates execution to bedwars/aethercore/aethercore.luau.
+-- Keeps the public loadstring unchanged while executing the single unified
+-- BedWars payload at bedwars/aethercore.luau.
 
-local BEDWARS_ENTRY_PATH = "bedwars/aethercore/aethercore.luau"
-local BEDWARS_ENTRY_URL = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/bedwars/aethercore/aethercore.luau"
+local BEDWARS_ENTRY_PATH = "bedwars/aethercore.luau"
+local BEDWARS_ENTRY_URL = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/bedwars/aethercore.luau"
 
 local function compileAndRun(source)
     if type(loadstring) ~= "function" then
@@ -14,7 +15,7 @@ local function compileAndRun(source)
         return false, string.format("compile error: %s", tostring(compileErr))
     end
 
-    local ran, runtimeErr = pcall(fn)
+    local ran, runtimeErr = xpcall(fn, debug.traceback)
     if not ran then
         return false, string.format("runtime error: %s", tostring(runtimeErr))
     end
@@ -23,10 +24,8 @@ local function compileAndRun(source)
 end
 
 local function fetchBedwarsSource()
-    local url = BEDWARS_ENTRY_URL
-
     local success, source = pcall(function()
-        return game:HttpGet(url)
+        return game:HttpGet(BEDWARS_ENTRY_URL)
     end)
 
     if success and type(source) == "string" and source ~= "" then
@@ -41,19 +40,15 @@ local function fetchBedwarsSource()
         end
     end
 
-    return false, string.format("failed to download '%s': %s", url, tostring(source))
+    return false, string.format("failed to download '%s': %s", BEDWARS_ENTRY_URL, tostring(source))
 end
 
-local function runBedwarsEntry()
-    local ok, sourceOrError = fetchBedwarsSource()
-    if not ok then
-        return false, sourceOrError
-    end
-
-    return compileAndRun(sourceOrError)
-end
-
-local ok, err = runBedwarsEntry()
+local ok, sourceOrError = fetchBedwarsSource()
 if not ok then
-    error(string.format("[AetherCore] Failed to start from '%s': %s", BEDWARS_ENTRY_PATH, tostring(err)))
+    error(string.format("[AetherCore] Failed to fetch unified payload: %s", tostring(sourceOrError)))
+end
+
+local ran, runtimeError = compileAndRun(sourceOrError)
+if not ran then
+    error(string.format("[AetherCore] Failed to start unified payload from '%s': %s", BEDWARS_ENTRY_PATH, tostring(runtimeError)))
 end

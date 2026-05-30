@@ -8,32 +8,29 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/plutoxqqq/AetherCore/
 ```
 
 
-## AetherCore Features
+## AetherCore Payload
 
-AetherCore comes with many custom features in which other scripts do not have
+AetherCore now uses one unified BedWars payload instead of the old custom module tree. The public loadstring is unchanged, but it loads `bedwars/aethercore.luau`, which combines:
 
-- ScriptHub: where you can ask about details for every module and what it does
-- Home Tab: useful quick buttons for tasks such as resetting character, server hopping, or join queue
-- Settings Tab: customise your AetherCore experience with its high customisation
+- `bedwars/aerov4.luau`
+- `bedwars/catvape.luau`
 
 ## Plan for AetherCore
- AetherCore is planning to evolve with more modules, less bugs, better UI, and stronger modules
- > Please note that AetherCore is still relatively new, so expect performance issues, bugs, and module inconsistencies
+ AetherCore is now maintained as a single combined payload to reduce loader complexity and avoid split-module inconsistencies.
 
 ## Latest Changes
 
 ```luau
-AetherCore v2.1.0
+AetherCore v3.0.0
 
-[+] Redesigned internal UI structure
-[+] Fixed lots of modules
-[+] Added lots of modules
-[+] Fixed Self Destruct button not working
-[+] Other minor GUI bug fixes
+[+] Rebuilt the loader around one combined payload
+[+] Switched execution to Aero V4 with the CatVape payload included
+[+] Removed the old custom module loading flow from the public entrypoint
+[+] Kept the existing public loadstring unchanged
 
 Join our Discord server for the latest updates, announcements, and changes
 
-Fri, 29 May, 2026
+Sat, 30 May, 2026
 ```
 
 ---
