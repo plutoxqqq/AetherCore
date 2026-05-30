@@ -2,7 +2,7 @@
 local run = function(func)
     local ok, err = pcall(func)
     if not ok then
-        warn('[AEROV4] module failed to load: ' .. tostring(err))
+        warn('[AetherCore] module failed to load: ' .. tostring(err))
     end
 end
 local vapeEvents = setmetatable({}, {
@@ -1197,7 +1197,7 @@ run(function()
 
 		if remote == '' or remote == nil then
 			if not preDumped[i] then
-				notif('Vape', 'Failed to grab remote ('..tostring(i)..')', 10, 'alert')
+				notif('AetherCore', 'Failed to grab remote ('..tostring(i)..')', 10, 'alert')
 			end
 			remote = preDumped[i] or ''
 		end
@@ -2869,7 +2869,7 @@ run(function()
 
     local function createkitrender(plr)
         local icon = Instance.new("ImageLabel")
-        icon.Name = "AeroV4KitRender" 
+        icon.Name = "AetherCoreKitRender"
         icon.AnchorPoint = Vector2.new(1, 0.5)
         icon.BackgroundTransparency = 1
         icon.Position = UDim2.new(1.05, 0, 0.5, 0)
@@ -2901,7 +2901,7 @@ run(function()
         end
         
         for _, v in ipairs(PlayerGui:GetDescendants()) do
-            if v:IsA("ImageLabel") and v.Name == "AeroV4KitRender" then  
+            if v:IsA("ImageLabel") and v.Name == "AetherCoreKitRender" then
                 v:Destroy()
             end
         end
@@ -2967,7 +2967,7 @@ run(function()
             local card = container:FindFirstChild("1") and container["1"]:FindFirstChild("MatchDraftPlayerCard")
             if not card then return end
             
-            local icon = card:FindFirstChild("AeroV4KitRender")  
+            local icon = card:FindFirstChild("AetherCoreKitRender")
             if not icon then
                 icon = createkitrender(playerFound)
                 icon.Parent = card
@@ -3002,7 +3002,7 @@ run(function()
     local function createKitLabel(parent, kitImage)
         if kitLabels[parent] then kitLabels[parent]:Destroy() end
         local kitLabel = Instance.new("ImageLabel")
-        kitLabel.Name = "AeroV4KitIcon"
+        kitLabel.Name = "AetherCoreKitIcon"
         kitLabel.Size = UDim2.new(1, 0, 1, 0)
         kitLabel.Position = UDim2.new(1.1, 0, 0, 0)
         kitLabel.BackgroundTransparency = 1
@@ -4786,7 +4786,7 @@ run(function()
 	})
 end)
 
--- aero killaura 
+-- AetherCore killaura
 local Attacking
 run(function()
     local Killaura
@@ -7622,19 +7622,19 @@ run(function()
 						elseif typeof(bedwars.ShopTaxController.hasTax) == "boolean" then
 							bedwars.ShopTaxController.hasTax = false
 						else
-							vape:CreateNotification('TaxRemover',`Tax Remover error the type of hasTax is {typeof(bedwars.ShopTaxController.hasTax)} report to aero or soryed`,16,'alert')
+							vape:CreateNotification('TaxRemover',`Tax Remover error the type of hasTax is {typeof(bedwars.ShopTaxController.hasTax)} report to the AetherCore maintainers`,16,'alert')
 							break
 						end
 						if typeof(bedwars.ShopTaxController.taxedItems) == "table" then
 							bedwars.ShopTaxController.taxedItems = {}
 						else
-							vape:CreateNotification('TaxRemover',`Tax Remover error the type of taxedItems is NOT a TABLE PLEASE report to aero or soryed ASAP`,16,'alert')
+							vape:CreateNotification('TaxRemover',`Tax Remover error the type of taxedItems is NOT a TABLE PLEASE report to the AetherCore maintainers ASAP`,16,'alert')
 							break
 						end
 						if typeof(bedwars.ShopTaxController.addedTaxMap) == "table" then
 							bedwars.ShopTaxController.addedTaxMap = {}
 						else
-							vape:CreateNotification('TaxRemover',`Tax Remover error the type of addedTaxMap is NOT a TABLE PLEASE report to aero or soryed ASAP`,16,'alert')
+							vape:CreateNotification('TaxRemover',`Tax Remover error the type of addedTaxMap is NOT a TABLE PLEASE report to the AetherCore maintainers ASAP`,16,'alert')
 							break
 						end
 						task.wait()
@@ -9901,7 +9901,7 @@ run(function()
                             newKitImage = res.renderImage
                         else
                             if not suc then
-                                warn(`[AEROV4 MODULE ISSUE]: [Module - NameTags (Using bedwars.BedwarsKitMeta)] [Error]: {res}`)
+                                warn(`[AetherCore Module Issue]: [Module - NameTags (Using bedwars.BedwarsKitMeta)] [Error]: {res}`)
                             end
                             newKitImage = kitImageIds[kit] or kitImageIds['none']
                         end
@@ -10477,7 +10477,7 @@ run(function()
 								AlarmAffects(bedpos)
 
 								local msg = '[Bed Alarm]: An intruder is near your bed!'
-								if Types.Value == 'Vape' then
+								if Types.Value == 'AetherCore' then
 									vape:CreateNotification("BedAlarm", msg, UpdateTick.Value + 1)
 								else
 									pcall(function()
@@ -10528,7 +10528,7 @@ run(function()
 	
 	Types = BedAlarm:CreateDropdown({
 		Name = 'Notification Type',
-		List = {'Vape','Bedwars'},
+		List = {'AetherCore','Bedwars'},
 		Default = 'Bedwars'
 	})
 	
@@ -20957,7 +20957,7 @@ run(function()
 
 	local function rakNetCheck(module)
 		if not (raknet and raknet.add_send_hook and pcall(raknet.add_send_hook, function() end)) then
-			vape:CreateNotification('Vape', 'This feature requires raknet!!!!', 10, 'warning')
+			vape:CreateNotification('AetherCore', 'This feature requires RakNet.', 10, 'warning')
 			return false
 		end
 		return true
@@ -29552,7 +29552,7 @@ run(function()
 						bedwars.GlacialSkaterController:updateMomentum(100, "newValue")
 					end)
 					if not suc then
-						warn(`[AEROV4 MODULE ISSUE]: [Module - InfKrystal (Starting to update Momentum)] [Error]: {res}`)
+						warn(`[AetherCore Module Issue]: [Module - InfKrystal (Starting to update Momentum)] [Error]: {res}`)
 						runService:UnbindFromRenderStep('InfiniteKrystalMovement')
 					end
 				end)
@@ -29563,7 +29563,7 @@ run(function()
 					bedwars.GlacialSkaterController:updateMomentum(0, "newValue")
 				end)
 				if not suc then
-					warn(`[AEROV4 MODULE ISSUE]: [Module - InfKrystal (Resetting updateMomentum function)] [Error]: {res}`)
+					warn(`[AetherCore Module Issue]: [Module - InfKrystal (Resetting updateMomentum function)] [Error]: {res}`)
 				end
 			end
 		end
@@ -30924,7 +30924,7 @@ run(function()
 		elseif Mode.Value == 'Camera' then
 			targetPos = gameCamera.CFrame.Position + gameCamera.CFrame.LookVector * 200
 		else
-			vape:CreateNotification('MouseTP', 'Mode is currently nil. Report to aero or soryed', 6, 'warning')
+			vape:CreateNotification('MouseTP', 'Mode is currently nil. Report to the AetherCore maintainers', 6, 'warning')
 			return
 		end
 
@@ -30975,7 +30975,7 @@ run(function()
 				)
 			end
 		else
-			vape:CreateNotification('MouseTP', 'Movement is currently nil. Report to aero or soryed', 6, 'warning')
+			vape:CreateNotification('MouseTP', 'Movement is currently nil. Report to the AetherCore maintainers', 6, 'warning')
 			return
 		end
 	end
@@ -34644,7 +34644,7 @@ run(function()
 
 	Aura = vape.Categories.Render:CreateModule({
 		Name = 'Aura',
-		Tooltip = 'aero = aura !!',
+		Tooltip = 'AetherCore aura',
 		Function = function(callback)
 			if callback then
 				applyAura()
