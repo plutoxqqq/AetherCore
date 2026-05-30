@@ -61,6 +61,13 @@ local function initializeVapeCore()
     return true
 end
 
+local function hasRequiredVapeRuntime()
+    return isVapeCoreReady()
+        and type(shared.vape.Libraries.entity) == "table"
+        and type(shared.vape.Libraries.targetinfo) == "table"
+        and type(shared.vape.Libraries.sessioninfo) == "table"
+end
+
 local function compileAndRun(source)
     if type(loadstring) ~= "function" then
         return false, "loadstring is not available in this executor"
@@ -102,6 +109,15 @@ end
 local coreReady, coreError = ensureVapeCore()
 if not coreReady then
     error(string.format("[AetherCore] Failed to load Vape core: %s", tostring(coreError)))
+end
+
+local initialized, initError = initializeVapeCore()
+if not initialized then
+    error(string.format("[AetherCore] Failed to initialize Vape core: %s", tostring(initError)))
+end
+
+if not hasRequiredVapeRuntime() then
+    error("[AetherCore] Vape core is missing required runtime libraries after initialization")
 end
 
 local ok, sourceOrError = fetchBedwarsSource()
