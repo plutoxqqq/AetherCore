@@ -12,54 +12,133 @@ function toggleLongJump(enabled)
     local JumpTick, JumpSpeed, Direction = tick(), 0, nil
     local projectileRemote = {InvokeServer = function(self, ...) return false end}
 
-    local function flattenUnit(vec)
-        if not vec then return Vector3.new(0, 0, -1) end
-        local flat = Vector3.new(vec.X, 0, vec.Z)
-        return flat.Magnitude > 0 and flat.Unit or Vector3.new(0, 0, -1)
-    end
+    task.spawn(function()
+        projectileRemote = bedwars.Client:Get(remotes.FireProjectile).instance
+    end)
 
     local function launchProjectile(item, pos, proj, speed, dir)
-        if not (item and pos and dir) then return end
-        if projectileRemote and projectileRemote.InvokeServer then
-            pcall(function()
-                projectileRemote:InvokeServer(item, proj, proj, pos, pos, dir * speed)
-            end)
+        if not (item and pos) then return end
+
+        pos = pos - dir * 0.1
+        local shootPosition = (CFrame.lookAlong(pos, Vector3.new(0, -speed, 0)) * CFrame.new(Vector3.new(-bedwars.BowConstantsTable.RelX, -bedwars.BowConstantsTable.RelY, -bedwars.BowConstantsTable.RelZ)))
+
+        switchItem(item.tool, 0)
+        task.wait(0.1)
+
+        if projectileRemote:InvokeServer(item.tool, proj, proj, shootPosition.Position, pos, shootPosition.LookVector * speed, httpService:GenerateGUID(true), {drawDurationSeconds = 1}, workspace:GetServerTimeNow() - 0.045) then
+            local shoot = bedwars.ItemMeta[item.itemType].projectileSource.launchSound
+            shoot = shoot and shoot[math.random(1, #shoot)] or nil
+            if shoot then
+                bedwars.SoundManager:playSound(shoot)
+            end
         end
     end
 
     local LongJumpMethods = {
-        cannon = function(_, _, dir)
-            Direction = flattenUnit(dir)
-            JumpSpeed = 5.25 * Value.Value
-            JumpTick = tick() + 2.3
+        cannon = function(_, pos, dir)
+            pos = pos - Vector3.new(0, (entitylib.character.HipHeight + (entitylib.character.RootPart.Size.Y / 2)) - 3, 0)
+            local rounded = Vector3.new(math.round(pos.X / 3) * 3, math.round(pos.Y / 3) * 3, math.round(pos.Z / 3) * 3)
+            bedwars.placeBlock(rounded, 'cannon', false)
+
+            task.delay(0, function()
+                local block, blockpos = getPlacedBlock(rounded)
+                if block and block.Name == 'cannon' and (entitylib.character.RootPart.Position - block.Position).Magnitude < 20 then
+                    local breaktype = bedwars.ItemMeta[block.Name].block.breakType
+                    local tool = store.tools[breaktype]
+                    if tool then
+                        switchItem(tool.tool)
+                    end
+
+                    bedwars.Client:Get(remotes.CannonAim):SendToServer({
+                        cannonBlockPos = blockpos,
+                        lookVector = dir
+                    })
+
+                    local broken = 0.1
+                    if bedwars.BlockController:calculateBlockDamage(lplr, {blockPosition = blockpos}) < block:GetAttribute('Health') then
+                        broken = 0.4
+                        bedwars.breakBlock(block, true, true)
+                    end
+
+                    task.delay(broken, function()
+                        for _ = 1, 3 do
+                            local call = bedwars.Client:Get(remotes.CannonLaunch):CallServer({cannonBlockPos = blockpos})
+                            if call then
+                                bedwars.breakBlock(block, true, true)
+                                JumpSpeed = 5.25 * Value.Value
+                                JumpTick = tick() + 2.3
+                                Direction = Vector3.new(dir.X, 0, dir.Z).Unit
+                                break
+                            end
+                            task.wait(0.1)
+                        end
+                    end)
+                end
+            end)
         end,
+
         catrewrite = function(_, _, dir)
-            Direction = flattenUnit(dir)
-            JumpSpeed = 4 * Value.Value
-            JumpTick = tick() + 2.5
+            addConnection("LongJump", vapeEvents.CatPounce.Event:Connect(function()
+                JumpSpeed = 4 * Value.Value
+                JumpTick = tick() + 2.5
+                Direction = Vector3.new(dir.X, 0, dir.Z).Unit
+                entitylib.character.RootPart.Velocity = Vector3.zero
+            end))
+
+            if not bedwars.AbilityController:canUseAbility('CAT_POUNCE') then
+                repeat task.wait() until bedwars.AbilityController:canUseAbility('CAT_POUNCE') or not moduleStates["LongJump"]
+            end
+
+            if bedwars.AbilityController:canUseAbility('CAT_POUNCE') and moduleStates["LongJump"] then
+                bedwars.AbilityController:useAbility('CAT_POUNCE')
+            end
         end,
+
         fireball = function(item, pos, dir)
-            launchProjectile(item, pos, "fireball", 60, dir)
+            launchProjectile(item, pos, 'fireball', 60, dir)
         end,
+
         grappling_hook = function(item, pos, dir)
-            launchProjectile(item, pos, "grappling_hook_projectile", 140, dir)
-            Direction = flattenUnit(dir)
-            JumpSpeed = 2.5 * Value.Value
-            JumpTick = tick() + 2.5
+            launchProjectile(item, pos, 'grappling_hook_projectile', 140, dir)
         end,
-        jade_hammer = function(_, _, dir)
-            Direction = flattenUnit(dir)
-            JumpSpeed = 1.4 * Value.Value
-            JumpTick = tick() + 2.5
+
+        jade_hammer = function(item, _, dir)
+            if not bedwars.AbilityController:canUseAbility(item.itemType..'_jump') then
+                repeat task.wait() until bedwars.AbilityController:canUseAbility(item.itemType..'_jump') or not moduleStates["LongJump"]
+            end
+
+            if bedwars.AbilityController:canUseAbility(item.itemType..'_jump') and moduleStates["LongJump"] then
+                bedwars.AbilityController:useAbility(item.itemType..'_jump')
+                JumpSpeed = 1.4 * Value.Value
+                JumpTick = tick() + 2.5
+                Direction = Vector3.new(dir.X, 0, dir.Z).Unit
+            end
         end,
+
         tnt = function(item, pos, dir)
-            if not (item and pos and dir and start) then return end
-            start = Vector3.new(pos.X, start.Y, pos.Z) + (dir * (item.Name == "pirate_gunpowder_barrel" and 2.6 or 0.2))
+            pos = pos - Vector3.new(0, (entitylib.character.HipHeight + (entitylib.character.RootPart.Size.Y / 2)) - 3, 0)
+            local rounded = Vector3.new(math.round(pos.X / 3) * 3, math.round(pos.Y / 3) * 3, math.round(pos.Z / 3) * 3)
+            start = Vector3.new(rounded.X, start.Y, rounded.Z) + (dir * (item.itemType == 'pirate_gunpowder_barrel' and 2.6 or 0.2))
+            bedwars.placeBlock(rounded, item.itemType, false)
         end,
-        wood_dao = function(_, _, dir)
-            Direction = flattenUnit(dir)
-            JumpSpeed = 4.5 * Value.Value
-            JumpTick = tick() + 2.4
+
+        wood_dao = function(item, pos, dir)
+            if (lplr.Character:GetAttribute('CanDashNext') or 0) > workspace:GetServerTimeNow() or not bedwars.AbilityController:canUseAbility('dash') then
+                repeat task.wait() until (lplr.Character:GetAttribute('CanDashNext') or 0) < workspace:GetServerTimeNow() and bedwars.AbilityController:canUseAbility('dash') or not moduleStates["LongJump"]
+            end
+
+            if moduleStates["LongJump"] then
+                bedwars.SwordController.lastAttack = workspace:GetServerTimeNow()
+                switchItem(item.tool, 0.1)
+                replicatedStorage['events-@easy-games/game-core:shared/game-core-networking@getEvents.Events'].useAbility:FireServer('dash', {
+                    direction = dir,
+                    origin = pos,
+                    weapon = item.itemType
+                })
+                JumpSpeed = 4.5 * Value.Value
+                JumpTick = tick() + 2.4
+                Direction = Vector3.new(dir.X, 0, dir.Z).Unit
+            end
         end
     }
 
@@ -86,7 +165,7 @@ function toggleLongJump(enabled)
 
     local function getLookVector()
         local source = CameraDir.Enabled and camera or hrp
-        return flattenUnit(source.CFrame.LookVector)
+        return Vector3.new(source.CFrame.LookVector.X, 0, source.CFrame.LookVector.Z).Unit
     end
 
     local function getItemByName(name)
@@ -108,7 +187,12 @@ function toggleLongJump(enabled)
         return false
     end
 
-    triggerMethodFromInventory()
+    -- CatVape style initial trigger
+    if store.hand and LongJumpMethods[store.hand.tool.Name] then
+        task.spawn(LongJumpMethods[store.hand.tool.Name], getItem(store.hand.tool.Name), start, getLookVector())
+    else
+        triggerMethodFromInventory()
+    end
 
     addConnection("LongJump", UserInputService.InputBegan:Connect(function(input, gpe)
         if gpe or not moduleStates["LongJump"] then return end
@@ -117,12 +201,40 @@ function toggleLongJump(enabled)
         end
     end))
 
+    -- CatVape enhanced connections
+    addConnection("LongJump", vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
+        if damageTable.entityInstance == lplr.Character and damageTable.fromEntity == lplr.Character and (not damageTable.knockbackMultiplier or not damageTable.knockbackMultiplier.disabled) then
+            local knockbackBoost = bedwars.KnockbackUtil.calculateKnockbackVelocity(Vector3.one, 1, {
+                vertical = 0,
+                horizontal = (damageTable.knockbackMultiplier and damageTable.knockbackMultiplier.horizontal or 1)
+            }).Magnitude * 1.1
+
+            if knockbackBoost >= JumpSpeed then
+                local pos = damageTable.fromPosition and Vector3.new(damageTable.fromPosition.X, damageTable.fromPosition.Y, damageTable.fromPosition.Z) or damageTable.fromEntity and damageTable.fromEntity.PrimaryPart.Position
+                if not pos then return end
+                local vec = (entitylib.character.RootPart.Position - pos)
+                JumpSpeed = knockbackBoost
+                JumpTick = tick() + 2.5
+                Direction = Vector3.new(vec.X, 0, vec.Z).Unit
+            end
+        end
+    end))
+
+    addConnection("LongJump", vapeEvents.GrapplingHookFunctions.Event:Connect(function(dataTable)
+        if dataTable.hookFunction == 'PLAYER_IN_TRANSIT' then
+            local vec = entitylib.character.RootPart.CFrame.LookVector
+            JumpSpeed = 2.5 * Value.Value
+            JumpTick = tick() + 2.5
+            Direction = Vector3.new(vec.X, 0, vec.Z).Unit
+        end
+    end))
+
     addConnection("LongJump", RunService.PreSimulation:Connect(function(dt)
         if not moduleStates["LongJump"] then return end
         local currentChar = getCharacter(lplr)
         local root = getHRP(currentChar)
         local currentHum = getHumanoid(currentChar)
-        if not (root and currentHum) then
+        if not (root and currentHum) or not isnetworkowner(root) then
             start = nil
             return
         end

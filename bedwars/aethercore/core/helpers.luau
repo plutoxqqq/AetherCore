@@ -79,6 +79,9 @@ CollectionService = Aether.Services.CollectionService
 Lighting = Aether.Services.Lighting
 StarterGui = Aether.Services.StarterGui
 
+httpService = HttpService
+replicatedStorage = ReplicatedStorage
+
 lplr = Aether.Services.LocalPlayer
 mouse = Aether.Services.Mouse
 camera = Aether.Services.Camera
