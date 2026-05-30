@@ -1465,8 +1465,89 @@ function uiCreateTextBox(parent, name, default, callback)
     end)
 end
 
+
+function formatGeneratedSettingName(key)
+    local spaced = tostring(key or "Setting"):gsub("([a-z%d])([A-Z])", "%1 %2"):gsub("[_%-]+", " ")
+    return spaced:sub(1, 1):upper() .. spaced:sub(2)
+end
+
+
+function getSettingDefinitionDefault(definition)
+    if definition.default ~= nil then
+        return definition.default
+    elseif definition.type == "slider" then
+        return definition.min or 0
+    elseif definition.type == "toggle" then
+        return false
+    elseif definition.type == "dropdown" then
+        return definition.options and definition.options[1] or ""
+    elseif definition.type == "textbox" then
+        return ""
+    end
+    return nil
+end
+
+function createGeneratedSettingsDefinition(moduleName)
+    local settings = moduleSettings[moduleName]
+    if type(settings) ~= "table" then
+        return {}
+    end
+
+    local keys = {}
+    for key, value in pairs(settings) do
+        local valueType = type(value)
+        if valueType == "number" or valueType == "boolean" or valueType == "string" then
+            table.insert(keys, key)
+        end
+    end
+    table.sort(keys, function(a, b)
+        return tostring(a) < tostring(b)
+    end)
+
+    local definitions = {}
+    for _, key in ipairs(keys) do
+        local value = settings[key]
+        local valueType = type(value)
+        local name = formatGeneratedSettingName(key)
+        if valueType == "number" then
+            local absolute = math.abs(value)
+            local maxValue = math.max(1, absolute * 2)
+            local minValue = value < 0 and -maxValue or 0
+            table.insert(definitions, {
+                type = "slider",
+                name = name,
+                min = minValue,
+                max = maxValue,
+                settingName = key,
+                allowTextInputBeyondMax = true
+            })
+        elseif valueType == "boolean" then
+            table.insert(definitions, {
+                type = "toggle",
+                name = name,
+                settingName = key
+            })
+        elseif valueType == "string" then
+            table.insert(definitions, {
+                type = "textbox",
+                name = name,
+                settingName = key
+            })
+        end
+    end
+
+    return definitions
+end
+
 function createSettingsContent(parent, moduleName)
+    moduleSettings[moduleName] = moduleSettings[moduleName] or {}
+
     local defs = moduleDefinitions[moduleName] or {}
+    if #defs == 0 then
+        defs = createGeneratedSettingsDefinition(moduleName)
+        moduleDefinitions[moduleName] = defs
+    end
+
     if #defs == 0 then
         local label = Instance.new("TextLabel")
         label.Size = UDim2.new(1, 0, 0, 24)
@@ -1478,6 +1559,12 @@ function createSettingsContent(parent, moduleName)
         label.TextSize = 15
         label.Parent = parent
         return
+    end
+
+    for _, setting in ipairs(defs) do
+        if setting.settingName and moduleSettings[moduleName][setting.settingName] == nil then
+            moduleSettings[moduleName][setting.settingName] = getSettingDefinitionDefault(setting)
+        end
     end
 
     for _, setting in ipairs(defs) do
@@ -2233,7 +2320,7 @@ end
 function addStaticProviderSetting(settings, moduleName, definition)
     moduleSettings[moduleName] = moduleSettings[moduleName] or {}
     if definition.settingName and moduleSettings[moduleName][definition.settingName] == nil then
-        moduleSettings[moduleName][definition.settingName] = definition.default
+        moduleSettings[moduleName][definition.settingName] = getSettingDefinitionDefault(definition)
     end
     table.insert(settings, definition)
 end
@@ -2380,7 +2467,9 @@ function loadExternalModuleSources()
         importStaticProviderModules(providerSource.info, providerSource.source)
     end
 
-    importEmbeddedProviderManifest()
+    -- Do not import the embedded manifest as live modules. It is only a name list,
+    -- so importing it here creates empty, non-functional duplicates with no real
+    -- CatVape source or settings and blocks AetherCore's working modules.
 
     shared.vape = originalSharedVape or provider
     consoleLog(string.format("AetherCore imported %d modules from CatVape (%d duplicates skipped).", Aether.ProviderStats.loaded, Aether.ProviderStats.skipped))
@@ -2391,7 +2480,17 @@ function createRegisteredModule(category, name, defaultEnabled, toggleCallback, 
     if Aether.ProviderModuleLookup[normalized] and not (Aether.ProviderModuleLookup[normalized].name == name and moduleUi[name] == nil) then
         return
     end
-    moduleDefinitions[name] = settingsDefinition or {}
+
+    moduleSettings[name] = moduleSettings[name] or {}
+    if type(settingsDefinition) == "table" and #settingsDefinition > 0 then
+        for _, definition in ipairs(settingsDefinition) do
+            if definition.settingName and moduleSettings[name][definition.settingName] == nil then
+                moduleSettings[name][definition.settingName] = getSettingDefinitionDefault(definition)
+            end
+        end
+    end
+
+    moduleDefinitions[name] = (#(settingsDefinition or {}) > 0) and settingsDefinition or createGeneratedSettingsDefinition(name)
     moduleHandlers[name] = toggleCallback
     createModule(category, name, defaultEnabled, toggleCallback)
 end

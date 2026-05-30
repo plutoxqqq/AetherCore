@@ -60,14 +60,9 @@ function initHelpers()
             local channel = chatService.ChatInputBarConfiguration.TargetTextChannel
             if channel then channel:SendAsync(message) end
         end)
-
-initHelpers()
-
+    end
 end
 
-initServices()
-initSettings()
-initState()
 initHelpers()
 
 Players = Aether.Services.Players
@@ -83,6 +78,9 @@ VirtualUser = Aether.Services.VirtualUser
 CollectionService = Aether.Services.CollectionService
 Lighting = Aether.Services.Lighting
 StarterGui = Aether.Services.StarterGui
+
+httpService = HttpService
+replicatedStorage = ReplicatedStorage
 
 lplr = Aether.Services.LocalPlayer
 mouse = Aether.Services.Mouse
@@ -110,3 +108,5 @@ safeCall = Aether.Helpers.safeCall
 warnMissingOnce = Aether.Helpers.warnMissingOnce
 getHandleInvItem = Aether.Helpers.getHandleInvItem
 getHumanoidScaleValue = Aether.Helpers.getHumanoidScaleValue
+clampSetting = Aether.Helpers.clampSetting
+sayInChat = Aether.Helpers.sayInChat

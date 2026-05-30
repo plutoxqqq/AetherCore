@@ -18,13 +18,13 @@ function toggleLongJump(enabled)
 
     local function launchProjectile(item, pos, proj, speed, dir)
         if not (item and pos) then return end
-        
+
         pos = pos - dir * 0.1
         local shootPosition = (CFrame.lookAlong(pos, Vector3.new(0, -speed, 0)) * CFrame.new(Vector3.new(-bedwars.BowConstantsTable.RelX, -bedwars.BowConstantsTable.RelY, -bedwars.BowConstantsTable.RelZ)))
-        
+
         switchItem(item.tool, 0)
         task.wait(0.1)
-        
+
         if projectileRemote:InvokeServer(item.tool, proj, proj, shootPosition.Position, pos, shootPosition.LookVector * speed, httpService:GenerateGUID(true), {drawDurationSeconds = 1}, workspace:GetServerTimeNow() - 0.045) then
             local shoot = bedwars.ItemMeta[item.itemType].projectileSource.launchSound
             shoot = shoot and shoot[math.random(1, #shoot)] or nil
