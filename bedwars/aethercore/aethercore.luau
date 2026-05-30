@@ -116,3 +116,8 @@ local ran, runtimeError = xpcall(chunk, debug.traceback)
 if not ran then
     error(string.format("[AetherCore] Failed to run unified payload: %s", tostring(runtimeError)))
 end
+
+local initialized, initError = initializeVapeCore()
+if not initialized then
+    error(string.format("[AetherCore] Failed to initialize Vape core: %s", tostring(initError)))
+end

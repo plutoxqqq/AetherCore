@@ -129,3 +129,8 @@ local ran, runtimeError = compileAndRun(sourceOrError)
 if not ran then
     error(string.format("[AetherCore] Failed to start unified payload from '%s': %s", BEDWARS_ENTRY_PATH, tostring(runtimeError)))
 end
+
+local initialized, initError = initializeVapeCore()
+if not initialized then
+    error(string.format("[AetherCore] Failed to initialize Vape core: %s", tostring(initError)))
+end
