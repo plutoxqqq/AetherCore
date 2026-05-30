@@ -24,7 +24,7 @@ AetherCore now uses one unified BedWars payload instead of the old custom module
 AetherCore v3.0.0
 
 [+] Rebuilt the loader around one combined payload
-[+] Switched execution to Aero V4 with the CatVape payload included
+[+] Switched execution to the AetherCore base payload with the CatVape payload included
 [+] Removed the old custom module loading flow from the public entrypoint
 [+] Kept the existing public loadstring unchanged
 
