@@ -59,6 +59,67 @@ local lplr = playersService.LocalPlayer
 local assetfunction = getcustomasset
 
 local vape = shared.vape
+
+if vape and type(vape.CreateNotification) ~= 'function' then
+    local function sendCoreNotification(title, text, duration)
+        local messageTitle = title ~= nil and tostring(title) or 'AetherCore'
+        local messageText = text ~= nil and tostring(text) or ''
+        local messageDuration = tonumber(duration) or 5
+
+        local success = pcall(function()
+            starterGui:SetCore('SendNotification', {
+                Title = messageTitle,
+                Text = messageText,
+                Duration = messageDuration
+            })
+        end)
+
+        if not success then
+            warn(string.format('[AetherCore] %s: %s', messageTitle, messageText))
+        end
+    end
+
+    local function tryNotification(callback)
+        local success, result = pcall(callback)
+        if success then
+            return true, result
+        end
+
+        return false, result
+    end
+
+    vape.CreateNotification = function(self, title, text, duration, notificationType)
+        local sent, result
+
+        if type(self.Notification) == 'function' then
+            sent, result = tryNotification(function()
+                return self:Notification(title, text, duration, notificationType)
+            end)
+            if sent then return result end
+        end
+
+        if type(self.Notify) == 'function' then
+            sent, result = tryNotification(function()
+                return self:Notify(title, text, duration, notificationType)
+            end)
+            if sent then return result end
+        end
+
+        if type(self.Notifications) == 'table' then
+            for _, methodName in {'CreateNotification', 'Create', 'Notify', 'Send', 'New', 'Alert'} do
+                local method = self.Notifications[methodName]
+                if type(method) == 'function' then
+                    sent, result = tryNotification(function()
+                        return method(self.Notifications, title, text, duration, notificationType)
+                    end)
+                    if sent then return result end
+                end
+            end
+        end
+
+        return sendCoreNotification(title, text, duration)
+    end
+end
 if vape and not vape.Clean then
 	vape.Clean = function(self, conn)
 		if not conn then return end
