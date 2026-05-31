@@ -1,16 +1,16 @@
 -- AetherCore unified BedWars entrypoint
--- The public loadstring still points at AetherCoreMain/AetherCore.lua, which now
+-- The public loadstring still points at loadstring, which now
 -- downloads this single combined payload instead of the old custom module tree.
--- Payload order: AetherCore base payload first, then the CatVape compatibility payload.
+-- Payload order: AetherCore base payload first, then the compatibility payload.
 
 getgenv().AetherCore = getgenv().AetherCore or {}
 getgenv().AetherCore.Payload = {
     Name = "AetherCore Unified",
-    Sources = {"bedwars/aerov4.luau", "bedwars/catvape.luau"}
+    Sources = {"games/bedwars/modules/aerov4.luau", "games/bedwars/modules/compatibility.luau"}
 }
 
 do
---// BEGIN AETHERCORE BASE PAYLOAD (source: bedwars/aerov4.luau)
+--// BEGIN AETHERCORE BASE PAYLOAD (source: games/bedwars/modules/aerov4.luau)
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 local run = function(func)
     local ok, err = pcall(func)
@@ -35229,8 +35229,8 @@ run(function()
 end)
 --// END AETHERCORE BASE PAYLOAD
 
---// BEGIN CATVAPE COMPATIBILITY PAYLOAD (source: bedwars/catvape.luau)
--- CatVape was authored as an Aether module fragment. The unified loader keeps it
+--// BEGIN COMPATIBILITY PAYLOAD (source: games/bedwars/modules/compatibility.luau)
+-- This compatibility payload was authored as an Aether module fragment. The unified loader keeps it
 -- in this one-file payload while preventing the legacy Aether module registry
 -- from being required at startup.
 moduleSettings = moduleSettings or {}
@@ -35433,7 +35433,7 @@ function toggleLongJump(enabled)
         return false
     end
 
-    -- CatVape style initial trigger
+    -- Compatibility-style initial trigger
     if store.hand and LongJumpMethods[store.hand.tool.Name] then
         task.spawn(LongJumpMethods[store.hand.tool.Name], getItem(store.hand.tool.Name), start, getLookVector())
     else
@@ -35447,7 +35447,7 @@ function toggleLongJump(enabled)
         end
     end))
 
-    -- CatVape enhanced connections
+    -- Compatibility enhanced connections
     addConnection("LongJump", vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
         if damageTable.entityInstance == lplr.Character and damageTable.fromEntity == lplr.Character and (not damageTable.knockbackMultiplier or not damageTable.knockbackMultiplier.disabled) then
             local knockbackBoost = bedwars.KnockbackUtil.calculateKnockbackVelocity(Vector3.one, 1, {
@@ -35515,5 +35515,5 @@ Aether.RegisterModule({
         toggleLongJump(false)
     end
 })
---// END CATVAPE COMPATIBILITY PAYLOAD
+--// END COMPATIBILITY PAYLOAD
 end

@@ -1,0 +1,21 @@
+-- AetherCore minimal public entrypoint.
+-- This file only prepares the startup path and executes init.lua.
+local rootUrl = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/"
+local startup = getgenv and getgenv().AetherCoreStartup or {}
+startup.RootUrl = startup.RootUrl or rootUrl
+startup.Entry = "init.lua"
+if getgenv then
+    getgenv().AetherCoreStartup = startup
+end
+
+local source
+if type(readfile) == "function" then
+    local ok, result = pcall(readfile, startup.Entry)
+    if ok and type(result) == "string" and result ~= "" then
+        source = result
+    end
+end
+if source == nil then
+    source = game:HttpGet(startup.RootUrl .. startup.Entry, true)
+end
+return loadstring(source, "AetherCore/init.lua")()
