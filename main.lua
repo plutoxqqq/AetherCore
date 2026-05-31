@@ -107,6 +107,7 @@ return function(startup)
     local utility = context.Libraries.utility
     local storage = context.Libraries.storage
 
+    utility.SetRuntimeContext(context)
     utility.WaitForGameLoaded()
     utility.InstallExecutorCompatibility()
 
@@ -185,14 +186,18 @@ return function(startup)
         if type(gameInfo) == "table" and tonumber(gameInfo.gameid) == tonumber(currentGameId) then
             for placeName, placeInfo in pairs(gameInfo) do
                 if type(placeInfo) == "table" then
+                    local configuredPath = type(placeInfo.Path) == "string" and placeInfo.Path ~= "" and placeInfo.Path or nil
+                    local defaultPath = "games/" .. tostring(gameName) .. "/" .. tostring(placeName) .. ".lua"
+                    local modulePath = configuredPath or defaultPath
+
                     if tonumber(placeInfo.Place) == tonumber(currentPlaceId) then
-                        matchedPath = "games/" .. tostring(gameName) .. "/" .. tostring(placeName) .. ".lua"
+                        matchedPath = modulePath
                         break
                     end
                     if type(placeInfo.Ids) == "table" then
                         for _, id in ipairs(placeInfo.Ids) do
                             if tonumber(id) == tonumber(currentPlaceId) then
-                                matchedPath = "games/" .. tostring(gameName) .. "/" .. tostring(placeName) .. ".lua"
+                                matchedPath = modulePath
                                 break
                             end
                         end

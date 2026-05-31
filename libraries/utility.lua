@@ -2,8 +2,55 @@
 local Utility = {}
 
 Utility.BrandName = "AetherCore"
+Utility.RuntimeContext = nil
+Utility.BrandTextAsset = "assets/new/aethercore_text.png"
 Utility.VapeCoreBaseUrl = "https://raw.githubusercontent.com/7GrandDadPGN/Vape" .. string.char(86, 52) .. "ForRoblox/main/"
 Utility.VapeCoreUrl = Utility.VapeCoreBaseUrl .. "NewMainScript.lua"
+
+function Utility.SetRuntimeContext(context)
+    if type(context) == "table" then
+        Utility.RuntimeContext = context
+    end
+end
+
+function Utility.GetRuntimeAssetPath(relativePath)
+    local context = Utility.RuntimeContext or {}
+    local rootFolder = type(context.RootFolder) == "string" and context.RootFolder ~= "" and context.RootFolder or "AetherCore"
+    local cachePath = rootFolder .. "/" .. relativePath
+
+    if type(readfile) == "function" then
+        local readOk, contents = pcall(readfile, cachePath)
+        if readOk and type(contents) == "string" and contents ~= "" then
+            return cachePath
+        end
+    end
+
+    if type(writefile) == "function" and game ~= nil and type(game.HttpGet) == "function" then
+        local rootUrl = type(context.RootUrl) == "string" and context.RootUrl ~= "" and context.RootUrl or nil
+        if rootUrl then
+            local fetchOk, contents = pcall(function()
+                return game:HttpGet(rootUrl .. relativePath, true)
+            end)
+            if fetchOk and type(contents) == "string" and contents ~= "" then
+                pcall(writefile, cachePath, contents)
+                return cachePath
+            end
+        end
+    end
+
+    return cachePath
+end
+
+function Utility.GetCustomAssetPath(relativePath)
+    local runtimePath = Utility.GetRuntimeAssetPath(relativePath)
+    if type(getcustomasset) == "function" then
+        local ok, asset = pcall(getcustomasset, runtimePath)
+        if ok and type(asset) == "string" and asset ~= "" then
+            return asset
+        end
+    end
+    return runtimePath
+end
 
 function Utility.BrandVapeCoreSource(source)
     if type(source) ~= "string" then
@@ -57,6 +104,42 @@ function Utility.BrandVisibleText(text)
     return brandedText
 end
 
+function Utility.IsLegacyLogoText(text)
+    if type(text) ~= "string" then
+        return false
+    end
+
+    local normalizedText = text:gsub("%s+", "")
+    local versionText = string.char(86, 52)
+    return normalizedText == "AERO"
+        or normalizedText == "Ae" .. "ro"
+        or normalizedText == "AERO" .. versionText
+        or normalizedText == "Ae" .. "ro" .. versionText
+end
+
+function Utility.ApplyBrandLogoImage(textObject)
+    if typeof(textObject) ~= "Instance" then
+        return
+    end
+
+    local logo = textObject:FindFirstChild("AetherCoreTextLogo")
+    if logo == nil then
+        logo = Instance.new("ImageLabel")
+        logo.Name = "AetherCoreTextLogo"
+        logo.BackgroundTransparency = 1
+        logo.BorderSizePixel = 0
+        logo.AnchorPoint = Vector2.new(0.5, 0.5)
+        logo.Position = UDim2.fromScale(0.5, 0.5)
+        logo.Size = UDim2.fromScale(1, 1)
+        logo.Parent = textObject
+    end
+
+    logo.Image = Utility.GetCustomAssetPath(Utility.BrandTextAsset)
+    logo.ScaleType = Enum.ScaleType.Fit
+    logo.ZIndex = textObject.ZIndex + 1
+    textObject.TextTransparency = 1
+end
+
 function Utility.ApplyVisibleBrandingOverrides()
     local function scan(container)
         if container == nil or type(container.GetDescendants) ~= "function" then
@@ -65,9 +148,13 @@ function Utility.ApplyVisibleBrandingOverrides()
 
         for _, object in ipairs(container:GetDescendants()) do
             if typeof(object) == "Instance" and (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
-                local brandedText = Utility.BrandVisibleText(object.Text)
-                if brandedText ~= object.Text then
-                    object.Text = brandedText
+                if Utility.IsLegacyLogoText(object.Text) then
+                    Utility.ApplyBrandLogoImage(object)
+                else
+                    local brandedText = Utility.BrandVisibleText(object.Text)
+                    if brandedText ~= object.Text then
+                        object.Text = brandedText
+                    end
                 end
             end
         end
