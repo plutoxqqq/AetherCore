@@ -6,7 +6,7 @@
 getgenv().AetherCore = getgenv().AetherCore or {}
 getgenv().AetherCore.Payload = {
     Name = "AetherCore Unified",
-    Sources = {"games/bedwars/modules/aerov4.luau", "games/bedwars/modules/compatibility.luau"}
+    Sources = {"games/bedwars/modules/aerov4.luau", "games/bedwars/modules/aerov4.luau"}
 }
 
 do
