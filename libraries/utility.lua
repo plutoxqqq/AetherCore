@@ -56,9 +56,13 @@ function Utility.BrandVapeCoreSource(source)
     if type(source) ~= "string" then
         return source
     end
+
+    local versionText = string.char(86, 52)
     return source
-        :gsub("Vape " .. string.char(86, 52), Utility.BrandName)
-        :gsub("VAPE " .. string.char(86, 52), Utility.BrandName)
+        :gsub("Vape " .. versionText, Utility.BrandName)
+        :gsub("VAPE " .. versionText, Utility.BrandName)
+        :gsub("Vape" .. versionText, Utility.BrandName)
+        :gsub("VAPE" .. versionText, Utility.BrandName)
 end
 
 function Utility.IsVapeCoreReady()
@@ -94,7 +98,11 @@ function Utility.BrandVisibleText(text)
         :gsub(legacyAeroText, Utility.BrandName)
         :gsub(string.upper(legacyAeroText), Utility.BrandName)
         :gsub("Vape%s*" .. versionText, Utility.BrandName)
+        :gsub("VAPE%s*" .. versionText, Utility.BrandName)
         :gsub("Vape" .. versionText, Utility.BrandName)
+        :gsub("VAPE" .. versionText, Utility.BrandName)
+        :gsub("newvape", Utility.BrandName)
+        :gsub("NewVape", Utility.BrandName)
         :gsub("%s+" .. versionText, "")
         :gsub(versionText .. "%s+", "")
 
@@ -115,6 +123,10 @@ function Utility.IsLegacyLogoText(text)
         or normalizedText == "Ae" .. "ro"
         or normalizedText == "AERO" .. versionText
         or normalizedText == "Ae" .. "ro" .. versionText
+        or normalizedText == "VAPE"
+        or normalizedText == "Vape"
+        or normalizedText == "VAPE" .. versionText
+        or normalizedText == "Vape" .. versionText
 end
 
 function Utility.ApplyBrandLogoImage(textObject)
@@ -128,35 +140,70 @@ function Utility.ApplyBrandLogoImage(textObject)
         logo.Name = "AetherCoreTextLogo"
         logo.BackgroundTransparency = 1
         logo.BorderSizePixel = 0
-        logo.AnchorPoint = Vector2.new(0.5, 0.5)
-        logo.Position = UDim2.fromScale(0.5, 0.5)
-        logo.Size = UDim2.fromScale(1, 1)
         logo.Parent = textObject
     end
 
+    logo.AnchorPoint = Vector2.new(0, 0.5)
+    logo.Position = UDim2.new(0, 0, 0.5, 0)
+    logo.Size = UDim2.fromOffset(108, 36)
     logo.Image = Utility.GetCustomAssetPath(Utility.BrandTextAsset)
+    logo.ImageTransparency = 0
     logo.ScaleType = Enum.ScaleType.Fit
+    logo.Visible = true
     logo.ZIndex = textObject.ZIndex + 1
+    textObject.Text = ""
     textObject.TextTransparency = 1
 end
 
 function Utility.ApplyVisibleBrandingOverrides()
-    local function scan(container)
-        if container == nil or type(container.GetDescendants) ~= "function" then
+    local function patchObject(object)
+        if typeof(object) ~= "Instance" or not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
             return
         end
 
+        if Utility.IsLegacyLogoText(object.Text) then
+            Utility.ApplyBrandLogoImage(object)
+            return
+        end
+
+        local brandedText = Utility.BrandVisibleText(object.Text)
+        if brandedText ~= object.Text then
+            object.Text = brandedText
+        end
+    end
+
+    local function watchTextObject(object)
+        if typeof(object) ~= "Instance" or not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
+            return
+        end
+        if object:GetAttribute("AetherCoreBrandWatcher") then
+            return
+        end
+
+        object:SetAttribute("AetherCoreBrandWatcher", true)
+        object:GetPropertyChangedSignal("Text"):Connect(function()
+            patchObject(object)
+        end)
+    end
+
+    local function scan(container)
+        if typeof(container) ~= "Instance" then
+            return
+        end
+
+        patchObject(container)
+        watchTextObject(container)
         for _, object in ipairs(container:GetDescendants()) do
-            if typeof(object) == "Instance" and (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
-                if Utility.IsLegacyLogoText(object.Text) then
-                    Utility.ApplyBrandLogoImage(object)
-                else
-                    local brandedText = Utility.BrandVisibleText(object.Text)
-                    if brandedText ~= object.Text then
-                        object.Text = brandedText
-                    end
-                end
-            end
+            patchObject(object)
+            watchTextObject(object)
+        end
+
+        if not container:GetAttribute("AetherCoreBrandDescendantWatcher") then
+            container:SetAttribute("AetherCoreBrandDescendantWatcher", true)
+            container.DescendantAdded:Connect(function(object)
+                patchObject(object)
+                watchTextObject(object)
+            end)
         end
     end
 
