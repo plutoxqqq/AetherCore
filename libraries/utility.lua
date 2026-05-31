@@ -141,22 +141,56 @@ function Utility.ApplyBrandLogoImage(textObject)
 end
 
 function Utility.ApplyVisibleBrandingOverrides()
-    local function scan(container)
-        if container == nil or type(container.GetDescendants) ~= "function" then
+    local function patchObject(object)
+        if typeof(object) ~= "Instance" or not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
             return
         end
 
+        if Utility.IsLegacyLogoText(object.Text) then
+            Utility.ApplyBrandLogoImage(object)
+            return
+        end
+
+        local brandedText = Utility.BrandVisibleText(object.Text)
+        if brandedText ~= object.Text then
+            object.Text = brandedText
+        end
+    end
+
+    local function watchTextObject(object)
+        if typeof(object) ~= "Instance" or not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
+            return
+        end
+        if object:GetAttribute("AetherCoreBrandWatcher") then
+            return
+        end
+
+        object:SetAttribute("AetherCoreBrandWatcher", true)
+        pcall(function()
+            object:GetPropertyChangedSignal("Text"):Connect(function()
+                patchObject(object)
+            end)
+        end)
+    end
+
+    local function scan(container)
+        if typeof(container) ~= "Instance" then
+            return
+        end
+
+        patchObject(container)
+        watchTextObject(container)
         for _, object in ipairs(container:GetDescendants()) do
-            if typeof(object) == "Instance" and (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
-                if Utility.IsLegacyLogoText(object.Text) then
-                    Utility.ApplyBrandLogoImage(object)
-                else
-                    local brandedText = Utility.BrandVisibleText(object.Text)
-                    if brandedText ~= object.Text then
-                        object.Text = brandedText
-                    end
-                end
-            end
+            patchObject(object)
+            watchTextObject(object)
+        end
+
+        if not container:GetAttribute("AetherCoreBrandDescendantWatcher") then
+            container:SetAttribute("AetherCoreBrandDescendantWatcher", true)
+            container.DescendantAdded:Connect(function(object)
+                patchObject(object)
+                watchTextObject(object)
+            end)
         end
     end
 
