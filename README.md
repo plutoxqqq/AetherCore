@@ -8,25 +8,25 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/plutoxqqq/AetherCore/
 ```
 
 
-## AetherCore Payload
+## AetherCore Features
 
-AetherCore now uses one unified BedWars payload instead of the old custom module tree. The public loadstring is unchanged, but it loads `bedwars/aethercore.luau`, which combines:
-
-- `bedwars/aerov4.luau`
-- `bedwars/catvape.luau`
+AetherCore now uses VapeV4 payload combines with its own custom features:
+- VoidWalk: allows you to walk below the map
+- AntiDeath: continual vertical teleportation to avoid getting hit when low
+- LongJump: zoom across the whole map in seconds
+- And much, much more!
 
 ## Plan for AetherCore
- AetherCore is now maintained as a single combined payload to reduce loader complexity and avoid split-module inconsistencies.
+AetherCore will continue to evolve by adding more modules and better updates
 
 ## Latest Changes
 
 ```luau
 AetherCore v3.0.0
 
-[+] Rebuilt the loader around one combined payload
-[+] Switched execution to the AetherCore base payload with the CatVape payload included
-[+] Removed the old custom module loading flow from the public entrypoint
-[+] Kept the existing public loadstring unchanged
+[+] Rebuilt the whole script system using VapeV4 library
+[+] Completely redesigned GUI to mimic Vape's
+[+] Fixed EVERY module
 
 Join our Discord server for the latest updates, announcements, and changes
 
