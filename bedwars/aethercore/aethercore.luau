@@ -4,7 +4,8 @@
 
 local UNIFIED_ENTRY_PATH = "bedwars/aethercore.luau"
 local UNIFIED_ENTRY_URL = "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/bedwars/aethercore.luau"
-local VAPE_CORE_URL = "https://raw.githubusercontent.com/7GrandDadPGN/Vape" .. string.char(86, 52) .. "ForRoblox/main/NewMainScript.lua"
+local VAPE_CORE_BASE_URL = "https://raw.githubusercontent.com/7GrandDadPGN/Vape" .. string.char(86, 52) .. "ForRoblox/main/"
+local VAPE_CORE_URL = VAPE_CORE_BASE_URL .. "NewMainScript.lua"
 
 local BRAND_NAME = "AetherCore"
 
@@ -159,11 +160,146 @@ local function initializeVapeCore()
     return true
 end
 
+local function loadVapeRuntimeLibrary(libraryName)
+    if not isVapeCoreReady() then
+        return false, "Vape core is not ready"
+    end
+
+    local libraries = shared.vape.Libraries
+    if type(libraries[libraryName]) == "table" then
+        return true
+    end
+
+    local success, result = pcall(function()
+        local source = game:HttpGet(VAPE_CORE_BASE_URL .. "libraries/" .. libraryName .. ".lua", true)
+        local loader, compileError = loadstring(source, "AetherCoreRuntimeLibrary:" .. libraryName)
+        if not loader then
+            error(string.format("compile error: %s", tostring(compileError)))
+        end
+        return loader()
+    end)
+
+    if not success then
+        return false, string.format("failed to load '%s': %s", libraryName, tostring(result))
+    end
+
+    if type(result) ~= "table" then
+        return false, string.format("'%s' returned %s instead of a table", libraryName, typeof(result))
+    end
+
+    libraries[libraryName] = result
+    return true
+end
+
+local function installGetCustomAssetFallback()
+    local libraries = shared.vape.Libraries
+    if type(libraries.getcustomasset) == "function" then
+        return
+    end
+
+    libraries.getcustomasset = function(path)
+        if type(getcustomasset) == "function" then
+            local success, asset = pcall(getcustomasset, path)
+            if success and asset ~= nil then
+                return asset
+            end
+        end
+
+        if type(getsynasset) == "function" then
+            local success, asset = pcall(getsynasset, path)
+            if success and asset ~= nil then
+                return asset
+            end
+        end
+
+        return path
+    end
+end
+
+local function installTargetInfoFallback()
+    local libraries = shared.vape.Libraries
+    if type(libraries.targetinfo) == "table" then
+        libraries.targetinfo.Targets = type(libraries.targetinfo.Targets) == "table" and libraries.targetinfo.Targets or {}
+        return
+    end
+
+    libraries.targetinfo = {
+        Targets = {},
+        Priority = {},
+        Render = function() end,
+        Reset = function(self)
+            if type(self.Targets) == "table" then
+                table.clear(self.Targets)
+            end
+        end
+    }
+end
+
+local function installSessionInfoFallback()
+    local libraries = shared.vape.Libraries
+    if type(libraries.sessioninfo) == "table" and type(libraries.sessioninfo.AddItem) == "function" then
+        return
+    end
+
+    local sessionInfo = type(libraries.sessioninfo) == "table" and libraries.sessioninfo or {}
+    sessionInfo.Items = type(sessionInfo.Items) == "table" and sessionInfo.Items or {}
+    sessionInfo.AddItem = function(self, name, defaultValue, valueCallback, numeric)
+        local item = {
+            Name = tostring(name),
+            Value = defaultValue or 0,
+            Numeric = numeric ~= false,
+            GetValue = type(valueCallback) == "function" and valueCallback or nil
+        }
+
+        function item:SetValue(value)
+            self.Value = value
+            return self.Value
+        end
+
+        function item:Increment(amount)
+            amount = tonumber(amount) or 1
+            self.Value = (tonumber(self.Value) or 0) + amount
+            return self.Value
+        end
+
+        function item:Get()
+            if self.GetValue then
+                return self.GetValue()
+            end
+            return self.Value
+        end
+
+        self.Items[item.Name] = item
+        return item
+    end
+
+    libraries.sessioninfo = sessionInfo
+end
+
 local function hasRequiredVapeRuntime()
-    return isVapeCoreReady()
-        and type(shared.vape.Libraries.entity) == "table"
-        and type(shared.vape.Libraries.targetinfo) == "table"
-        and type(shared.vape.Libraries.sessioninfo) == "table"
+    if not isVapeCoreReady() then
+        return false, "Vape core is not ready"
+    end
+
+    for _, libraryName in {"entity", "prediction"} do
+        local loaded, loadError = loadVapeRuntimeLibrary(libraryName)
+        if not loaded then
+            return false, loadError
+        end
+    end
+
+    installGetCustomAssetFallback()
+    installTargetInfoFallback()
+    installSessionInfoFallback()
+
+    local libraries = shared.vape.Libraries
+    for _, libraryName in {"entity", "targetinfo", "sessioninfo", "prediction", "uipallet", "tween", "color", "getfontsize", "getcustomasset"} do
+        if libraries[libraryName] == nil then
+            return false, string.format("missing '%s'", libraryName)
+        end
+    end
+
+    return true
 end
 
 local function installModuleRegistrationTracker()
@@ -275,8 +411,9 @@ if not coreReady then
 end
 warn("[AetherCore] Vape core loaded")
 
-if not hasRequiredVapeRuntime() then
-    error("[AetherCore] Vape core is missing required runtime libraries")
+local runtimeReady, runtimeError = hasRequiredVapeRuntime()
+if not runtimeReady then
+    error(string.format("[AetherCore] Vape core is missing required runtime libraries: %s", tostring(runtimeError)))
 end
 
 installModuleRegistrationTracker()
