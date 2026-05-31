@@ -128,15 +128,18 @@ function Utility.ApplyBrandLogoImage(textObject)
         logo.Name = "AetherCoreTextLogo"
         logo.BackgroundTransparency = 1
         logo.BorderSizePixel = 0
-        logo.AnchorPoint = Vector2.new(0.5, 0.5)
-        logo.Position = UDim2.fromScale(0.5, 0.5)
-        logo.Size = UDim2.fromScale(1, 1)
         logo.Parent = textObject
     end
 
+    logo.AnchorPoint = Vector2.new(0, 0.5)
+    logo.Position = UDim2.new(0, 0, 0.5, 0)
+    logo.Size = UDim2.fromOffset(108, 36)
     logo.Image = Utility.GetCustomAssetPath(Utility.BrandTextAsset)
+    logo.ImageTransparency = 0
     logo.ScaleType = Enum.ScaleType.Fit
+    logo.Visible = true
     logo.ZIndex = textObject.ZIndex + 1
+    textObject.Text = ""
     textObject.TextTransparency = 1
 end
 
