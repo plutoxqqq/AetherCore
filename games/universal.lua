@@ -14,6 +14,7 @@ return function(context)
     utility.InstallGetCustomAssetFallback()
     utility.InstallTargetInfoFallback()
     utility.InstallSessionInfoFallback()
+    utility.InstallVapeLibraryFallbacks()
 
     local libraries = shared.vape.Libraries
     for _, libraryName in ipairs({"entity", "targetinfo", "sessioninfo", "prediction", "uipallet", "tween", "color", "getfontsize", "getcustomasset"}) do

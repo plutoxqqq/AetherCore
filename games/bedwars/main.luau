@@ -9,7 +9,6 @@ getgenv().AetherCore.Payload = {
     Sources = {"merged:aerov4", "merged:catvape"}
 }
 
-do
 --// BEGIN AETHERCORE BASE PAYLOAD (merged from former aerov4.luau)
 --This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.
 local run = function(func)
@@ -52297,5 +52296,4 @@ end
 local catvapeOk, catvapeError = xpcall(catvapeChunk, debug.traceback)
 if not catvapeOk then
 	error('[AetherCore] Failed to run merged catvape payload: ' .. tostring(catvapeError))
-end
 end
