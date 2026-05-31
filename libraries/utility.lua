@@ -56,9 +56,29 @@ function Utility.BrandVapeCoreSource(source)
     if type(source) ~= "string" then
         return source
     end
-    return source
-        :gsub("Vape " .. string.char(86, 52), Utility.BrandName)
-        :gsub("VAPE " .. string.char(86, 52), Utility.BrandName)
+
+    local versionText = string.char(86, 52)
+    local brandedSource = source
+        :gsub("Vape " .. versionText, Utility.BrandName)
+        :gsub("VAPE " .. versionText, Utility.BrandName)
+        :gsub("newvape/assets/new/vape%.png", Utility.BrandTextAsset)
+        :gsub("newvape/assets/new/logo%.png", Utility.BrandTextAsset)
+        :gsub("newvape/assets/new/vapelogo%.png", Utility.BrandTextAsset)
+        :gsub("newvape/assets/new/VapeLogo%.png", Utility.BrandTextAsset)
+
+    local categoryInsertions = {
+        "'Combat', 'Blatant', 'Render', 'Utility', 'World', 'Inventory', 'Minigames'",
+        "'Combat','Blatant','Render','Utility','World','Inventory','Minigames'",
+        '"Combat", "Blatant", "Render", "Utility", "World", "Inventory", "Minigames"',
+        '"Combat","Blatant","Render","Utility","World","Inventory","Minigames"'
+    }
+    for _, categoryList in ipairs(categoryInsertions) do
+        local quote = categoryList:sub(1, 1)
+        local extendedList = categoryList .. ", " .. quote .. "Kits" .. quote .. ", " .. quote .. "Legit" .. quote .. ", " .. quote .. "BoostFPS" .. quote
+        brandedSource = brandedSource:gsub(categoryList, extendedList)
+    end
+
+    return brandedSource
 end
 
 function Utility.IsVapeCoreReady()
@@ -94,7 +114,9 @@ function Utility.BrandVisibleText(text)
         :gsub(legacyAeroText, Utility.BrandName)
         :gsub(string.upper(legacyAeroText), Utility.BrandName)
         :gsub("Vape%s*" .. versionText, Utility.BrandName)
+        :gsub("VAPE%s*" .. versionText, Utility.BrandName)
         :gsub("Vape" .. versionText, Utility.BrandName)
+        :gsub("VAPE" .. versionText, Utility.BrandName)
         :gsub("%s+" .. versionText, "")
         :gsub(versionText .. "%s+", "")
 
@@ -115,6 +137,10 @@ function Utility.IsLegacyLogoText(text)
         or normalizedText == "Ae" .. "ro"
         or normalizedText == "AERO" .. versionText
         or normalizedText == "Ae" .. "ro" .. versionText
+        or normalizedText == "VAPE"
+        or normalizedText == "Vape"
+        or normalizedText == "VAPE" .. versionText
+        or normalizedText == "Vape" .. versionText
 end
 
 function Utility.ApplyBrandLogoImage(textObject)
@@ -144,8 +170,35 @@ function Utility.ApplyBrandLogoImage(textObject)
 end
 
 function Utility.ApplyVisibleBrandingOverrides()
+    local function patchImageObject(object)
+        if typeof(object) ~= "Instance" or not (object:IsA("ImageLabel") or object:IsA("ImageButton")) then
+            return
+        end
+
+        local imageText = type(object.Image) == "string" and object.Image:lower() or ""
+        local nameText = type(object.Name) == "string" and object.Name:lower() or ""
+        local looksLikeVapeLogo = (nameText:find("logo", 1, true) ~= nil or imageText:find("logo", 1, true) ~= nil or imageText:find("vape", 1, true) ~= nil)
+            and imageText:find("aethercore", 1, true) == nil
+        if not looksLikeVapeLogo then
+            return
+        end
+
+        object.Image = Utility.GetCustomAssetPath(Utility.BrandTextAsset)
+        object.ScaleType = Enum.ScaleType.Fit
+        object.BackgroundTransparency = 1
+        object.ImageTransparency = 0
+        if object.AbsoluteSize.X > 0 and object.AbsoluteSize.X < 96 then
+            object.Size = UDim2.fromOffset(108, math.max(28, object.AbsoluteSize.Y))
+        end
+    end
+
     local function patchObject(object)
-        if typeof(object) ~= "Instance" or not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
+        if typeof(object) ~= "Instance" then
+            return
+        end
+
+        patchImageObject(object)
+        if not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
             return
         end
 
@@ -160,20 +213,32 @@ function Utility.ApplyVisibleBrandingOverrides()
         end
     end
 
-    local function watchTextObject(object)
-        if typeof(object) ~= "Instance" or not (object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox")) then
+    local function watchBrandedObject(object)
+        if typeof(object) ~= "Instance" then
             return
         end
         if object:GetAttribute("AetherCoreBrandWatcher") then
             return
         end
 
-        object:SetAttribute("AetherCoreBrandWatcher", true)
-        pcall(function()
-            object:GetPropertyChangedSignal("Text"):Connect(function()
-                patchObject(object)
+        if object:IsA("TextLabel") or object:IsA("TextButton") or object:IsA("TextBox") then
+            object:SetAttribute("AetherCoreBrandWatcher", true)
+            pcall(function()
+                object:GetPropertyChangedSignal("Text"):Connect(function()
+                    patchObject(object)
+                end)
             end)
-        end)
+            return
+        end
+
+        if object:IsA("ImageLabel") or object:IsA("ImageButton") then
+            object:SetAttribute("AetherCoreBrandWatcher", true)
+            pcall(function()
+                object:GetPropertyChangedSignal("Image"):Connect(function()
+                    patchObject(object)
+                end)
+            end)
+        end
     end
 
     local function scan(container)
@@ -182,17 +247,17 @@ function Utility.ApplyVisibleBrandingOverrides()
         end
 
         patchObject(container)
-        watchTextObject(container)
+        watchBrandedObject(container)
         for _, object in ipairs(container:GetDescendants()) do
             patchObject(object)
-            watchTextObject(object)
+            watchBrandedObject(object)
         end
 
         if not container:GetAttribute("AetherCoreBrandDescendantWatcher") then
             container:SetAttribute("AetherCoreBrandDescendantWatcher", true)
             container.DescendantAdded:Connect(function(object)
                 patchObject(object)
-                watchTextObject(object)
+                watchBrandedObject(object)
             end)
         end
     end
@@ -299,6 +364,74 @@ function Utility.InstallSessionInfoFallback()
 end
 
 
+function Utility.InstallVapeLibraryFallbacks()
+    if not Utility.IsVapeCoreReady() then
+        return
+    end
+
+    local libraries = shared.vape.Libraries
+
+    if type(libraries.getfontsize) ~= "function" then
+        libraries.getfontsize = function(text, size, font, bounds)
+            local textService = game:GetService("TextService")
+            local success, result = pcall(function()
+                return textService:GetTextSize(tostring(text or ""), tonumber(size) or 14, Enum.Font.SourceSans, bounds or Vector2.new(100000, 100000))
+            end)
+            if success then
+                return result
+            end
+            return Vector2.new(#tostring(text or "") * ((tonumber(size) or 14) * 0.5), tonumber(size) or 14)
+        end
+    end
+
+    if type(libraries.color) ~= "table" then
+        local function clampChannel(value)
+            return math.clamp(value, 0, 1)
+        end
+        libraries.color = {
+            Dark = function(colorValue, amount)
+                amount = tonumber(amount) or 0
+                return Color3.new(
+                    clampChannel(colorValue.R - amount),
+                    clampChannel(colorValue.G - amount),
+                    clampChannel(colorValue.B - amount)
+                )
+            end,
+            Light = function(colorValue, amount)
+                amount = tonumber(amount) or 0
+                return Color3.new(
+                    clampChannel(colorValue.R + amount),
+                    clampChannel(colorValue.G + amount),
+                    clampChannel(colorValue.B + amount)
+                )
+            end
+        }
+    end
+
+    if type(libraries.uipallet) ~= "table" then
+        libraries.uipallet = {
+            Main = Color3.fromRGB(18, 18, 22),
+            Text = Color3.fromRGB(220, 220, 225),
+            Accent = Color3.fromRGB(0, 170, 140),
+            Font = Font.fromEnum(Enum.Font.SourceSans)
+        }
+    end
+
+    if type(libraries.tween) ~= "table" then
+        libraries.tween = {
+            Tween = function(instance, tweenInfo, properties)
+                local tween = game:GetService("TweenService"):Create(instance, tweenInfo, properties)
+                tween:Play()
+                return tween
+            end,
+            Create = function(instance, tweenInfo, properties)
+                return game:GetService("TweenService"):Create(instance, tweenInfo, properties)
+            end
+        }
+    end
+end
+
+
 function Utility.InstallCategoryFallbacks()
     if not Utility.IsVapeCoreReady() then
         return
@@ -316,9 +449,33 @@ function Utility.InstallCategoryFallbacks()
         return
     end
 
+    if type(categories.Friends) ~= "table" then
+        categories.Friends = {
+            ListEnabled = {},
+            Options = {
+                ["Use friends"] = {Enabled = false},
+                ["Recolor visuals"] = {Enabled = true}
+            },
+            CreateModule = fallbackCategory.CreateModule
+        }
+    end
+    categories.Friends.ListEnabled = categories.Friends.ListEnabled or {}
+    categories.Friends.Options = categories.Friends.Options or {}
+    categories.Friends.Options["Use friends"] = categories.Friends.Options["Use friends"] or {Enabled = false}
+    categories.Friends.Options["Recolor visuals"] = categories.Friends.Options["Recolor visuals"] or {Enabled = true}
+
+    if type(categories.Targets) ~= "table" then
+        categories.Targets = {
+            ListEnabled = {},
+            Options = {},
+            CreateModule = fallbackCategory.CreateModule
+        }
+    end
+    categories.Targets.ListEnabled = categories.Targets.ListEnabled or {}
+    categories.Targets.Options = categories.Targets.Options or {}
+
     local aliases = {
         BoostFPS = "Render",
-        Friends = "Utility",
         Inventory = "Utility",
         Kits = "Utility",
         Legit = "Utility",
@@ -336,6 +493,12 @@ function Utility.InstallCategoryFallbacks()
             else
                 categories[missingName] = fallbackCategory
             end
+        end
+    end
+
+    for categoryName, category in pairs(categories) do
+        if type(category) == "table" and type(category.CreateModule) == "function" and shared.vape[categoryName] == nil then
+            shared.vape[categoryName] = category
         end
     end
 
