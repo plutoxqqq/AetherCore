@@ -149,6 +149,7 @@ return function(startup)
     utility.InstallGetCustomAssetFallback()
     utility.InstallTargetInfoFallback()
     utility.InstallSessionInfoFallback()
+    utility.InstallVapeLibraryFallbacks()
     utility.InstallCategoryFallbacks()
     utility.InstallHumanoidScaleFallbacks()
 
