@@ -14,8 +14,7 @@ Existing compatibility loadstrings that point to `AetherCoreMain/AetherCore.lua`
 - `loadstring` is the smallest public entry file and runs `init.lua`.
 - `init.lua` prepares startup options and executor cache folders, then loads `main.lua`.
 - `main.lua` loads libraries, the selected GUI, universal modules, supported game modules, and `custom_modules.luau`.
-- `games/bedwars/main.lua` contains the preserved unified BedWars payload.
-- `games/bedwars/modules/` stores the preserved source payloads used to build the unified BedWars module set.
+- `games/bedwars/main.luau` is the single BedWars source and contains the merged former AeroV4 and CatVape payloads.
 - `profiles/supported.json` maps BedWars GameId and PlaceIds to the right game loader.
 
 ## AetherCore Features
