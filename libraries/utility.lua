@@ -175,16 +175,16 @@ function Utility.InstallSessionInfoFallback()
 end
 
 function Utility.InstallExecutorCompatibility()
-    if type(getgenv) == "function" then
-        getgenv().AetherCore = getgenv().AetherCore or {}
-    end
+    local env = type(getgenv) == "function" and getgenv() or _G
+    env.AetherCore = env.AetherCore or {}
+
     if type(cloneref) ~= "function" then
-        getgenv().cloneref = function(object)
+        env.cloneref = function(object)
             return object
         end
     end
     if type(isnetworkowner) ~= "function" then
-        getgenv().isnetworkowner = function()
+        env.isnetworkowner = function()
             return true
         end
     end

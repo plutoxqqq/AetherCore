@@ -65,7 +65,16 @@ local mainChunk, compileError = loadstring(mainSource, "AetherCore/main.lua")
 if not mainChunk then
     error("[AetherCore] Failed to compile main.lua: " .. tostring(compileError))
 end
-return mainChunk({
+
+-- main.lua returns the central controller function. Compile and execute the
+-- chunk first, then call that returned function with the prepared startup data.
+local mainController = mainChunk()
+if type(mainController) ~= "function" then
+    error("[AetherCore] main.lua did not return the central controller function")
+end
+
+state.LoaderStage = "main"
+return mainController({
     RootUrl = rootUrl,
     RootFolder = rootFolder,
     Fetch = fetch,
