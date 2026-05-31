@@ -145,6 +145,12 @@ return function(startup)
         fail("GUI core is not ready after loading " .. guiChoice)
     end
 
+    utility.InstallGetCustomAssetFallback()
+    utility.InstallTargetInfoFallback()
+    utility.InstallSessionInfoFallback()
+    utility.InstallCategoryFallbacks()
+    utility.InstallHumanoidScaleFallbacks()
+
     for categoryName, category in pairs(shared.vape.Categories) do
         if type(category) == "table" and type(category.CreateModule) == "function" and category.__AetherCoreOriginalCreateModule == nil then
             local originalCreateModule = category.CreateModule

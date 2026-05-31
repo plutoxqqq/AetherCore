@@ -21022,18 +21022,7 @@ run(function()
         local calc
         for _, offset in offsets do
             calc = prediction.SolveTrajectory(pos, meta.launchVelocity, meta.gravitationalAcceleration, spot + offset, Vector3.zero, workspace.Gravity, 0, 0, nil, false, lplr:GetNetworkPing())
-            local targetRoot = plr.RootPart
-                        if targetRoot then
-                            local targetRootVel = targetRoot.AssemblyLinearVelocity or targetRoot.Velocity or Vector3.zero
-                            local targetMovingUp = targetRootVel.Y > 3
-                            local heightDiff = aimTarget.Y - newlook.p.Y
-                            if targetMovingUp then
-                                aimTarget = aimTarget + Vector3.new(0, math.clamp(targetRootVel.Y * 0.08, 0.5, 3.5), 0)
-                            elseif heightDiff < -8 then
-                                aimTarget = aimTarget + Vector3.new(0, math.clamp(math.abs(heightDiff) * 0.04, 0.3, 2.5), 0)
-                            end
-                        end
-                        if calc then break end
+            if calc then break end
         end
         if not calc then return false end
         local dir = CFrame.lookAt(pos, calc).LookVector * meta.launchVelocity

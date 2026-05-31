@@ -174,6 +174,134 @@ function Utility.InstallSessionInfoFallback()
     shared.vape.Libraries.sessioninfo = sessionInfo
 end
 
+
+function Utility.InstallCategoryFallbacks()
+    if not Utility.IsVapeCoreReady() then
+        return
+    end
+
+    local categories = shared.vape.Categories
+    local fallbackCategory = nil
+    for _, category in pairs(categories) do
+        if type(category) == "table" and type(category.CreateModule) == "function" then
+            fallbackCategory = category
+            break
+        end
+    end
+    if not fallbackCategory then
+        return
+    end
+
+    local aliases = {
+        BoostFPS = "Render",
+        Friends = "Utility",
+        Inventory = "Utility",
+        Kits = "Utility",
+        Legit = "Utility",
+        Minigames = "World",
+        Other = "Utility",
+        Profiles = "Utility",
+        Search = "Utility"
+    }
+
+    for missingName, preferredName in pairs(aliases) do
+        if type(categories[missingName]) ~= "table" or type(categories[missingName].CreateModule) ~= "function" then
+            local preferredCategory = categories[preferredName]
+            if type(preferredCategory) == "table" and type(preferredCategory.CreateModule) == "function" then
+                categories[missingName] = preferredCategory
+            else
+                categories[missingName] = fallbackCategory
+            end
+        end
+    end
+
+    local currentMetatable = getmetatable(categories)
+    if type(currentMetatable) ~= "table" then
+        currentMetatable = {}
+        setmetatable(categories, currentMetatable)
+    end
+    if currentMetatable.__AetherCoreCategoryFallback ~= true then
+        local previousIndex = currentMetatable.__index
+        currentMetatable.__AetherCoreCategoryFallback = true
+        currentMetatable.__index = function(tableValue, key)
+            local previousValue
+            if type(previousIndex) == "function" then
+                previousValue = previousIndex(tableValue, key)
+            elseif type(previousIndex) == "table" then
+                previousValue = previousIndex[key]
+            end
+            if previousValue ~= nil then
+                return previousValue
+            end
+            rawset(tableValue, key, fallbackCategory)
+            return fallbackCategory
+        end
+    end
+end
+
+function Utility.EnsureHumanoidScaleValues(character)
+    if typeof(character) ~= "Instance" then
+        return
+    end
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid") or character:FindFirstChild("Humanoid")
+    if typeof(humanoid) ~= "Instance" then
+        return
+    end
+
+    local defaults = {
+        BodyDepthScale = 1,
+        BodyHeightScale = 1,
+        BodyProportionScale = 0,
+        BodyTypeScale = 0,
+        BodyWidthScale = 1,
+        HeadScale = 1
+    }
+
+    for scaleName, defaultValue in pairs(defaults) do
+        if humanoid:FindFirstChild(scaleName) == nil then
+            pcall(function()
+                local scaleValue = Instance.new("NumberValue")
+                scaleValue.Name = scaleName
+                scaleValue.Value = defaultValue
+                scaleValue.Parent = humanoid
+            end)
+        end
+    end
+end
+
+function Utility.InstallHumanoidScaleFallbacks()
+    local players = game and game:GetService("Players")
+    if not players then
+        return
+    end
+
+    local function watchPlayer(player)
+        if typeof(player) ~= "Instance" then
+            return
+        end
+
+        if player.Character then
+            Utility.EnsureHumanoidScaleValues(player.Character)
+        end
+        pcall(function()
+            player.CharacterAdded:Connect(function(character)
+                Utility.EnsureHumanoidScaleValues(character)
+                if type(task) == "table" and type(task.defer) == "function" then
+                    task.defer(Utility.EnsureHumanoidScaleValues, character)
+                end
+            end)
+        end)
+    end
+
+    for _, player in ipairs(players:GetPlayers()) do
+        watchPlayer(player)
+    end
+    pcall(function()
+        players.PlayerAdded:Connect(watchPlayer)
+    end)
+end
+
 function Utility.InstallExecutorCompatibility()
     local env = type(getgenv) == "function" and getgenv() or _G
     env.AetherCore = env.AetherCore or {}
