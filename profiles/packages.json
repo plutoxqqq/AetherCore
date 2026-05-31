@@ -1,4 +1,4 @@
 {
   "universal": ["runtime-compatibility"],
-  "bedwars": ["aethercore-base", "compatibility"]
+  "bedwars": ["main"]
 }
