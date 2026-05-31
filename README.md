@@ -25,7 +25,7 @@ AetherCore will continue to evolve by adding more modules and better updates
 AetherCore v3.0.0
 
 [+] Rebuilt the whole script system using VapeV4 library
-[+] Completely redesigned GUI to mimic Vape's
+[+] Completely redesigned GUI to mimic Vape
 [+] Fixed EVERY module
 
 Join our Discord server for the latest updates, announcements, and changes
