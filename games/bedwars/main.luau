@@ -1,3 +1,36 @@
+-- AetherCore unified BedWars entrypoint.
+-- The full BedWars payload intentionally lives in this file for compatibility
+-- with existing game-specific load expectations. A small preamble loads the
+-- AetherCore-owned module group files before the preserved payload registers
+-- its feature modules.
+local aetherState = getgenv and getgenv().AetherCore or nil
+local aetherContext = type(aetherState) == 'table' and aetherState.Context or nil
+if type(aetherContext) == 'table' and type(aetherContext.RunFunctionModule) == 'function' then
+    for _, groupName in ipairs({
+        'Combat',
+        'Blatant',
+        'Render',
+        'Utility',
+        'World',
+        'Inventory',
+        'Minigames',
+        'Friends',
+        'Targets',
+        'Profiles',
+        'Legit',
+        'Kits',
+        'BoostFPS'
+    }) do
+        local groupPath = 'games/bedwars/modules/' .. groupName .. '.lua'
+        local ok, result = pcall(function()
+            return aetherContext.RunFunctionModule(groupPath)
+        end)
+        if not ok or result == false then
+            warn('[AetherCore] BedWars ' .. groupName .. ' group failed: ' .. tostring(result))
+        end
+    end
+end
+
 -- AetherCore unified BedWars entrypoint
 -- games/bedwars/main.luau is the single source for BedWars modules.
 -- The former catvape.luau and aerov4.luau payloads are merged here so the
@@ -52297,3 +52330,238 @@ local catvapeOk, catvapeError = xpcall(catvapeChunk, debug.traceback)
 if not catvapeOk then
 	error('[AetherCore] Failed to run merged catvape payload: ' .. tostring(catvapeError))
 end
+
+--// BEGIN AETHERCORE LIONV5 REFERENCE COMPATIBILITY MODULES
+-- These modules preserve LionV5-facing names while using AetherCore-safe
+-- implementations or clear bridges to existing AetherCore modules. Unsafe
+-- external whitelist/network behaviour from the reference is intentionally not
+-- imported.
+local function createLionModule(categoryName, options)
+    local categories = vape and vape.Categories
+    if type(categories) ~= 'table' then return nil end
+    local category = categories[categoryName] or categories.Utility
+    if type(category) ~= 'table' or type(category.CreateModule) ~= 'function' then return nil end
+    return category:CreateModule(options)
+end
+
+local function lionNotify(title, text, duration)
+    if vape and type(vape.CreateNotification) == 'function' then
+        vape:CreateNotification(title or 'AetherCore', text or '', duration or 4)
+    else
+        warn('[AetherCore] ' .. tostring(text or title or ''))
+    end
+end
+
+run(function()
+    local Fullbright
+    local settings
+    local connection
+
+    Fullbright = createLionModule('World', {
+        Name = 'Fullbright',
+        Tooltip = 'LionV5-compatible full brightness lighting control.',
+        Function = function(callback)
+            if callback then
+                settings = {
+                    Brightness = lightingService.Brightness,
+                    ClockTime = lightingService.ClockTime,
+                    FogEnd = lightingService.FogEnd,
+                    GlobalShadows = lightingService.GlobalShadows,
+                    OutdoorAmbient = lightingService.OutdoorAmbient
+                }
+                local function apply()
+                    lightingService.Brightness = 2
+                    lightingService.ClockTime = 14
+                    lightingService.FogEnd = 100000
+                    lightingService.GlobalShadows = false
+                    lightingService.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+                end
+                apply()
+                connection = lightingService.Changed:Connect(apply)
+                Fullbright:Clean(connection)
+            else
+                if connection then
+                    connection:Disconnect()
+                    connection = nil
+                end
+                if settings then
+                    for property, value in pairs(settings) do
+                        pcall(function()
+                            lightingService[property] = value
+                        end)
+                    end
+                    settings = nil
+                end
+            end
+        end
+    })
+end)
+
+run(function()
+    local AntiDizzy
+    local originalCanPickup
+
+    AntiDizzy = createLionModule('World', {
+        Name = 'AntiDizzy',
+        Tooltip = 'Prevents dizzy movement from mushroom and toad pickups when the BedWars controller is available.',
+        Function = function(callback)
+            local controller = bedwars and bedwars.ForestEnvironmentCollectibleEntityController
+            if callback then
+                if type(controller) ~= 'table' or type(controller.canPickupEntity) ~= 'function' then
+                    lionNotify('AetherCore', 'AntiDizzy could not find the BedWars collectible controller.', 4)
+                    return
+                end
+                originalCanPickup = originalCanPickup or controller.canPickupEntity
+                controller.canPickupEntity = function(player, entity, ...)
+                    if player == lplr then
+                        return false
+                    end
+                    return originalCanPickup(player, entity, ...)
+                end
+            elseif originalCanPickup and type(controller) == 'table' then
+                controller.canPickupEntity = originalCanPickup
+                originalCanPickup = nil
+            end
+        end
+    })
+end)
+
+run(function()
+    local ElektraExtender
+    local Range
+    local originalGet
+
+    ElektraExtender = createLionModule('Kits', {
+        Name = 'ElektraExtender',
+        Tooltip = 'Extends Elektra dash vectors when the ElectricDash remote is available.',
+        Function = function(callback)
+            if callback then
+                if not (bedwars and bedwars.Client and type(bedwars.Client.Get) == 'function') then
+                    lionNotify('AetherCore', 'ElektraExtender could not find the BedWars client remote table.', 4)
+                    return
+                end
+                originalGet = originalGet or bedwars.Client.Get
+                bedwars.Client.Get = function(self, remoteName)
+                    local remote = originalGet(self, remoteName)
+                    if remoteName ~= 'ElectricDash' or type(remote) ~= 'table' or type(remote.CallServer) ~= 'function' then
+                        return remote
+                    end
+                    return setmetatable({
+                        CallServer = function(remoteSelf, data, ...)
+                            if type(data) == 'table' then
+                                for _, key in ipairs({'direction', 'dashDirection', 'moveDirection'}) do
+                                    if typeof(data[key]) == 'Vector3' then
+                                        data[key] = data[key] * ((Range and Range.Value) or 1.4)
+                                    end
+                                end
+                            end
+                            return remote.CallServer(remote, data, ...)
+                        end
+                    }, {__index = remote})
+                end
+            elseif originalGet and bedwars and bedwars.Client then
+                bedwars.Client.Get = originalGet
+                originalGet = nil
+            end
+        end
+    })
+
+    if ElektraExtender then
+        Range = ElektraExtender:CreateSlider({Name = 'Dash Multiplier', Min = 1, Max = 3, Default = 1.4, Decimal = 10})
+    end
+end)
+
+run(function()
+    local MartinSpeed
+    local connection
+
+    MartinSpeed = createLionModule('Kits', {
+        Name = 'MartinSpeed',
+        Tooltip = 'LionV5-compatible Martin sword-swing sync helper.',
+        Function = function(callback)
+            if callback then
+                local syncEvents = bedwars and bedwars.ClientSyncEvents
+                local swordSwing = syncEvents and syncEvents.SwordSwing
+                if type(swordSwing) ~= 'table' or type(swordSwing.fire) ~= 'function' then
+                    lionNotify('AetherCore', 'MartinSpeed could not find the SwordSwing sync event.', 4)
+                    return
+                end
+                local lastFire = 0
+                connection = runService.Heartbeat:Connect(function()
+                    if tick() - lastFire < 0.2 then return end
+                    lastFire = tick()
+                    pcall(function()
+                        swordSwing:fire({chargedAttack = {chargeRatio = 1}})
+                    end)
+                end)
+                MartinSpeed:Clean(connection)
+            elseif connection then
+                connection:Disconnect()
+                connection = nil
+            end
+        end
+    })
+end)
+
+run(function()
+    local AutoRelease
+    local Percentage
+    local originalCalculate
+
+    AutoRelease = createLionModule('Utility', {
+        Name = 'AutoRelease',
+        Tooltip = 'Automatically releases charged projectiles once the selected charge percentage is reached.',
+        Function = function(callback)
+            local projectileController = bedwars and bedwars.ProjectileController
+            if callback then
+                if type(projectileController) ~= 'table' or type(projectileController.calculateImportantLaunchValues) ~= 'function' then
+                    lionNotify('AetherCore', 'AutoRelease could not find the projectile controller.', 4)
+                    return
+                end
+                originalCalculate = originalCalculate or projectileController.calculateImportantLaunchValues
+                projectileController.calculateImportantLaunchValues = function(self, ...)
+                    local values = originalCalculate(self, ...)
+                    local charge = tonumber((values and (values.charge or values.chargeRatio)) or 1) or 1
+                    if charge >= ((Percentage and Percentage.Value or 95) / 100) then
+                        local mouse = lplr and lplr:GetMouse()
+                        if mouse then
+                            pcall(function()
+                                mouse1release()
+                            end)
+                        end
+                    end
+                    return values
+                end
+            elseif originalCalculate and type(projectileController) == 'table' then
+                projectileController.calculateImportantLaunchValues = originalCalculate
+                originalCalculate = nil
+            end
+        end
+    })
+
+    if AutoRelease then
+        Percentage = AutoRelease:CreateSlider({Name = 'Charge Percent', Min = 1, Max = 100, Default = 95})
+    end
+end)
+
+for _, bridge in ipairs({
+    {'Kits', 'AutoEldertree', 'Use AetherCore Auto Elder for full tree-orb collection behaviour.'},
+    {'Utility', 'Clutch', 'Use AetherCore Block-In, AntiFall, and Scaffold-style utility modules for clutch behaviour.'},
+    {'Utility', 'KitRender (5v5)', 'Use AetherCore KitRender for current kit rendering support.'},
+    {'Utility', 'KitRender (squads)', 'Use AetherCore KitRender for current kit rendering support.'},
+    {'Combat', 'ProjectileAimAssist', 'Use AetherCore Projectile Aimbot for active projectile aim assistance.'},
+    {'Combat', 'SilentAura', 'Use AetherCore Killaura or Aura modules for active aura behaviour.'}
+}) do
+    run(function()
+        createLionModule(bridge[1], {
+            Name = bridge[2],
+            Tooltip = 'LionV5 compatibility bridge. ' .. bridge[3],
+            Function = function(callback)
+                if callback then
+                    lionNotify('AetherCore', bridge[3], 5)
+                end
+            end
+        })
+    end)
+end
+--// END AETHERCORE LIONV5 REFERENCE COMPATIBILITY MODULES

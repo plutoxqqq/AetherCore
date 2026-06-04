@@ -1,6 +1,6 @@
 -- BedWars lobby entry.
--- The current module set is shared with the in-match payload so lobby users keep
--- the same feature list instead of receiving an empty module page.
+-- Lobby and match places share the BedWars controller so users never receive an
+-- empty payload when Roblox routes them through the BedWars lobby.
 return function(context)
     return context.LoadGameModule("games/bedwars/main.luau")
 end

@@ -1,5 +1,5 @@
 -- Default AetherCore GUI bridge.
--- The project keeps the proven Vape-compatible interface while the new loader
+-- The project keeps the proven compatibility interface while the new loader
 -- owns startup, module routing, profile loading, and finalisation.
 local Gui = {}
 

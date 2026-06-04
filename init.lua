@@ -1,15 +1,18 @@
 -- AetherCore init.lua
--- Sets startup arguments, prepares cache folders when available, and then loads main.lua.
+-- Prepares cache folders, updates core cached files when possible, then executes
+-- main.lua with a startup context. Feature logic belongs in main.lua/modules.
 local startup = getgenv and getgenv().AetherCoreStartup or {}
 local rootUrl = startup.RootUrl or "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/"
 local rootFolder = startup.RootFolder or "AetherCore"
+local versionPath = rootFolder .. "/profiles/version.txt"
+local remoteVersionPath = "profiles/version.txt"
 
-local function executorHasFileSupport()
+local function hasFileSupport()
     return type(isfolder) == "function" and type(makefolder) == "function"
 end
 
 local function ensureFolder(path)
-    if executorHasFileSupport() then
+    if hasFileSupport() then
         local ok, exists = pcall(isfolder, path)
         if not ok or not exists then
             pcall(makefolder, path)
@@ -17,38 +20,29 @@ local function ensureFolder(path)
     end
 end
 
-local cacheFolders = {
+local folders = {
     rootFolder,
     rootFolder .. "/assets",
     rootFolder .. "/assets/new",
     rootFolder .. "/assets/old",
     rootFolder .. "/assets/rise",
-    rootFolder .. "/assets/wurst",
+    rootFolder .. "/assets/shared",
     rootFolder .. "/games",
+    rootFolder .. "/games/bedwars",
+    rootFolder .. "/games/bedwars/modules",
+    rootFolder .. "/games/bedwars/libraries",
+    rootFolder .. "/games/bedwars/profiles",
     rootFolder .. "/guis",
     rootFolder .. "/libraries",
-    rootFolder .. "/profiles"
+    rootFolder .. "/profiles",
+    rootFolder .. "/profiles/premade"
 }
-for _, folder in ipairs(cacheFolders) do
+for _, folder in ipairs(folders) do
     ensureFolder(folder)
 end
 
-local state = getgenv and getgenv().AetherCore or {}
-state.Name = "AetherCore"
-state.Version = state.Version or "3.1.0"
-state.RootUrl = rootUrl
-state.RootFolder = rootFolder
-state.CacheFolders = cacheFolders
-state.StartedAt = os.time()
-if getgenv then
-    getgenv().AetherCore = state
-    getgenv().AetherCoreStartup = startup
-end
-
-local function readLocal(path)
-    if type(readfile) ~= "function" then
-        return nil
-    end
+local function read(path)
+    if type(readfile) ~= "function" then return nil end
     local ok, result = pcall(readfile, path)
     if ok and type(result) == "string" and result ~= "" then
         return result
@@ -56,8 +50,113 @@ local function readLocal(path)
     return nil
 end
 
+local function write(path, contents)
+    if type(writefile) == "function" and type(contents) == "string" then
+        pcall(writefile, path, contents)
+    end
+end
+
+local function fetchRemote(path)
+    return game:HttpGet(rootUrl .. path, true)
+end
+
+local remoteVersion
+pcall(function()
+    remoteVersion = fetchRemote(remoteVersionPath)
+end)
+if type(remoteVersion) == "string" then
+    remoteVersion = remoteVersion:gsub("^%s+", ""):gsub("%s+$", "")
+    if remoteVersion == "" or remoteVersion:find("404", 1, true) then
+        remoteVersion = nil
+    end
+end
+local localVersion = read(versionPath)
+local shouldRefresh = remoteVersion and localVersion ~= remoteVersion
+
+local cacheManifest = {
+    "init.lua",
+    "main.lua",
+    "games/universal.lua",
+    "games/bedwars/main.luau",
+    "games/bedwars/lobby.lua",
+    "games/bedwars/libraries/loader.lua",
+    "games/bedwars/modules/Combat.lua",
+    "games/bedwars/modules/Blatant.lua",
+    "games/bedwars/modules/Render.lua",
+    "games/bedwars/modules/Utility.lua",
+    "games/bedwars/modules/World.lua",
+    "games/bedwars/modules/Inventory.lua",
+    "games/bedwars/modules/Minigames.lua",
+    "games/bedwars/modules/Friends.lua",
+    "games/bedwars/modules/Targets.lua",
+    "games/bedwars/modules/Profiles.lua",
+    "games/bedwars/modules/Legit.lua",
+    "games/bedwars/modules/Kits.lua",
+    "games/bedwars/modules/BoostFPS.lua",
+    "games/bedwars/modules/compatibility_payload.luau",
+    "guis/new.lua",
+    "guis/old.lua",
+    "guis/rise.lua",
+    "libraries/utility.lua",
+    "libraries/storage.lua",
+    "libraries/theme.lua",
+    "libraries/signal.lua",
+    "libraries/tween.lua",
+    "libraries/entity.lua",
+    "libraries/prediction.lua",
+    "libraries/target.lua",
+    "libraries/drawing.lua",
+    "profiles/gui.txt",
+    "profiles/default.txt",
+    "profiles/supported.json",
+    "profiles/version.txt",
+    "custom_modules.luau"
+}
+
 local function fetch(path)
-    return readLocal(path) or game:HttpGet(rootUrl .. path, true)
+    local cachePath = rootFolder .. "/" .. path
+    if not shouldRefresh then
+        local cached = read(cachePath)
+        if cached then return cached end
+    end
+
+    local ok, remote = pcall(fetchRemote, path)
+    if ok and type(remote) == "string" and remote ~= "" then
+        write(cachePath, remote)
+        return remote
+    end
+
+    local cached = read(cachePath)
+    if cached then return cached end
+
+    -- Legacy local fallback is intentionally last; AetherCore/<path> is the
+    -- supported cache root.
+    local legacy = read(path)
+    if legacy then return legacy end
+
+    error("[AetherCore] Unable to load " .. tostring(path) .. ": " .. tostring(remote))
+end
+
+if shouldRefresh then
+    for _, path in ipairs(cacheManifest) do
+        pcall(fetch, path)
+    end
+    if remoteVersion then
+        write(versionPath, remoteVersion)
+    end
+end
+
+local state = getgenv and getgenv().AetherCore or {}
+state.Name = "AetherCore"
+state.Version = (remoteVersion and remoteVersion:gsub("%s+", "")) or state.Version or "3.2.0"
+state.RootUrl = rootUrl
+state.RootFolder = rootFolder
+state.CacheFolders = folders
+state.LoaderStage = "main"
+state.StartedAt = os.time()
+if getgenv then
+    getgenv().AetherCore = state
+    getgenv().AetherCoreStartup = startup
 end
 
 local mainSource = fetch("main.lua")
@@ -66,14 +165,11 @@ if not mainChunk then
     error("[AetherCore] Failed to compile main.lua: " .. tostring(compileError))
 end
 
--- main.lua returns the central controller function. Compile and execute the
--- chunk first, then call that returned function with the prepared startup data.
 local mainController = mainChunk()
 if type(mainController) ~= "function" then
     error("[AetherCore] main.lua did not return the central controller function")
 end
 
-state.LoaderStage = "main"
 return mainController({
     RootUrl = rootUrl,
     RootFolder = rootFolder,
