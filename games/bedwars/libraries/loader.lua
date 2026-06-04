@@ -14,7 +14,8 @@ BedWarsLoader.Groups = {
     "Profiles",
     "Legit",
     "Kits",
-    "BoostFPS"
+    "BoostFPS",
+    "ReferenceExtras"
 }
 
 local function notify(text)

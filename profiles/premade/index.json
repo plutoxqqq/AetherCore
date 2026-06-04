@@ -1,0 +1,36 @@
+{
+  "source": "https://github.com/poopparty/poopparty/tree/main/profiles/premade",
+  "profiles": [
+    {
+      "name": "Mahad V4",
+      "file": "Mahad V4 cc2619619496.txt",
+      "gameId": 2619619496
+    },
+    {
+      "name": "Richify",
+      "file": "RichifyCC2619619496.txt",
+      "gameId": 2619619496,
+      "note": "The upstream raw file is truncated after module settings, so this copy preserves module settings and resets categories to keep the profile valid JSON."
+    },
+    {
+      "name": "Aero BedWars Lobby",
+      "file": "aero2619619496.txt",
+      "gameId": 2619619496
+    },
+    {
+      "name": "Aero BedWars Main",
+      "file": "aero6872265039.txt",
+      "placeId": 6872265039
+    },
+    {
+      "name": "Mafia",
+      "file": "mafia2619619496.txt",
+      "gameId": 2619619496
+    },
+    {
+      "name": "Soryed",
+      "file": "soryed2619619496.txt",
+      "gameId": 2619619496
+    }
+  ]
+}
