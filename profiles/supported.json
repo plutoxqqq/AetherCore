@@ -2,6 +2,7 @@
   "bedwars": {
     "gameid": 2619619496,
     "lobby": {
+      "Path": "games/bedwars/lobby.lua",
       "Place": 6872265039,
       "Ids": [6872265039]
     },

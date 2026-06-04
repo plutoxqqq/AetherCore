@@ -1,4 +1,4 @@
--- Shared utility helpers for AetherCore's CatV6-style loader.
+-- Shared utility helpers for AetherCore's VapeV4-style loader.
 local Utility = {}
 
 Utility.BrandName = "AetherCore"
@@ -274,7 +274,7 @@ end
 
 function Utility.LoadVapeRuntimeLibrary(libraryName)
     if not Utility.IsVapeCoreReady() then
-        return false, "Vape core is not ready"
+        return false, "GUI core is not ready"
     end
 
     local libraries = shared.vape.Libraries
