@@ -74,8 +74,21 @@ function Utility.BrandVapeCoreSource(source)
     }
     for _, categoryList in ipairs(categoryInsertions) do
         local quote = categoryList:sub(1, 1)
-        local extendedList = categoryList .. ", " .. quote .. "Kits" .. quote .. ", " .. quote .. "Legit" .. quote .. ", " .. quote .. "BoostFPS" .. quote
+        local extendedList = categoryList .. ", " .. quote .. "Kits" .. quote .. ", " .. quote .. "Legit" .. quote .. ", " .. quote .. "BoostFPS" .. quote .. ", " .. quote .. "VibeCoded" .. quote
         brandedSource = brandedSource:gsub(categoryList, extendedList)
+    end
+
+    local vibeCategoryInsertions = {
+        "'Kits', 'Legit', 'BoostFPS'",
+        "'Kits','Legit','BoostFPS'",
+        '"Kits", "Legit", "BoostFPS"',
+        '"Kits","Legit","BoostFPS"'
+    }
+    for _, categoryList in ipairs(vibeCategoryInsertions) do
+        local quote = categoryList:sub(1, 1)
+        if not brandedSource:find(quote .. "VibeCoded" .. quote, 1, true) then
+            brandedSource = brandedSource:gsub(categoryList, categoryList .. ", " .. quote .. "VibeCoded" .. quote)
+        end
     end
 
     return brandedSource
@@ -482,7 +495,8 @@ function Utility.InstallCategoryFallbacks()
         Minigames = "World",
         Other = "Utility",
         Profiles = "Utility",
-        Search = "Utility"
+        Search = "Utility",
+        VibeCoded = "Utility"
     }
 
     for missingName, preferredName in pairs(aliases) do
