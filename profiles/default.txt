@@ -1,0 +1,6 @@
+{
+  "gui": "new",
+  "theme": "new",
+  "profileVersion": 1,
+  "modules": {}
+}
