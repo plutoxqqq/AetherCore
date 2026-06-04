@@ -29,6 +29,560 @@ return function(context)
         end
     end
 
+    -- Inline BedWars VibeCoded module group.
+    -- These modules add practical client-side quality-of-life behaviour without
+    -- depending on one brittle BedWars implementation detail.
+    local function loadVibeCodedModuleGroup(context)
+        local vape = shared and shared.vape
+        if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+            return false, "GUI categories are unavailable"
+        end
+
+        local category = vape.Categories.VibeCoded or vape.Categories["VibeCoded"] or vape.Categories.Utility
+        if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+            return false, "VibeCoded category is unavailable"
+        end
+
+        context.BedWars = context.BedWars or {Groups = {}}
+        context.BedWars.Groups = context.BedWars.Groups or {}
+        context.BedWars.Groups.VibeCoded = true
+
+        local playersService = game:GetService("Players")
+        local runService = game:GetService("RunService")
+        local userInputService = game:GetService("UserInputService")
+        local soundService = game:GetService("SoundService")
+        local localPlayer = playersService.LocalPlayer
+        if localPlayer == nil then
+            return false, "LocalPlayer is unavailable"
+        end
+        local vibeState = context.VibeCoded or {}
+        context.VibeCoded = vibeState
+
+        local function notify(title, text, duration)
+            if type(vape.CreateNotification) == "function" then
+                pcall(function()
+                    vape:CreateNotification(title or "VibeCoded", text or "", duration or 3)
+                end)
+            end
+        end
+
+        local function disconnectAll(connections)
+            for _, connection in ipairs(connections) do
+                if type(connection) == "table" or typeof(connection) == "RBXScriptConnection" then
+                    pcall(function()
+                        connection:Disconnect()
+                    end)
+                end
+            end
+            table.clear(connections)
+        end
+
+        local function destroyAll(instances)
+            for _, instance in ipairs(instances) do
+                if typeof(instance) == "Instance" then
+                    pcall(function()
+                        instance:Destroy()
+                    end)
+                end
+            end
+            table.clear(instances)
+        end
+
+        local function getCharacterParts()
+            local character = localPlayer and localPlayer.Character
+            if typeof(character) ~= "Instance" then
+                return nil, nil, nil
+            end
+            local humanoid = character:FindFirstChildOfClass("Humanoid")
+            local rootPart = character:FindFirstChild("HumanoidRootPart")
+            return character, humanoid, rootPart
+        end
+
+        local function isOpponent(player)
+            if player == nil or player == localPlayer then
+                return false
+            end
+            if localPlayer and player.Team ~= nil and localPlayer.Team ~= nil then
+                return player.Team ~= localPlayer.Team
+            end
+            return true
+        end
+
+        local function getOrCreateGui(name)
+            local parent = nil
+            pcall(function()
+                parent = localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")
+            end)
+            if typeof(parent) ~= "Instance" then
+                return nil
+            end
+
+            local existing = parent:FindFirstChild(name)
+            if existing then
+                existing:Destroy()
+            end
+
+            local gui = Instance.new("ScreenGui")
+            gui.Name = name
+            gui.ResetOnSpawn = false
+            gui.IgnoreGuiInset = true
+            gui.Parent = parent
+            return gui
+        end
+
+        local function createStatusLabel(name, position, size)
+            local gui = getOrCreateGui(name)
+            if not gui then
+                return nil, nil
+            end
+
+            local label = Instance.new("TextLabel")
+            label.Name = "Status"
+            label.AnchorPoint = Vector2.new(1, 0)
+            label.Position = position or UDim2.new(1, -18, 0, 150)
+            label.Size = size or UDim2.fromOffset(230, 92)
+            label.BackgroundColor3 = Color3.fromRGB(16, 18, 24)
+            label.BackgroundTransparency = 0.22
+            label.BorderSizePixel = 0
+            label.Font = Enum.Font.GothamMedium
+            label.TextColor3 = Color3.fromRGB(236, 243, 255)
+            label.TextSize = 13
+            label.TextXAlignment = Enum.TextXAlignment.Left
+            label.TextYAlignment = Enum.TextYAlignment.Top
+            label.TextWrapped = true
+            label.Parent = gui
+
+            local padding = Instance.new("UIPadding")
+            padding.PaddingBottom = UDim.new(0, 8)
+            padding.PaddingLeft = UDim.new(0, 10)
+            padding.PaddingRight = UDim.new(0, 10)
+            padding.PaddingTop = UDim.new(0, 8)
+            padding.Parent = label
+
+            return gui, label
+        end
+
+        local function containsKeyword(text, keywords)
+            text = tostring(text or ""):lower()
+            for _, keyword in ipairs(keywords) do
+                if text:find(keyword, 1, true) then
+                    return true
+                end
+            end
+            return false
+        end
+
+        local function makeBillboard(adornee, text, color)
+            local billboard = Instance.new("BillboardGui")
+            billboard.Name = "AetherVibeMarker"
+            billboard.Adornee = adornee
+            billboard.AlwaysOnTop = true
+            billboard.LightInfluence = 0
+            billboard.MaxDistance = 600
+            billboard.Size = UDim2.fromOffset(128, 34)
+            billboard.StudsOffsetWorldSpace = Vector3.new(0, 3.4, 0)
+
+            local label = Instance.new("TextLabel")
+            label.BackgroundTransparency = 0.25
+            label.BackgroundColor3 = Color3.fromRGB(18, 19, 26)
+            label.BorderSizePixel = 0
+            label.Font = Enum.Font.GothamBold
+            label.Size = UDim2.fromScale(1, 1)
+            label.Text = text
+            label.TextColor3 = color or Color3.fromRGB(255, 255, 255)
+            label.TextScaled = true
+            label.Parent = billboard
+
+            billboard.Parent = adornee
+            return billboard
+        end
+
+        local function createHighlight(target, color)
+            local highlight = Instance.new("Highlight")
+            highlight.Name = "AetherVibeHighlight"
+            highlight.Adornee = target
+            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+            highlight.FillColor = color
+            highlight.FillTransparency = 0.72
+            highlight.OutlineColor = color
+            highlight.OutlineTransparency = 0.05
+            highlight.Parent = target
+            return highlight
+        end
+
+        local function createModule(options)
+            return category:CreateModule(options)
+        end
+
+        createModule({
+            Name = "Health Pulse Alerts",
+            Function = function(enabled)
+                local key = "HealthPulseAlerts"
+                if vibeState[key] then
+                    disconnectAll(vibeState[key].Connections)
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local state = {Connections = {}, LastBand = nil}
+                vibeState[key] = state
+                local function watchCharacter(character)
+                    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+                    if not humanoid then
+                        return
+                    end
+                    local function update()
+                        local maxHealth = math.max(tonumber(humanoid.MaxHealth) or 100, 1)
+                        local percent = (tonumber(humanoid.Health) or 0) / maxHealth
+                        local band = percent <= 0.25 and "critical" or percent <= 0.5 and "low" or "safe"
+                        if band ~= state.LastBand and band ~= "safe" then
+                            notify("Health Pulse", band == "critical" and "Critical health. Reset pressure or escape now." or "Health is below half.", 4)
+                        end
+                        state.LastBand = band
+                    end
+                    table.insert(state.Connections, humanoid.HealthChanged:Connect(update))
+                    update()
+                end
+                if localPlayer.Character then
+                    watchCharacter(localPlayer.Character)
+                end
+                table.insert(state.Connections, localPlayer.CharacterAdded:Connect(watchCharacter))
+                notify("VibeCoded", "Health Pulse Alerts enabled", 3)
+            end,
+            Tooltip = "Warns when your health crosses low and critical bands."
+        })
+
+        createModule({
+            Name = "Void Guard Ping",
+            Function = function(enabled)
+                local key = "VoidGuardPing"
+                if vibeState[key] then
+                    disconnectAll(vibeState[key].Connections)
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local state = {Connections = {}, LastWarn = 0}
+                vibeState[key] = state
+                table.insert(state.Connections, runService.Heartbeat:Connect(function()
+                    local _, humanoid, rootPart = getCharacterParts()
+                    if not humanoid or not rootPart or humanoid.Health <= 0 then
+                        return
+                    end
+                    local now = os.clock()
+                    if now - state.LastWarn < 2.5 then
+                        return
+                    end
+                    local params = RaycastParams.new()
+                    params.FilterType = Enum.RaycastFilterType.Exclude
+                    params.FilterDescendantsInstances = {localPlayer.Character}
+                    local downHit = workspace:Raycast(rootPart.Position, Vector3.new(0, -18, 0), params)
+                    if rootPart.Position.Y < 35 or downHit == nil then
+                        state.LastWarn = now
+                        notify("Void Guard", "No safe floor detected below you.", 3)
+                    end
+                end))
+                notify("VibeCoded", "Void Guard Ping enabled", 3)
+            end,
+            Tooltip = "Checks for missing ground under you and warns near the void."
+        })
+
+        createModule({
+            Name = "Bed Beacon Overlay",
+            Function = function(enabled)
+                local key = "BedBeaconOverlay"
+                if vibeState[key] then
+                    destroyAll(vibeState[key].Instances)
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local state = {Instances = {}}
+                vibeState[key] = state
+                local count = 0
+                for _, object in ipairs(workspace:GetDescendants()) do
+                    if count >= 24 then
+                        break
+                    end
+                    if object:IsA("BasePart") and containsKeyword(object.Name, {"bed"}) then
+                        count = count + 1
+                        table.insert(state.Instances, makeBillboard(object, "BED", Color3.fromRGB(255, 99, 132)))
+                        table.insert(state.Instances, createHighlight(object, Color3.fromRGB(255, 99, 132)))
+                    end
+                end
+                notify("Bed Beacon", count > 0 and ("Marked " .. tostring(count) .. " bed objects.") or "No bed objects were visible yet.", 4)
+            end,
+            Tooltip = "Marks visible bed objects with lightweight labels and highlights."
+        })
+
+        createModule({
+            Name = "Resource Beacon Overlay",
+            Function = function(enabled)
+                local key = "ResourceBeaconOverlay"
+                if vibeState[key] then
+                    disconnectAll(vibeState[key].Connections)
+                    destroyAll(vibeState[key].Instances)
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local keywords = {"iron", "diamond", "emerald", "gold", "resource"}
+                local state = {Connections = {}, Instances = {}, Seen = {}}
+                vibeState[key] = state
+                local function mark(object)
+                    if state.Seen[object] or not object:IsA("BasePart") or not containsKeyword(object.Name, keywords) then
+                        return
+                    end
+                    state.Seen[object] = true
+                    table.insert(state.Instances, makeBillboard(object, object.Name:upper(), Color3.fromRGB(106, 255, 189)))
+                end
+                for _, object in ipairs(workspace:GetDescendants()) do
+                    mark(object)
+                end
+                table.insert(state.Connections, workspace.DescendantAdded:Connect(mark))
+                notify("VibeCoded", "Resource Beacon Overlay enabled", 3)
+            end,
+            Tooltip = "Labels visible resource drops and newly spawned resource parts."
+        })
+
+        createModule({
+            Name = "Teammate Radar HUD",
+            Function = function(enabled)
+                local key = "TeammateRadarHUD"
+                if vibeState[key] then
+                    disconnectAll(vibeState[key].Connections)
+                    destroyAll(vibeState[key].Instances)
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local gui, label = createStatusLabel("AetherTeammateRadar", UDim2.new(1, -18, 0, 145), UDim2.fromOffset(240, 104))
+                if not gui or not label then
+                    notify("Teammate Radar", "PlayerGui was not ready.", 3)
+                    return
+                end
+                local state = {Connections = {}, Instances = {gui}, LastUpdate = 0}
+                vibeState[key] = state
+                table.insert(state.Connections, runService.Heartbeat:Connect(function()
+                    local now = os.clock()
+                    if now - state.LastUpdate < 0.35 then
+                        return
+                    end
+                    state.LastUpdate = now
+                    local _, _, rootPart = getCharacterParts()
+                    local rows = {"Teammate Radar"}
+                    if rootPart and localPlayer.Team then
+                        local entries = {}
+                        for _, player in ipairs(playersService:GetPlayers()) do
+                            local targetRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                            if player ~= localPlayer and player.Team == localPlayer.Team and targetRoot then
+                                table.insert(entries, {Name = player.DisplayName, Distance = (targetRoot.Position - rootPart.Position).Magnitude})
+                            end
+                        end
+                        table.sort(entries, function(a, b) return a.Distance < b.Distance end)
+                        for index = 1, math.min(4, #entries) do
+                            table.insert(rows, string.format("%s  •  %d studs", entries[index].Name, math.floor(entries[index].Distance + 0.5)))
+                        end
+                    end
+                    if #rows == 1 then
+                        table.insert(rows, "No nearby teammates found.")
+                    end
+                    label.Text = table.concat(rows, "\n")
+                end))
+                notify("VibeCoded", "Teammate Radar HUD enabled", 3)
+            end,
+            Tooltip = "Shows the closest teammates and their distances."
+        })
+
+        createModule({
+            Name = "Threat Ring Highlights",
+            Function = function(enabled)
+                local key = "ThreatRingHighlights"
+                if vibeState[key] then
+                    disconnectAll(vibeState[key].Connections)
+                    destroyAll(vibeState[key].Instances)
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local state = {Connections = {}, Instances = {}, Marked = {}, LastUpdate = 0}
+                vibeState[key] = state
+                local function clearMarks()
+                    destroyAll(state.Instances)
+                    state.Marked = {}
+                end
+                table.insert(state.Connections, runService.Heartbeat:Connect(function()
+                    local now = os.clock()
+                    if now - state.LastUpdate < 0.8 then
+                        return
+                    end
+                    state.LastUpdate = now
+                    clearMarks()
+                    local _, _, rootPart = getCharacterParts()
+                    if not rootPart then
+                        return
+                    end
+                    for _, player in ipairs(playersService:GetPlayers()) do
+                        local character = player.Character
+                        local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
+                        if isOpponent(player) and targetRoot and (targetRoot.Position - rootPart.Position).Magnitude <= 80 then
+                            table.insert(state.Instances, createHighlight(character, Color3.fromRGB(255, 80, 80)))
+                        end
+                    end
+                end))
+                notify("VibeCoded", "Threat Ring Highlights enabled", 3)
+            end,
+            Tooltip = "Highlights opponents who are within 80 studs of you."
+        })
+
+        createModule({
+            Name = "Lag Spike Watcher",
+            Function = function(enabled)
+                local key = "LagSpikeWatcher"
+                if vibeState[key] then
+                    disconnectAll(vibeState[key].Connections)
+                    destroyAll(vibeState[key].Instances)
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local gui, label = createStatusLabel("AetherLagSpikeWatcher", UDim2.new(1, -18, 0, 258), UDim2.fromOffset(240, 70))
+                if not gui or not label then
+                    notify("Lag Spike Watcher", "PlayerGui was not ready.", 3)
+                    return
+                end
+                local state = {Connections = {}, Instances = {gui}, LastUpdate = 0, Spikes = 0, Frames = 0, TotalDelta = 0}
+                vibeState[key] = state
+                table.insert(state.Connections, runService.RenderStepped:Connect(function(deltaTime)
+                    state.Frames = state.Frames + 1
+                    state.TotalDelta = state.TotalDelta + deltaTime
+                    if deltaTime >= 0.12 then
+                        state.Spikes = state.Spikes + 1
+                    end
+                    local now = os.clock()
+                    if now - state.LastUpdate >= 0.5 then
+                        state.LastUpdate = now
+                        local average = state.TotalDelta / math.max(state.Frames, 1)
+                        label.Text = string.format("Lag Spike Watcher\nAverage FPS: %d\nSpikes: %d", math.floor((1 / math.max(average, 0.001)) + 0.5), state.Spikes)
+                    end
+                end))
+                notify("VibeCoded", "Lag Spike Watcher enabled", 3)
+            end,
+            Tooltip = "Tracks average FPS and visible frame spikes during the match."
+        })
+
+        createModule({
+            Name = "Session Stopwatch HUD",
+            Function = function(enabled)
+                local key = "SessionStopwatchHUD"
+                if vibeState[key] then
+                    disconnectAll(vibeState[key].Connections)
+                    destroyAll(vibeState[key].Instances)
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local gui, label = createStatusLabel("AetherSessionStopwatch", UDim2.new(1, -18, 0, 337), UDim2.fromOffset(240, 58))
+                if not gui or not label then
+                    notify("Session Stopwatch", "PlayerGui was not ready.", 3)
+                    return
+                end
+                local state = {Connections = {}, Instances = {gui}, StartedAt = os.clock()}
+                vibeState[key] = state
+                table.insert(state.Connections, runService.Heartbeat:Connect(function()
+                    local elapsed = math.floor(os.clock() - state.StartedAt)
+                    local minutes = math.floor(elapsed / 60)
+                    local seconds = elapsed % 60
+                    label.Text = string.format("Session Stopwatch\n%02d:%02d", minutes, seconds)
+                end))
+                notify("VibeCoded", "Session Stopwatch HUD enabled", 3)
+            end,
+            Tooltip = "Adds a clean on-screen match timer from the moment it is enabled."
+        })
+
+        createModule({
+            Name = "Focus Mute Guard",
+            Function = function(enabled)
+                local key = "FocusMuteGuard"
+                if vibeState[key] then
+                    disconnectAll(vibeState[key].Connections)
+                    if vibeState[key].OriginalVolume then
+                        soundService.Volume = vibeState[key].OriginalVolume
+                    end
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local state = {Connections = {}, OriginalVolume = soundService.Volume}
+                vibeState[key] = state
+                table.insert(state.Connections, userInputService.WindowFocusReleased:Connect(function()
+                    state.OriginalVolume = soundService.Volume
+                    soundService.Volume = math.min(soundService.Volume, 0.08)
+                end))
+                table.insert(state.Connections, userInputService.WindowFocused:Connect(function()
+                    soundService.Volume = state.OriginalVolume or 1
+                end))
+                notify("VibeCoded", "Focus Mute Guard enabled", 3)
+            end,
+            Tooltip = "Automatically soft-mutes Roblox when the game window loses focus."
+        })
+
+        createModule({
+            Name = "Camera Comfort Boost",
+            Function = function(enabled)
+                local key = "CameraComfortBoost"
+                if vibeState[key] then
+                    disconnectAll(vibeState[key].Connections)
+                    if workspace.CurrentCamera and vibeState[key].OriginalFov then
+                        workspace.CurrentCamera.FieldOfView = vibeState[key].OriginalFov
+                    end
+                    vibeState[key] = nil
+                end
+                if not enabled then
+                    return
+                end
+
+                local state = {Connections = {}, OriginalFov = workspace.CurrentCamera and workspace.CurrentCamera.FieldOfView or 70}
+                vibeState[key] = state
+                table.insert(state.Connections, runService.RenderStepped:Connect(function()
+                    local _, humanoid = getCharacterParts()
+                    local camera = workspace.CurrentCamera
+                    if not humanoid or not camera then
+                        return
+                    end
+                    local moving = humanoid.MoveDirection.Magnitude > 0.05
+                    local targetFov = moving and math.min(state.OriginalFov + 8, 90) or state.OriginalFov
+                    camera.FieldOfView = camera.FieldOfView + ((targetFov - camera.FieldOfView) * 0.08)
+                end))
+                notify("VibeCoded", "Camera Comfort Boost enabled", 3)
+            end,
+            Tooltip = "Smoothly widens FOV while moving and restores it when disabled."
+        })
+
+
+
+        return true
+    end
+
+
     if type(shared) ~= "table" or type(shared.vape) ~= "table" then
         return false, "compatibility GUI core is unavailable"
     end
@@ -41,6 +595,17 @@ return function(context)
     context.BedWars.Groups = context.BedWars.Groups or {}
 
     local loadedGroups = 0
+
+    local vibeOk, vibeResult = pcall(function()
+        return loadVibeCodedModuleGroup(context)
+    end)
+    context.BedWars.Groups.VibeCoded = vibeOk and (vibeResult ~= false) or false
+    if vibeOk and vibeResult ~= false then
+        loadedGroups = loadedGroups + 1
+    else
+        warn("[AetherCore] BedWars VibeCoded group failed: " .. tostring(vibeResult))
+    end
+
     for _, groupName in ipairs(groupNames) do
         local path = "games/bedwars/modules/" .. groupName .. ".lua"
         local ok, result = pcall(function()
