@@ -451,6 +451,89 @@ function Utility.InstallCategoryFallbacks()
     end
 
     local categories = shared.vape.Categories
+    local vape = shared.vape
+
+    local function getAsset(path)
+        local assetLoader = type(vape.Libraries) == "table" and vape.Libraries.getcustomasset or nil
+        if type(assetLoader) == "function" then
+            local ok, asset = pcall(assetLoader, path)
+            if ok and type(asset) == "string" and asset ~= "" then
+                return asset
+            end
+        end
+        if type(getcustomasset) == "function" then
+            local ok, asset = pcall(getcustomasset, path)
+            if ok and type(asset) == "string" and asset ~= "" then
+                return asset
+            end
+        end
+        return path
+    end
+
+    local function createWindowCategory(name, iconPath, size)
+        if type(categories[name]) == "table" and type(categories[name].CreateModule) == "function" then
+            return categories[name]
+        end
+        if type(vape.CreateCategory) ~= "function" then
+            return nil
+        end
+
+        local ok, category = pcall(function()
+            return vape:CreateCategory({
+                Name = name,
+                Icon = getAsset(iconPath or "newvape/assets/new/utilityicon.png"),
+                Size = size or UDim2.fromOffset(15, 14)
+            })
+        end)
+        if ok and type(category) == "table" then
+            categories[name] = category
+            return category
+        end
+        return nil
+    end
+
+    local function createListCategory(name, iconPath, size, options)
+        if type(categories[name]) == "table" and type(categories[name].CreateModule) == "function" then
+            return categories[name]
+        end
+        if type(vape.CreateCategoryList) ~= "function" then
+            return nil
+        end
+
+        options = options or {}
+        options.Name = name
+        options.Icon = getAsset(iconPath or "newvape/assets/new/friendstab.png")
+        options.Size = size or UDim2.fromOffset(17, 16)
+        local ok, category = pcall(function()
+            return vape:CreateCategoryList(options)
+        end)
+        if ok and type(category) == "table" then
+            categories[name] = category
+            return category
+        end
+        return nil
+    end
+
+    createWindowCategory("Inventory", "newvape/assets/new/inventoryicon.png", UDim2.fromOffset(15, 14))
+    createWindowCategory("Minigames", "newvape/assets/new/miniicon.png", UDim2.fromOffset(19, 12))
+    createWindowCategory("Kits", "newvape/assets/new/utilityicon.png", UDim2.fromOffset(15, 14))
+    createWindowCategory("Legit", "newvape/assets/new/legittab.png", UDim2.fromOffset(16, 16))
+    createWindowCategory("BoostFPS", "newvape/assets/new/rendericon.png", UDim2.fromOffset(15, 14))
+    createWindowCategory("VibeCoded", "newvape/assets/new/utilityicon.png", UDim2.fromOffset(15, 14))
+
+    createListCategory("Friends", "newvape/assets/new/friendstab.png", UDim2.fromOffset(17, 16), {
+        Placeholder = "Roblox username",
+        Color = Color3.fromRGB(5, 134, 105)
+    })
+    createListCategory("Profiles", "newvape/assets/new/profilesicon.png", UDim2.fromOffset(17, 10), {
+        Position = UDim2.fromOffset(12, 16),
+        Placeholder = "Type name",
+        Profiles = true
+    })
+    createListCategory("Targets", "newvape/assets/new/friendstab.png", UDim2.fromOffset(17, 16), {
+        Placeholder = "Roblox username"
+    })
+
     local fallbackCategory = nil
     for _, category in pairs(categories) do
         if type(category) == "table" and type(category.CreateModule) == "function" then
@@ -462,6 +545,18 @@ function Utility.InstallCategoryFallbacks()
         return
     end
 
+    local function delegateCreateModule(category)
+        if type(category) == "table" and type(category.CreateModule) ~= "function" then
+            category.CreateModule = function(_, moduleOptions, ...)
+                return fallbackCategory:CreateModule(moduleOptions, ...)
+            end
+        end
+    end
+
+    delegateCreateModule(categories.Friends)
+    delegateCreateModule(categories.Profiles)
+    delegateCreateModule(categories.Targets)
+
     if type(categories.Friends) ~= "table" then
         categories.Friends = {
             ListEnabled = {},
@@ -469,7 +564,9 @@ function Utility.InstallCategoryFallbacks()
                 ["Use friends"] = {Enabled = false},
                 ["Recolor visuals"] = {Enabled = true}
             },
-            CreateModule = fallbackCategory.CreateModule
+            CreateModule = function(_, moduleOptions, ...)
+                return fallbackCategory:CreateModule(moduleOptions, ...)
+            end
         }
     end
     categories.Friends.ListEnabled = categories.Friends.ListEnabled or {}
@@ -481,7 +578,9 @@ function Utility.InstallCategoryFallbacks()
         categories.Targets = {
             ListEnabled = {},
             Options = {},
-            CreateModule = fallbackCategory.CreateModule
+            CreateModule = function(_, moduleOptions, ...)
+                return fallbackCategory:CreateModule(moduleOptions, ...)
+            end
         }
     end
     categories.Targets.ListEnabled = categories.Targets.ListEnabled or {}

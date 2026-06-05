@@ -621,6 +621,8 @@ return function(context)
 
     local before = tonumber(context.State and context.State.ModuleRegistrationCount) or 0
 
+    local compatibilityPayloadOk, compatibilityPayloadError = xpcall(function()
+
     --// BEGIN INLINE AETHERCORE BEDWARS COMPATIBILITY PAYLOAD
 -- AetherCore unified BedWars entrypoint
 -- games/bedwars/main.luau is the single source for BedWars modules.
@@ -52924,6 +52926,11 @@ end
 end -- Close the isolated catvape payload block.
 
     --// END INLINE AETHERCORE BEDWARS COMPATIBILITY PAYLOAD
+
+    end, debug.traceback)
+    if not compatibilityPayloadOk then
+        warn("[AetherCore] BedWars compatibility payload failed; keeping lightweight modules available: " .. tostring(compatibilityPayloadError))
+    end
 
     local after = tonumber(context.State and context.State.ModuleRegistrationCount) or 0
     if after <= before and loadedGroups == 0 then
