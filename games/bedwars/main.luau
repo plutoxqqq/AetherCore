@@ -52921,6 +52921,7 @@ local catvapeOk, catvapeError = xpcall(catvapeChunk, debug.traceback)
 if not catvapeOk then
 	error('[AetherCore] Failed to run merged catvape payload: ' .. tostring(catvapeError))
 end
+end -- Close the isolated catvape payload block.
 
     --// END INLINE AETHERCORE BEDWARS COMPATIBILITY PAYLOAD
 
