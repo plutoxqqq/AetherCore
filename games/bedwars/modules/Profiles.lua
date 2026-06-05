@@ -7,9 +7,9 @@ return function(context)
         return false, "GUI categories are unavailable"
     end
 
-    local category = vape.Categories["Utility"] or vape.Categories.Utility
+    local category = vape.Categories["Profiles"] or vape.Categories.Utility
     if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Utility category is unavailable"
+        return false, "Profiles category is unavailable"
     end
 
     context.BedWars = context.BedWars or {Groups = {}}
