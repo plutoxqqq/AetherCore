@@ -4710,6 +4710,120 @@ run(function()
     })
 end)
 
+
+local InfiniteFly
+run(function()
+    local hiddenPart
+    local originalCameraSubject
+    local originalTransparency = {}
+
+    local function getCharacter()
+        local character = entitylib.character
+        if type(character) ~= 'table' then
+            return nil
+        end
+        return character.Character, character.RootPart or character.HumanoidRootPart, character.Head, character.Humanoid
+    end
+
+    local function setCharacterTransparency(transparency)
+        local character = select(1, getCharacter())
+        if typeof(character) ~= 'Instance' then
+            return
+        end
+
+        for _, object in character:GetDescendants() do
+            if object:IsA('BasePart') then
+                if originalTransparency[object] == nil then
+                    originalTransparency[object] = object.Transparency
+                end
+                object.Transparency = transparency
+            end
+        end
+    end
+
+    local function restoreCharacterTransparency()
+        for object, transparency in pairs(originalTransparency) do
+            if typeof(object) == 'Instance' and object.Parent ~= nil then
+                object.Transparency = transparency
+            end
+        end
+        table.clear(originalTransparency)
+    end
+
+    local function setRootHeight(rootPart, height)
+        local position = rootPart.Position
+        rootPart.CFrame = CFrame.lookAlong(Vector3.new(position.X, height, position.Z), rootPart.CFrame.LookVector)
+        rootPart.AssemblyLinearVelocity = Vector3.zero
+    end
+
+    InfiniteFly = vape.Categories.Blatant:CreateModule({
+        Name = 'InfiniteFly',
+        Function = function(callback)
+            if callback then
+                local character, rootPart, head = getCharacter()
+                if typeof(character) ~= 'Instance' or typeof(rootPart) ~= 'Instance' then
+                    if type(vape.CreateNotification) == 'function' then
+                        vape:CreateNotification('InfiniteFly', 'Character is not ready.', 3)
+                    end
+                    InfiniteFly:Toggle()
+                    return
+                end
+
+                hiddenPart = Instance.new('Part')
+                hiddenPart.Name = 'AetherCoreInfiniteFlyCameraPart'
+                hiddenPart.Transparency = 1
+                hiddenPart.CanQuery = false
+                hiddenPart.CanTouch = false
+                hiddenPart.CanCollide = false
+                hiddenPart.Anchored = true
+                hiddenPart.CFrame = (typeof(head) == 'Instance' and head.CFrame) or rootPart.CFrame
+                hiddenPart.Parent = workspace
+                InfiniteFly:Clean(hiddenPart)
+
+                originalCameraSubject = gameCamera.CameraSubject
+                gameCamera.CameraSubject = hiddenPart
+                setCharacterTransparency(1)
+                setRootHeight(rootPart, 210)
+
+                InfiniteFly:Clean(runService.RenderStepped:Connect(function()
+                    local _, currentRootPart = getCharacter()
+                    if not entitylib.isAlive or typeof(currentRootPart) ~= 'Instance' then
+                        return
+                    end
+
+                    local rootPosition = currentRootPart.Position
+                    if hiddenPart and hiddenPart.Parent ~= nil then
+                        hiddenPart.CFrame = CFrame.new(Vector3.new(rootPosition.X, hiddenPart.Position.Y, rootPosition.Z))
+                    end
+
+                    if rootPosition.Y < -75 then
+                        setRootHeight(currentRootPart, 210)
+                    end
+                end))
+            else
+                restoreCharacterTransparency()
+                local _, _, _, humanoid = getCharacter()
+                if typeof(originalCameraSubject) == 'Instance' and originalCameraSubject.Parent ~= nil then
+                    gameCamera.CameraSubject = originalCameraSubject
+                elseif typeof(humanoid) == 'Instance' then
+                    gameCamera.CameraSubject = humanoid
+                end
+                originalCameraSubject = nil
+                if hiddenPart then
+                    pcall(function()
+                        hiddenPart:Destroy()
+                    end)
+                    hiddenPart = nil
+                end
+            end
+        end,
+        ExtraText = function()
+            return 'Heatseeker'
+        end,
+        Tooltip = 'Keeps the camera anchored while repeatedly recovering your character from the void. Use AntiFall or another no-fall module with it.'
+    })
+end)
+
 local Fly
 local LongJump
 run(function()
@@ -4880,7 +4994,7 @@ run(function()
                 local wallRaycastInterval = 0.05
 
                 Fly:Clean(runService.PreSimulation:Connect(function(dt)
-                    if entitylib.isAlive and isnetworkowner(entitylib.character.RootPart) then
+                    if entitylib.isAlive and not (InfiniteFly and InfiniteFly.Enabled) and isnetworkowner(entitylib.character.RootPart) then
                         preSimFrameCounter = preSimFrameCounter + 1
                         local now = tick()
 
@@ -37624,6 +37738,7 @@ do
 end
 
 local AntiFallDirection
+local InfiniteFly
 local Fly
 local LongJump
 local Attacking
@@ -39488,6 +39603,119 @@ run(function()
     })
 end)
 
+
+run(function()
+    local hiddenPart
+    local originalCameraSubject
+    local originalTransparency = {}
+
+    local function getCharacter()
+        local character = entitylib.character
+        if type(character) ~= 'table' then
+            return nil
+        end
+        return character.Character, character.RootPart or character.HumanoidRootPart, character.Head, character.Humanoid
+    end
+
+    local function setCharacterTransparency(transparency)
+        local character = select(1, getCharacter())
+        if typeof(character) ~= 'Instance' then
+            return
+        end
+
+        for _, object in character:GetDescendants() do
+            if object:IsA('BasePart') then
+                if originalTransparency[object] == nil then
+                    originalTransparency[object] = object.Transparency
+                end
+                object.Transparency = transparency
+            end
+        end
+    end
+
+    local function restoreCharacterTransparency()
+        for object, transparency in pairs(originalTransparency) do
+            if typeof(object) == 'Instance' and object.Parent ~= nil then
+                object.Transparency = transparency
+            end
+        end
+        table.clear(originalTransparency)
+    end
+
+    local function setRootHeight(rootPart, height)
+        local position = rootPart.Position
+        rootPart.CFrame = CFrame.lookAlong(Vector3.new(position.X, height, position.Z), rootPart.CFrame.LookVector)
+        rootPart.AssemblyLinearVelocity = Vector3.zero
+    end
+
+    InfiniteFly = vape.Categories.Blatant:CreateModule({
+        Name = 'InfiniteFly',
+        Function = function(callback)
+            if callback then
+                local character, rootPart, head = getCharacter()
+                if typeof(character) ~= 'Instance' or typeof(rootPart) ~= 'Instance' then
+                    if type(vape.CreateNotification) == 'function' then
+                        vape:CreateNotification('InfiniteFly', 'Character is not ready.', 3)
+                    end
+                    InfiniteFly:Toggle()
+                    return
+                end
+
+                hiddenPart = Instance.new('Part')
+                hiddenPart.Name = 'AetherCoreInfiniteFlyCameraPart'
+                hiddenPart.Transparency = 1
+                hiddenPart.CanQuery = false
+                hiddenPart.CanTouch = false
+                hiddenPart.CanCollide = false
+                hiddenPart.Anchored = true
+                hiddenPart.CFrame = (typeof(head) == 'Instance' and head.CFrame) or rootPart.CFrame
+                hiddenPart.Parent = workspace
+                InfiniteFly:Clean(hiddenPart)
+
+                originalCameraSubject = gameCamera.CameraSubject
+                gameCamera.CameraSubject = hiddenPart
+                setCharacterTransparency(1)
+                setRootHeight(rootPart, 210)
+
+                InfiniteFly:Clean(runService.RenderStepped:Connect(function()
+                    local _, currentRootPart = getCharacter()
+                    if not entitylib.isAlive or typeof(currentRootPart) ~= 'Instance' then
+                        return
+                    end
+
+                    local rootPosition = currentRootPart.Position
+                    if hiddenPart and hiddenPart.Parent ~= nil then
+                        hiddenPart.CFrame = CFrame.new(Vector3.new(rootPosition.X, hiddenPart.Position.Y, rootPosition.Z))
+                    end
+
+                    if rootPosition.Y < -75 then
+                        setRootHeight(currentRootPart, 210)
+                    end
+                end))
+            else
+                restoreCharacterTransparency()
+                local _, _, _, humanoid = getCharacter()
+                if typeof(originalCameraSubject) == 'Instance' and originalCameraSubject.Parent ~= nil then
+                    gameCamera.CameraSubject = originalCameraSubject
+                elseif typeof(humanoid) == 'Instance' then
+                    gameCamera.CameraSubject = humanoid
+                end
+                originalCameraSubject = nil
+                if hiddenPart then
+                    pcall(function()
+                        hiddenPart:Destroy()
+                    end)
+                    hiddenPart = nil
+                end
+            end
+        end,
+        ExtraText = function()
+            return 'Heatseeker'
+        end,
+        Tooltip = 'Keeps the camera anchored while repeatedly recovering your character from the void. Use AntiFall or another no-fall module with it.'
+    })
+end)
+
 run(function()
     local Value
     local VerticalValue
@@ -39525,7 +39753,7 @@ run(function()
 				end
 			end))
 			Fly:Clean(runService.PreSimulation:Connect(function(dt)
-				if entitylib.isAlive and isnetworkowner(entitylib.character.RootPart) then
+				if entitylib.isAlive and not (InfiniteFly and InfiniteFly.Enabled) and isnetworkowner(entitylib.character.RootPart) then
 					local flyAllowed = (
 						lplr.Character:GetAttribute('InflatedBalloons')
 						and lplr.Character:GetAttribute('InflatedBalloons') > 0
