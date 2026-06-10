@@ -1,0 +1,9 @@
+* text=auto eol=lf
+*.lua text eol=lf
+*.luau text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.png -text
+*.ttf -text
+*.otf -text

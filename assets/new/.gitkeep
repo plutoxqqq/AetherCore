@@ -1,0 +1,2 @@
+# AetherCore keeps binary GUI assets out of the repository so pull requests remain text-only.
+# Runtime code can fetch remote assets when needed.

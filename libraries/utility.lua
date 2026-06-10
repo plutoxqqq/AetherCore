@@ -3,7 +3,7 @@ local Utility = {}
 
 Utility.BrandName = "AetherCore"
 Utility.RuntimeContext = nil
-Utility.BrandTextAsset = "assets/new/aethercore_text.png"
+Utility.BrandTextAsset = nil -- Binary branding assets are intentionally not tracked in Git.
 Utility.VapeCoreBaseUrl = "https://raw.githubusercontent.com/7GrandDadPGN/Vape" .. string.char(86, 52) .. "ForRoblox/main/"
 Utility.VapeCoreUrl = Utility.VapeCoreBaseUrl .. "NewMainScript.lua"
 
@@ -61,10 +61,14 @@ function Utility.BrandVapeCoreSource(source)
     local brandedSource = source
         :gsub("Vape " .. versionText, Utility.BrandName)
         :gsub("VAPE " .. versionText, Utility.BrandName)
-        :gsub("newvape/assets/new/vape%.png", Utility.BrandTextAsset)
-        :gsub("newvape/assets/new/logo%.png", Utility.BrandTextAsset)
-        :gsub("newvape/assets/new/vapelogo%.png", Utility.BrandTextAsset)
-        :gsub("newvape/assets/new/VapeLogo%.png", Utility.BrandTextAsset)
+
+    if type(Utility.BrandTextAsset) == "string" and Utility.BrandTextAsset ~= "" then
+        brandedSource = brandedSource
+            :gsub("newvape/assets/new/vape%.png", Utility.BrandTextAsset)
+            :gsub("newvape/assets/new/logo%.png", Utility.BrandTextAsset)
+            :gsub("newvape/assets/new/vapelogo%.png", Utility.BrandTextAsset)
+            :gsub("newvape/assets/new/VapeLogo%.png", Utility.BrandTextAsset)
+    end
 
     local categoryInsertions = {
         "'Combat', 'Blatant', 'Render', 'Utility', 'World', 'Inventory', 'Minigames'",
@@ -162,6 +166,15 @@ function Utility.ApplyBrandLogoImage(textObject)
     end
 
     local logo = textObject:FindFirstChild("AetherCoreTextLogo")
+    if type(Utility.BrandTextAsset) ~= "string" or Utility.BrandTextAsset == "" then
+        if logo then
+            logo.Visible = false
+        end
+        textObject.Text = Utility.BrandName
+        textObject.TextTransparency = 0
+        return
+    end
+
     if logo == nil then
         logo = Instance.new("ImageLabel")
         logo.Name = "AetherCoreTextLogo"
@@ -193,6 +206,11 @@ function Utility.ApplyVisibleBrandingOverrides()
         local looksLikeVapeLogo = (nameText:find("logo", 1, true) ~= nil or imageText:find("logo", 1, true) ~= nil or imageText:find("vape", 1, true) ~= nil)
             and imageText:find("aethercore", 1, true) == nil
         if not looksLikeVapeLogo then
+            return
+        end
+
+        if type(Utility.BrandTextAsset) ~= "string" or Utility.BrandTextAsset == "" then
+            object.Visible = false
             return
         end
 

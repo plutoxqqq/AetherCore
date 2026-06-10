@@ -1,0 +1,1 @@
+AetherCore helper placeholder. Core code belongs in loader.lua, main.lua, libraries/, guis/, and games/.
