@@ -1,0 +1,18 @@
+# Runtime cache and executor output
+AetherCore/
+newvape/
+*.log
+*.tmp
+*.bak
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Dependency/build folders
+node_modules/
+dist/
+build/
+coverage/

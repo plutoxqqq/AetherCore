@@ -17,7 +17,7 @@ return function(startup)
         SelectedGui = "new",
         Profile = {},
         RequiredLibraries = {"utility", "storage", "theme"},
-        OptionalLibraries = {"signal", "tween", "entity", "drawing", "prediction", "target"}
+        OptionalLibraries = {"signal", "tween", "entity", "drawing", "prediction", "target", "hash", "vm"}
     }
 
     local function warnf(format, ...)
@@ -207,7 +207,7 @@ return function(startup)
 
     local guiChoice = context.Fetch("profiles/gui.txt")
     guiChoice = type(guiChoice) == "string" and guiChoice:gsub("%s+", ""):lower() or "new"
-    local validGuis = {new = true, old = true, rise = true}
+    local validGuis = {new = true, old = true, rise = true, wurst = true}
     if not validGuis[guiChoice] then
         warnf("unknown GUI '%s'; falling back to new", tostring(guiChoice))
         guiChoice = "new"

@@ -26,6 +26,7 @@ local folders = {
     rootFolder .. "/assets/new",
     rootFolder .. "/assets/old",
     rootFolder .. "/assets/rise",
+    rootFolder .. "/assets/wurst",
     rootFolder .. "/assets/shared",
     rootFolder .. "/games",
     rootFolder .. "/games/bedwars",
@@ -74,8 +75,12 @@ local localVersion = read(versionPath)
 local shouldRefresh = remoteVersion and localVersion ~= remoteVersion
 
 local cacheManifest = {
+    "loader.lua",
+    "loadstring",
     "init.lua",
     "main.lua",
+    "NewMainScript.lua",
+    "a.txt",
     "games/universal.lua",
     "games/bedwars/main.luau",
     "games/bedwars/lobby.lua",
@@ -97,6 +102,7 @@ local cacheManifest = {
     "guis/new.lua",
     "guis/old.lua",
     "guis/rise.lua",
+    "guis/wurst.lua",
     "libraries/utility.lua",
     "libraries/storage.lua",
     "libraries/theme.lua",
@@ -106,6 +112,8 @@ local cacheManifest = {
     "libraries/prediction.lua",
     "libraries/target.lua",
     "libraries/drawing.lua",
+    "libraries/hash.lua",
+    "libraries/vm.lua",
     "profiles/gui.txt",
     "profiles/default.txt",
     "profiles/supported.json",
