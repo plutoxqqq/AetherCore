@@ -28,7 +28,7 @@ The repository also includes a `loadstring` text file for users who want a copy-
    - Selects a GUI from `profiles/gui.txt`.
    - Loads universal modules first.
    - Detects `game.GameId` and `game.PlaceId`.
-   - Loads the matching game/place file or routed game controller.
+   - Loads `games/universal.luau`, then loads the `games/<PlaceId>.luau` module when one exists.
    - Loads optional custom modules.
 4. **`NewMainScript.lua`**
    - VapeV4-style compatibility entrypoint.
@@ -68,14 +68,9 @@ AetherCore/
 │  ├─ prediction.lua
 │  └─ vm.lua
 └─ games/
-   ├─ universal.lua
-   ├─ 6872274481.lua
-   ├─ 6872265039.lua
-   └─ bedwars/
-      ├─ main.luau
-      ├─ lobby.lua
-      ├─ libraries/
-      └─ modules/
+   ├─ universal.luau
+   ├─ 6872265039.luau
+   └─ 6872274481.luau
 ```
 
 Additional compatibility helpers such as `libraries/utility.lua`, `libraries/storage.lua`, `libraries/theme.lua`, `libraries/signal.lua`, `libraries/tween.lua`, and `libraries/target.lua` are kept because the current AetherCore runtime uses them.
@@ -91,62 +86,46 @@ Additional compatibility helpers such as `libraries/utility.lua`, `libraries/sto
 
 Unknown values fall back to `new` with a warning.
 
-## Supported game routing
+## Supported game metadata
 
-`profiles/supported.json` maps supported experiences to module paths:
+`profiles/supported.json` documents supported experiences and their place-specific payloads:
 
 ```json
 {
   "bedwars": {
     "gameid": 2619619496,
     "lobby": {
-      "Path": "games/bedwars/lobby.lua",
+      "Path": "games/6872265039.luau",
       "Place": 6872265039,
       "Ids": [6872265039]
     },
     "main": {
-      "Path": "games/bedwars/main.luau",
+      "Path": "games/6872274481.luau",
       "Place": 6872274481,
-      "Ids": [6872274481, 8444591321, 8560631822]
+      "Ids": [6872274481]
     }
   }
 }
 ```
 
-If no route matches, `main.lua` falls back to `games/<PlaceId>.lua` and warns clearly if that file is unavailable.
+`main.lua` always loads `games/universal.luau` first. It then attempts `games/<PlaceId>.luau`; if no PlaceId file exists, it warns and continues with universal and custom modules only.
 
 ## Games folder
 
 `games/` is the main loader area for universal and place-specific modules.
 
-- `games/universal.lua` runs in every supported experience.
-- `games/6872274481.lua` is loaded when the current `PlaceId` is `6872274481`.
-- `games/6872265039.lua` is loaded when the current `PlaceId` is `6872265039`.
-- Additional place files should be named after the Roblox `PlaceId`.
+- `games/universal.luau` runs in every experience, regardless of GameId or PlaceId, and contains modules that are safe everywhere.
+- Numeric files such as `games/6872265039.luau` and `games/6872274481.luau` are keyed by Roblox `PlaceId` and only run when the current `game.PlaceId` matches that number.
+- `games/6872265039.luau` contains BedWars lobby-specific modules.
+- `games/6872274481.luau` contains real BedWars match-specific modules.
 
-## BedWars module system
+## Place-specific module system
 
-The routed BedWars controller lives under `games/bedwars/` and keeps modules grouped by category:
-
-- `Combat`
-- `Blatant`
-- `Render`
-- `Utility`
-- `World`
-- `Inventory`
-- `Minigames`
-- `Friends`
-- `Targets`
-- `Profiles`
-- `Legit`
-- `Kits`
-- `BoostFPS`
-
-The compatibility payload remains under `games/bedwars/modules/compatibility_payload.luau` so existing AetherCore BedWars registrations continue to work while the top-level controller stays readable.
+Place-specific files live directly under `games/` and are intentionally separate from the universal runtime. For BedWars, the lobby place and match place have independent files so lobby-only code never executes match-only modules and match-only code never executes lobby-only modules.
 
 ## Adding a module
 
-1. Choose the correct universal, place-specific, or BedWars module file.
+1. Choose the correct universal or PlaceId-specific module file.
 2. Register modules through the selected GUI category:
 
 ```luau
@@ -170,10 +149,10 @@ end
 
 ## Adding a supported game
 
-1. Create `games/<PlaceId>.lua` or a routed game folder such as `games/<game-name>/main.lua`.
-2. Add the route to `profiles/supported.json` with `gameid`, `Place`, optional `Ids`, and `Path`.
+1. Create `games/<PlaceId>.luau` directly under `games/`.
+2. Document the game in `profiles/supported.json` with `gameid`, `Place`, optional `Ids`, and `Path`.
 3. Make sure the loader registers real modules or warns clearly.
-4. Keep game-specific helper code under that game's folder.
+4. Keep place-specific helper code inside that place file unless it is safe enough for `games/universal.luau`.
 
 ## Assets
 

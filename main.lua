@@ -1,6 +1,6 @@
 -- AetherCore main.lua
 -- Central controller: waits for Roblox, installs compatibility fallbacks, loads
--- libraries and GUI, routes universal/game modules, profiles, custom modules,
+-- libraries and GUI, routes universal and place-specific modules, profiles, custom modules,
 -- then finalizes or cleanly reloads/uninjects.
 return function(startup)
     startup = startup or {}
@@ -262,55 +262,19 @@ return function(startup)
         storage.MigrateLegacyProfiles(context)
     end
 
-    local universalOk, universalError = context.RunFunctionModule("games/universal.lua")
+    local universalOk, universalError = context.RunFunctionModule("games/universal.luau")
     if universalOk == false then
         fail("Failed to load universal modules: " .. tostring(universalError))
     end
     warn("[AetherCore] Universal modules loaded")
 
-    local supported = storage.DecodeJson(context.Fetch("profiles/supported.json"), {}) or {}
-    local currentGameId = game.GameId
-    local currentPlaceId = game.PlaceId
-    local matchedPath = nil
-
-    for gameName, gameInfo in pairs(supported) do
-        if type(gameInfo) == "table" and tonumber(gameInfo.gameid or gameInfo.GameId) == tonumber(currentGameId) then
-            for placeName, placeInfo in pairs(gameInfo) do
-                if type(placeInfo) == "table" then
-                    local configuredPath = type(placeInfo.Path) == "string" and placeInfo.Path ~= "" and placeInfo.Path or nil
-                    local defaultPath = "games/" .. tostring(gameName) .. "/" .. tostring(placeName) .. ".lua"
-                    local modulePath = configuredPath or defaultPath
-                    if tonumber(placeInfo.Place or placeInfo.PlaceId) == tonumber(currentPlaceId) then
-                        matchedPath = modulePath
-                    elseif type(placeInfo.Ids) == "table" then
-                        for _, id in ipairs(placeInfo.Ids) do
-                            if tonumber(id) == tonumber(currentPlaceId) then
-                                matchedPath = modulePath
-                                break
-                            end
-                        end
-                    end
-                end
-                if matchedPath then break end
-            end
-        end
-        if matchedPath then break end
-    end
-
-    if matchedPath then
-        local ok, loadError = context.LoadGameModule(matchedPath)
-        if not ok then
-            fail("Failed to load " .. matchedPath .. ": " .. tostring(loadError))
-        end
-        warnf("Loaded supported game module: %s", matchedPath)
+    local currentPlaceId = tonumber(game.PlaceId)
+    local placePath = "games/" .. tostring(currentPlaceId or "unknown") .. ".luau"
+    local ok, loadError = context.LoadGameModule(placePath)
+    if ok then
+        warnf("Loaded place module: %s", placePath)
     else
-        local placePath = "games/" .. tostring(currentPlaceId) .. ".lua"
-        local ok, loadError = context.LoadGameModule(placePath)
-        if ok then
-            warnf("Loaded place module: %s", placePath)
-        else
-            warnf("No supported game profile matched; place fallback failed: %s", tostring(loadError))
-        end
+        warnf("No place module loaded for PlaceId %s: %s", tostring(currentPlaceId or "unknown"), tostring(loadError))
     end
 
     local customOk, customResult = pcall(function()
