@@ -1,24 +1,7 @@
--- AetherCore unified BedWars main entrypoint.
--- This file is intentionally the main BedWars payload and embeds the merged
--- compatibility code directly so the supported-game route resolves here.
+-- BedWars match entrypoint.
+-- This file is loaded only when the current Roblox PlaceId is a real
+-- BedWars match place and keeps match-specific modules out of the lobby.
 return function(context)
-    local groupNames = {
-        "Combat",
-        "Blatant",
-        "Render",
-        "Utility",
-        "World",
-        "Inventory",
-        "Minigames",
-        "Friends",
-        "Targets",
-        "Profiles",
-        "Legit",
-        "Kits",
-        "BoostFPS",
-        "ReferenceExtras"
-    }
-
     local function notify(text)
         if type(shared) == "table" and type(shared.vape) == "table" and type(shared.vape.CreateNotification) == "function" then
             pcall(function()
@@ -590,7 +573,7 @@ return function(context)
     context.BedWars = context.BedWars or {
         Groups = {},
         LoadedAt = tick and tick() or os.time(),
-        CompatibilityPayload = "games/bedwars/main.luau"
+        CompatibilityPayload = "games/6872274481.luau"
     }
     context.BedWars.Groups = context.BedWars.Groups or {}
 
@@ -606,10 +589,578 @@ return function(context)
         warn("[AetherCore] BedWars VibeCoded group failed: " .. tostring(vibeResult))
     end
 
-    for _, groupName in ipairs(groupNames) do
-        local path = "games/bedwars/modules/" .. groupName .. ".lua"
+
+    local embeddedModuleSources = {
+        Combat = [==[
+-- BedWars Combat module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Combat"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Combat category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Combat"] = true
+
+    category:CreateModule({
+        Name = "Aim Assist",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Aim Assist enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Combat bridge module."
+    })
+
+    category:CreateModule({
+        Name = "Auto Clicker",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Auto Clicker enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Combat bridge module."
+    })
+
+    category:CreateModule({
+        Name = "Reach Monitor",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Reach Monitor enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Combat bridge module."
+    })
+
+    return true
+end
+]==],
+        Blatant = [==[
+-- BedWars Blatant module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Blatant"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Blatant category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Blatant"] = true
+
+    category:CreateModule({
+        Name = "Anti Fall Guard",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Anti Fall Guard enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Blatant bridge module."
+    })
+
+    category:CreateModule({
+        Name = "Movement Watchdog",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Movement Watchdog enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Blatant bridge module."
+    })
+
+    return true
+end
+]==],
+        Render = [==[
+-- BedWars Render module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Render"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Render category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Render"] = true
+
+    category:CreateModule({
+        Name = "Interface Branding",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Interface Branding enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Render bridge module."
+    })
+
+    category:CreateModule({
+        Name = "Target Overlay Bridge",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Target Overlay Bridge enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Render bridge module."
+    })
+
+    return true
+end
+]==],
+        Utility = [==[
+-- BedWars Utility module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Utility"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Utility category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Utility"] = true
+
+    category:CreateModule({
+        Name = "BedWars Status",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "BedWars Status enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Utility bridge module."
+    })
+
+    category:CreateModule({
+        Name = "Notification Test",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Notification Test enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Utility bridge module."
+    })
+
+    return true
+end
+]==],
+        World = [==[
+-- BedWars World module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["World"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "World category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["World"] = true
+
+    category:CreateModule({
+        Name = "World Scanner",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "World Scanner enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars World bridge module."
+    })
+
+    return true
+end
+]==],
+        Inventory = [==[
+-- BedWars Inventory module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Inventory"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Inventory category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Inventory"] = true
+
+    category:CreateModule({
+        Name = "Inventory Cache Bridge",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Inventory Cache Bridge enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Inventory bridge module."
+    })
+
+    return true
+end
+]==],
+        Minigames = [==[
+-- BedWars Minigames module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Minigames"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Minigames category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Minigames"] = true
+
+    category:CreateModule({
+        Name = "Queue Info",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Queue Info enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Minigames bridge module."
+    })
+
+    return true
+end
+]==],
+        Friends = [==[
+-- BedWars Friends module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Friends"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Friends category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Friends"] = true
+
+    category:CreateModule({
+        Name = "Friend Sync",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Friend Sync enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Friends bridge module."
+    })
+
+    return true
+end
+]==],
+        Targets = [==[
+-- BedWars Targets module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Targets"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Targets category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Targets"] = true
+
+    category:CreateModule({
+        Name = "Target Sync",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Target Sync enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Targets bridge module."
+    })
+
+    return true
+end
+]==],
+        Profiles = [==[
+-- BedWars Profiles module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Profiles"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Profiles category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Profiles"] = true
+
+    category:CreateModule({
+        Name = "Profile Manager",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Profile Manager enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Profiles bridge module."
+    })
+
+    return true
+end
+]==],
+        Legit = [==[
+-- BedWars Legit module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Legit"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Legit category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Legit"] = true
+
+    category:CreateModule({
+        Name = "Legit Helper",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Legit Helper enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Legit bridge module."
+    })
+
+    return true
+end
+]==],
+        Kits = [==[
+-- BedWars Kits module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["Kits"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "Kits category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["Kits"] = true
+
+    category:CreateModule({
+        Name = "Kit Helper",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "Kit Helper enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars Kits bridge module."
+    })
+
+    return true
+end
+]==],
+        BoostFPS = [==[
+-- BedWars BoostFPS module group.
+-- Lightweight AetherCore-owned registrations live here; the full compatibility
+-- payload is embedded later in this place file.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local category = vape.Categories["BoostFPS"] or vape.Categories.Utility
+    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+        return false, "BoostFPS category is unavailable"
+    end
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups["BoostFPS"] = true
+
+    category:CreateModule({
+        Name = "FPS Optimizer",
+        Function = function(callback)
+            if callback and type(shared.vape.CreateNotification) == "function" then
+                shared.vape:CreateNotification("AetherCore", "FPS Optimizer enabled", 3)
+            end
+        end,
+        Tooltip = "AetherCore BedWars BoostFPS bridge module."
+    })
+
+    return true
+end
+]==],
+        ReferenceExtras = [==[
+-- BedWars reference-only module registrations.
+-- These names are present in the local reference payloads but were not present
+-- in AetherCore's merged compatibility payload.  They are registered as safe
+-- bridge modules so premade profiles can resolve every referenced module name
+-- without forcing another full legacy payload into memory.
+return function(context)
+    local vape = shared and shared.vape
+    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
+        return false, "GUI categories are unavailable"
+    end
+
+    local categories = vape.Categories
+    local function getCategory(name, fallback)
+        local category = categories[name] or categories[fallback] or categories.Utility
+        if type(category) == "table" and type(category.CreateModule) == "function" then
+            return category
+        end
+        for _, candidate in pairs(categories) do
+            if type(candidate) == "table" and type(candidate.CreateModule) == "function" then
+                return candidate
+            end
+        end
+        return nil
+    end
+
+    local definitions = {
+        {Name = "Armor Highlight", Category = "Render", Reference = "catvape"},
+        {Name = "Armor Trims", Category = "Render", Reference = "catvape"},
+        {Name = "AntiDizzy", Category = "Utility", Reference = "lionv5"},
+        {Name = "AutoEldertree", Category = "Utility", Reference = "lionv5", FormalName = "Auto Eldertree"},
+        {Name = "Auto Lasso", Category = "Utility", Reference = "catvape"},
+        {Name = "AutoRelease", Category = "Combat", Reference = "lionv5", FormalName = "Auto Release"},
+        {Name = "Back Track", Category = "Combat", Reference = "catvape"},
+        {Name = "Bed Assist", Category = "Combat", Reference = "catvape"},
+        {Name = "Bed Protector", Category = "World", Reference = "catvape"},
+        {Name = "Block Overlay", Category = "Render", Reference = "catvape"},
+        {Name = "Clutch", Category = "World", Reference = "lionv5"},
+        {Name = "Device Spoofer", Category = "Utility", Reference = "catvape"},
+        {Name = "ElektraExtender", Category = "Utility", Reference = "lionv5", FormalName = "Elektra Extender"},
+        {Name = "Fake Lag", Category = "Utility", Reference = "catvape"},
+        {Name = "Fullbright", Category = "Render", Reference = "lionv5"},
+        {Name = "KitRender (5v5)", Category = "Render", Reference = "lionv5", FormalName = "Kit Render (5v5)"},
+        {Name = "KitRender (squads)", Category = "Render", Reference = "lionv5", FormalName = "Kit Render (Squads)"},
+        {Name = "MartinSpeed", Category = "Blatant", Reference = "lionv5", FormalName = "Martin Speed"},
+        {Name = "Owl Aura", Category = "Combat", Reference = "catvape"},
+        {Name = "Player Attach", Category = "Utility", Reference = "catvape"},
+        {Name = "Potion Status", Category = "Render", Reference = "catvape"},
+        {Name = "ProjectileAimAssist", Category = "Combat", Reference = "lionv5", FormalName = "Projectile Aim Assist"},
+        {Name = "Silent Aura", Category = "Combat", Reference = "catvape"},
+        {Name = "SilentAura", Category = "Combat", Reference = "lionv5", FormalName = "Silent Aura"},
+        {Name = "SilentAura(aero - testing)", Category = "Combat", Reference = "aerov4", FormalName = "Silent Aura (Aero Testing)"},
+        {Name = "Skin Changer", Category = "Render", Reference = "catvape"},
+        {Name = "Viewmodel Visuals", Category = "Render", Reference = "catvape"}
+    }
+
+    context.BedWars = context.BedWars or {Groups = {}}
+    context.BedWars.Groups = context.BedWars.Groups or {}
+    context.BedWars.Groups.ReferenceExtras = true
+    context.BedWars.ReferenceExtras = context.BedWars.ReferenceExtras or {}
+
+    local registered = 0
+    for _, definition in ipairs(definitions) do
+        local category = getCategory(definition.Category, "Utility")
+        if not category then
+            return false, "No compatible category exists for reference extras"
+        end
+
+        category:CreateModule({
+            Name = definition.Name,
+            Function = function(callback)
+                if callback and type(vape.CreateNotification) == "function" then
+                    vape:CreateNotification(
+                        "AetherCore",
+                        (definition.FormalName or definition.Name) .. " is available from the " .. definition.Reference .. " reference bridge.",
+                        3
+                    )
+                end
+            end,
+            Tooltip = "Reference bridge for " .. (definition.FormalName or definition.Name) .. " from " .. definition.Reference .. "."
+        })
+
+        context.BedWars.ReferenceExtras[definition.Name] = definition.FormalName or definition.Name
+        registered = registered + 1
+    end
+
+    return registered > 0
+end
+]==]
+    }
+
+    for _, groupName in ipairs({"Combat", "Blatant", "Render", "Utility", "World", "Inventory", "Minigames", "Friends", "Targets", "Profiles", "Legit", "Kits", "BoostFPS", "ReferenceExtras"}) do
+        local moduleSource = embeddedModuleSources[groupName]
         local ok, result = pcall(function()
-            return context.RunFunctionModule(path)
+            local chunk, compileError = loadstring(moduleSource, "AetherCore/games/6872274481.luau:" .. groupName)
+            if not chunk then
+                return false, compileError
+            end
+
+            local module = chunk()
+            if type(module) == "function" then
+                return module(context)
+            end
+            return module
         end)
         context.BedWars.Groups[groupName] = ok and (result ~= false) or false
         if ok and result ~= false then
@@ -624,8 +1175,8 @@ return function(context)
     local compatibilityPayloadOk, compatibilityPayloadError = xpcall(function()
 
     --// BEGIN INLINE AETHERCORE BEDWARS COMPATIBILITY PAYLOAD
--- AetherCore unified BedWars entrypoint
--- games/bedwars/main.luau is the single source for BedWars modules.
+-- AetherCore unified BedWars match entrypoint
+-- games/6872274481.luau is the single source for BedWars match modules.
 -- The former catvape.luau and aerov4.luau payloads are merged here so the
 -- loader does not need to fetch separate BedWars module payload files.
 
@@ -53143,7 +53694,7 @@ run(function()
 end)
 --// END AETHERCORE COMPATIBILITY PAYLOAD
 ]===]
-local catvapeChunk, catvapeCompileError = loadstring(catvapePayload, 'AetherCore/games/bedwars/main.luau:catvape')
+local catvapeChunk, catvapeCompileError = loadstring(catvapePayload, 'AetherCore/games/6872274481.luau:catvape')
 if not catvapeChunk then
 	error('[AetherCore] Failed to compile merged catvape payload: ' .. tostring(catvapeCompileError))
 end

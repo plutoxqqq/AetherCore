@@ -2,14 +2,14 @@
   "bedwars": {
     "gameid": 2619619496,
     "lobby": {
-      "Path": "games/bedwars/lobby.lua",
+      "Path": "games/6872265039.luau",
       "Place": 6872265039,
       "Ids": [6872265039]
     },
     "main": {
-      "Path": "games/bedwars/main.luau",
+      "Path": "games/6872274481.luau",
       "Place": 6872274481,
-      "Ids": [6872274481, 8444591321, 8560631822]
+      "Ids": [6872274481]
     }
   }
 }
