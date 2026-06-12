@@ -53,6 +53,16 @@ local function write(path, contents)
     end
 end
 
+local function isMissingRemote(contents)
+    if type(contents) ~= "string" then
+        return true
+    end
+    local trimmed = contents:gsub("^%s+", ""):gsub("%s+$", "")
+    return trimmed == ""
+        or trimmed == "404: Not Found"
+        or trimmed:find("^404", 1, false) ~= nil
+end
+
 local function fetchRemote(path)
     return game:HttpGet(rootUrl .. path, true)
 end
@@ -63,7 +73,7 @@ pcall(function()
 end)
 if type(remoteVersion) == "string" then
     remoteVersion = remoteVersion:gsub("^%s+", ""):gsub("%s+$", "")
-    if remoteVersion == "" or remoteVersion:find("404", 1, true) then
+    if isMissingRemote(remoteVersion) then
         remoteVersion = nil
     end
 end
@@ -110,7 +120,7 @@ local function fetch(path)
     end
 
     local ok, remote = pcall(fetchRemote, path)
-    if ok and type(remote) == "string" and remote ~= "" then
+    if ok and not isMissingRemote(remote) then
         write(cachePath, remote)
         return remote
     end

@@ -5,6 +5,7 @@ local Gui = {}
 
 function Gui.Load(context)
     local utility = context.Libraries.utility
+    shared = type(shared) == "table" and shared or {}
 
     if utility.IsVapeCoreReady() then
         utility.ApplyVapeBranding()
