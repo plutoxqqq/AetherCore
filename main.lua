@@ -100,9 +100,16 @@ return function(startup)
         local module = context.LoadModule(path)
         if type(module) == "function" then
             local previousSource = context.CurrentSource
+            local args = {...}
+            local results
             context.CurrentSource = path
-            local results = {module(context, ...)}
+            local ok, runtimeError = xpcall(function()
+                results = {module(context, unpack(args))}
+            end, debug.traceback)
             context.CurrentSource = previousSource
+            if not ok then
+                error(string.format("[AetherCore] Failed to run function module %s: %s", path, tostring(runtimeError)))
+            end
             return unpack(results)
         end
         return module
