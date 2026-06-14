@@ -9,7 +9,7 @@ return function(startup)
     local context = {
         RootUrl = startup.RootUrl or "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/",
         RootFolder = startup.RootFolder or "AetherCore",
-        Version = startup.Version or "3.2.1",
+        Version = startup.Version or "3.2.2",
         Libraries = {},
         LoadedGames = {},
         LoadedModules = {},
@@ -278,13 +278,87 @@ return function(startup)
     end
     warn("[AetherCore] Universal modules loaded")
 
+    local function appendUniquePath(paths, path)
+        if type(path) ~= "string" or path == "" then
+            return
+        end
+        for _, existingPath in ipairs(paths) do
+            if existingPath == path then
+                return
+            end
+        end
+        table.insert(paths, path)
+    end
+
+    local function idListContains(list, id)
+        if type(list) ~= "table" or id == nil then
+            return false
+        end
+        for _, value in pairs(list) do
+            if tonumber(value) == id then
+                return true
+            end
+        end
+        return false
+    end
+
+    local function collectSupportedGamePaths(currentGameId, currentPlaceId)
+        local supported = storage.DecodeJson(context.Fetch("profiles/supported.json"), {}) or {}
+        local paths = {}
+
+        for _, gameInfo in pairs(supported) do
+            if type(gameInfo) == "table" and tonumber(gameInfo.gameid or gameInfo.GameId) == currentGameId then
+                local exactPaths = {}
+                local fallbackPaths = {}
+
+                for groupName, groupInfo in pairs(gameInfo) do
+                    if type(groupInfo) == "table" then
+                        local groupPath = groupInfo.Path or groupInfo.path
+                        local groupPlace = tonumber(groupInfo.Place or groupInfo.place)
+                        local exactMatch = groupPlace == currentPlaceId or idListContains(groupInfo.Ids or groupInfo.ids, currentPlaceId)
+
+                        if exactMatch then
+                            appendUniquePath(exactPaths, groupPath)
+                        elseif groupName == "main" or groupName == "match" or groupInfo.Main == true then
+                            appendUniquePath(fallbackPaths, groupPath)
+                        end
+                    end
+                end
+
+                for _, path in ipairs(exactPaths) do
+                    appendUniquePath(paths, path)
+                end
+                for _, path in ipairs(fallbackPaths) do
+                    appendUniquePath(paths, path)
+                end
+            end
+        end
+
+        return paths
+    end
+
+    local currentGameId = tonumber(game.GameId)
     local currentPlaceId = tonumber(game.PlaceId)
     local placePath = "games/" .. tostring(currentPlaceId or "unknown") .. ".luau"
-    local ok, loadError = context.LoadGameModule(placePath)
-    if ok then
-        warnf("Loaded place module: %s", placePath)
-    else
-        warnf("No place module loaded for PlaceId %s: %s", tostring(currentPlaceId or "unknown"), tostring(loadError))
+    local gamePaths = {placePath}
+    for _, supportedPath in ipairs(collectSupportedGamePaths(currentGameId, currentPlaceId)) do
+        appendUniquePath(gamePaths, supportedPath)
+    end
+
+    local loadedPlaceModule = false
+    local loadErrors = {}
+    for _, candidatePath in ipairs(gamePaths) do
+        local ok, loadError = context.LoadGameModule(candidatePath)
+        if ok then
+            loadedPlaceModule = true
+            warnf("Loaded place module: %s", candidatePath)
+            break
+        end
+        table.insert(loadErrors, candidatePath .. ": " .. tostring(loadError))
+    end
+
+    if not loadedPlaceModule then
+        warnf("No place module loaded for GameId %s PlaceId %s: %s", tostring(currentGameId or "unknown"), tostring(currentPlaceId or "unknown"), table.concat(loadErrors, " | "))
     end
 
     local customOk, customResult = pcall(function()
