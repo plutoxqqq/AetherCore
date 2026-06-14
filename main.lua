@@ -308,28 +308,16 @@ return function(startup)
 
         for _, gameInfo in pairs(supported) do
             if type(gameInfo) == "table" and tonumber(gameInfo.gameid or gameInfo.GameId) == currentGameId then
-                local exactPaths = {}
-                local fallbackPaths = {}
-
-                for groupName, groupInfo in pairs(gameInfo) do
+                for _, groupInfo in pairs(gameInfo) do
                     if type(groupInfo) == "table" then
                         local groupPath = groupInfo.Path or groupInfo.path
                         local groupPlace = tonumber(groupInfo.Place or groupInfo.place)
                         local exactMatch = groupPlace == currentPlaceId or idListContains(groupInfo.Ids or groupInfo.ids, currentPlaceId)
 
                         if exactMatch then
-                            appendUniquePath(exactPaths, groupPath)
-                        elseif groupName == "main" or groupName == "match" or groupInfo.Main == true then
-                            appendUniquePath(fallbackPaths, groupPath)
+                            appendUniquePath(paths, groupPath)
                         end
                     end
-                end
-
-                for _, path in ipairs(exactPaths) do
-                    appendUniquePath(paths, path)
-                end
-                for _, path in ipairs(fallbackPaths) do
-                    appendUniquePath(paths, path)
                 end
             end
         end
