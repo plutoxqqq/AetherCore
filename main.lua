@@ -180,13 +180,16 @@ return function(startup)
 
     context.State = state
 
-    function context.RegisterModuleRecord(name, category, status, source)
+    function context.RegisterModuleRecord(name, category, status, source, details)
         state.ModuleRegistrationCount = (tonumber(state.ModuleRegistrationCount) or 0) + 1
+        details = type(details) == "table" and details or {}
         table.insert(state.RegisteredModules, {
             Name = tostring(name or "Unknown"),
             Category = tostring(category or "Unknown"),
             Status = tostring(status or "registered"),
-            Source = tostring(source or context.CurrentSource or "unknown")
+            Source = tostring(source or context.CurrentSource or "unknown"),
+            Tooltip = type(details.Tooltip) == "string" and details.Tooltip or nil,
+            Description = type(details.Description) == "string" and details.Description or nil
         })
     end
 
@@ -254,7 +257,7 @@ return function(startup)
                 local module = originalCreateModule(self, moduleOptions, ...)
                 if module ~= nil then
                     local moduleName = type(moduleOptions) == "table" and moduleOptions.Name or type(module) == "table" and module.Name or nil
-                    context.RegisterModuleRecord(moduleName, categoryName, "loaded", context.CurrentSource)
+                    context.RegisterModuleRecord(moduleName, categoryName, "loaded", context.CurrentSource, moduleOptions)
                 end
                 return module
             end
@@ -291,6 +294,19 @@ return function(startup)
         warnf("custom_modules.luau is unavailable or failed: %s", tostring(customResult))
     else
         warn("[AetherCore] Custom modules loaded")
+    end
+
+    local moduleAssistOk, moduleAssistResult = pcall(function()
+        local moduleAssist = context.LoadModule("libraries/moduleassist.lua")
+        if type(moduleAssist) == "table" and type(moduleAssist.Install) == "function" then
+            return moduleAssist.Install(context)
+        end
+        return false, "library did not expose Install"
+    end)
+    if not moduleAssistOk or moduleAssistResult == false then
+        warnf("Module Assist failed to load: %s", tostring(moduleAssistResult))
+    else
+        warn("[AetherCore] Module Assist loaded")
     end
 
     if (tonumber(state.ModuleRegistrationCount) or 0) == 0 then

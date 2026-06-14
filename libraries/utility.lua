@@ -78,7 +78,7 @@ function Utility.BrandVapeCoreSource(source)
     }
     for _, categoryList in ipairs(categoryInsertions) do
         local quote = categoryList:sub(1, 1)
-        local extendedList = categoryList .. ", " .. quote .. "Kits" .. quote .. ", " .. quote .. "Legit" .. quote .. ", " .. quote .. "BoostFPS" .. quote .. ", " .. quote .. "VibeCoded" .. quote
+        local extendedList = categoryList .. ", " .. quote .. "Kits" .. quote .. ", " .. quote .. "Legit" .. quote .. ", " .. quote .. "BoostFPS" .. quote .. ", " .. quote .. "VibeCoded" .. quote .. ", " .. quote .. "Module Assist" .. quote
         brandedSource = brandedSource:gsub(categoryList, extendedList)
     end
 
@@ -92,6 +92,9 @@ function Utility.BrandVapeCoreSource(source)
         local quote = categoryList:sub(1, 1)
         if not brandedSource:find(quote .. "VibeCoded" .. quote, 1, true) then
             brandedSource = brandedSource:gsub(categoryList, categoryList .. ", " .. quote .. "VibeCoded" .. quote)
+        end
+        if not brandedSource:find(quote .. "Module Assist" .. quote, 1, true) then
+            brandedSource = brandedSource:gsub(categoryList, categoryList .. ", " .. quote .. "Module Assist" .. quote)
         end
     end
 
@@ -538,6 +541,10 @@ function Utility.InstallCategoryFallbacks()
     createWindowCategory("Legit", "newvape/assets/new/legittab.png", UDim2.fromOffset(16, 16))
     createWindowCategory("BoostFPS", "newvape/assets/new/rendericon.png", UDim2.fromOffset(15, 14))
     createWindowCategory("VibeCoded", "newvape/assets/new/utilityicon.png", UDim2.fromOffset(15, 14))
+    local moduleAssistCategory = createWindowCategory("Module Assist", "newvape/assets/new/utilityicon.png", UDim2.fromOffset(15, 14))
+    if moduleAssistCategory then
+        categories.ModuleAssist = moduleAssistCategory
+    end
 
     createListCategory("Friends", "newvape/assets/new/friendstab.png", UDim2.fromOffset(17, 16), {
         Placeholder = "Roblox username",
@@ -613,7 +620,9 @@ function Utility.InstallCategoryFallbacks()
         Other = "Utility",
         Profiles = "Utility",
         Search = "Utility",
-        VibeCoded = "Utility"
+        VibeCoded = "Utility",
+        ModuleAssist = "Utility",
+        ["Module Assist"] = "Utility"
     }
 
     for missingName, preferredName in pairs(aliases) do
