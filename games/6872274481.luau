@@ -194,14 +194,111 @@ return function(context)
         end
 
         local function createModule(options)
-            return category:CreateModule(options)
+            if type(options) ~= "table" or type(options.Name) ~= "string" or options.Name == "" then
+                return nil, "module options require a non-empty Name"
+            end
+
+            local ok, module = pcall(function()
+                return category:CreateModule(options)
+            end)
+            if not ok or type(module) ~= "table" then
+                return nil, tostring(module or "CreateModule returned no module")
+            end
+            return module
         end
 
+        local modulesCreated = 0
+        local function addModule(options)
+            local module, moduleError = createModule(options)
+            if module then
+                modulesCreated = modulesCreated + 1
+            else
+                warn("[AetherCore] Failed to create VibeCoded module '" .. tostring(options and options.Name or "Unknown") .. "': " .. tostring(moduleError))
+            end
+            return module
+        end
 
+        addModule({
+            Name = "Aether Status",
+            Tooltip = "Shows AetherCore runtime, place, and module registration information.",
+            Function = function(enabled)
+                local state = context.State or {}
+                local guiObject, label
 
+                if enabled then
+                    guiObject, label = createStatusLabel("AetherCoreStatus", UDim2.new(1, -18, 0, 150), UDim2.fromOffset(260, 104))
+                    if label then
+                        label.Text = string.format(
+                            "AetherCore Ready\nPlaceId: %s\nGUI: %s\nRegistered modules: %s",
+                            tostring(game.PlaceId),
+                            tostring(context.SelectedGui or "unknown"),
+                            tostring(state.ModuleRegistrationCount or 0)
+                        )
+                    end
+                    vibeState.StatusGui = guiObject
+                else
+                    if typeof(vibeState.StatusGui) == "Instance" then
+                        vibeState.StatusGui:Destroy()
+                    end
+                    vibeState.StatusGui = nil
+                end
+            end
+        })
 
+        addModule({
+            Name = "Fullbright",
+            Tooltip = "Improves client-side visibility by keeping lighting bright while enabled.",
+            Function = function(enabled)
+                local lighting = game:GetService("Lighting")
+                vibeState.FullbrightConnections = vibeState.FullbrightConnections or {}
 
-        return true
+                if enabled then
+                    vibeState.FullbrightOriginal = vibeState.FullbrightOriginal or {
+                        Brightness = lighting.Brightness,
+                        ClockTime = lighting.ClockTime,
+                        FogEnd = lighting.FogEnd,
+                        GlobalShadows = lighting.GlobalShadows
+                    }
+
+                    local function applyLighting()
+                        lighting.Brightness = 2
+                        lighting.ClockTime = 14
+                        lighting.FogEnd = 100000
+                        lighting.GlobalShadows = false
+                    end
+
+                    applyLighting()
+                    table.insert(vibeState.FullbrightConnections, runService.RenderStepped:Connect(applyLighting))
+                else
+                    disconnectAll(vibeState.FullbrightConnections or {})
+                    local original = vibeState.FullbrightOriginal
+                    if type(original) == "table" then
+                        lighting.Brightness = original.Brightness
+                        lighting.ClockTime = original.ClockTime
+                        lighting.FogEnd = original.FogEnd
+                        lighting.GlobalShadows = original.GlobalShadows
+                    end
+                    vibeState.FullbrightOriginal = nil
+                end
+            end
+        })
+
+        addModule({
+            Name = "BedWars Module Check",
+            Tooltip = "Reports whether BedWars compatibility modules registered successfully.",
+            Function = function(enabled)
+                if enabled then
+                    local state = context.State or {}
+                    notify("AetherCore", "Registered modules: " .. tostring(state.ModuleRegistrationCount or 0), 5)
+                end
+            end
+        })
+
+        if modulesCreated == 0 then
+            return false, "no VibeCoded modules were created"
+        end
+
+        return true, modulesCreated
     end
 
 
@@ -218,12 +315,12 @@ return function(context)
 
     local loadedGroups = 0
 
-    local vibeOk, vibeResult = pcall(function()
+    local vibeOk, vibeResult, vibeModuleCount = pcall(function()
         return loadVibeCodedModuleGroup(context)
     end)
     context.BedWars.Groups.VibeCoded = vibeOk and (vibeResult ~= false) or false
     if vibeOk and vibeResult ~= false then
-        loadedGroups = loadedGroups + 1
+        loadedGroups = loadedGroups + (tonumber(vibeModuleCount) or 1)
     else
         warn("[AetherCore] BedWars VibeCoded group failed: " .. tostring(vibeResult))
     end
