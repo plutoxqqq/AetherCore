@@ -38449,7 +38449,7 @@ run(function()
 
     AutoDodge = vape.Categories.Blatant:CreateModule({
 	Name = 'Anti Death',
-	Tooltip = 'Dodges melee and projectiles "blatantly"',
+	Tooltip = 'Prevents death [WORKING]',
 	Function = function(call)
 		if call then
 			repeat
@@ -38549,7 +38549,7 @@ run(function()
     })
     AutoDodge:CreateToggle({
 	Name = 'Projectiles',
-	Tooltip = 'Dodges projectiles',
+	Tooltip = 'Avoids projectiles',
 	Default = true,
     })
 end)
