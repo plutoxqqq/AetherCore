@@ -9,7 +9,7 @@ return function(startup)
     local context = {
         RootUrl = startup.RootUrl or "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/",
         RootFolder = startup.RootFolder or "AetherCore",
-        Version = startup.Version or "3.2.0",
+        Version = startup.Version or "3.2.1",
         Libraries = {},
         LoadedGames = {},
         LoadedModules = {},
