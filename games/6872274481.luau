@@ -197,368 +197,7 @@ return function(context)
             return category:CreateModule(options)
         end
 
-        createModule({
-            Name = "Health Pulse Alerts",
-            Function = function(enabled)
-                local key = "HealthPulseAlerts"
-                if vibeState[key] then
-                    disconnectAll(vibeState[key].Connections)
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
 
-                local state = {Connections = {}, LastBand = nil}
-                vibeState[key] = state
-                local function watchCharacter(character)
-                    local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-                    if not humanoid then
-                        return
-                    end
-                    local function update()
-                        local maxHealth = math.max(tonumber(humanoid.MaxHealth) or 100, 1)
-                        local percent = (tonumber(humanoid.Health) or 0) / maxHealth
-                        local band = percent <= 0.25 and "critical" or percent <= 0.5 and "low" or "safe"
-                        if band ~= state.LastBand and band ~= "safe" then
-                            notify("Health Pulse", band == "critical" and "Critical health. Reset pressure or escape now." or "Health is below half.", 4)
-                        end
-                        state.LastBand = band
-                    end
-                    table.insert(state.Connections, humanoid.HealthChanged:Connect(update))
-                    update()
-                end
-                if localPlayer.Character then
-                    watchCharacter(localPlayer.Character)
-                end
-                table.insert(state.Connections, localPlayer.CharacterAdded:Connect(watchCharacter))
-                notify("VibeCoded", "Health Pulse Alerts enabled", 3)
-            end,
-            Tooltip = "Warns when your health crosses low and critical bands."
-        })
-
-        createModule({
-            Name = "Void Guard Ping",
-            Function = function(enabled)
-                local key = "VoidGuardPing"
-                if vibeState[key] then
-                    disconnectAll(vibeState[key].Connections)
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
-
-                local state = {Connections = {}, LastWarn = 0}
-                vibeState[key] = state
-                table.insert(state.Connections, runService.Heartbeat:Connect(function()
-                    local _, humanoid, rootPart = getCharacterParts()
-                    if not humanoid or not rootPart or humanoid.Health <= 0 then
-                        return
-                    end
-                    local now = os.clock()
-                    if now - state.LastWarn < 2.5 then
-                        return
-                    end
-                    local params = RaycastParams.new()
-                    params.FilterType = Enum.RaycastFilterType.Exclude
-                    params.FilterDescendantsInstances = {localPlayer.Character}
-                    local downHit = workspace:Raycast(rootPart.Position, Vector3.new(0, -18, 0), params)
-                    if rootPart.Position.Y < 35 or downHit == nil then
-                        state.LastWarn = now
-                        notify("Void Guard", "No safe floor detected below you.", 3)
-                    end
-                end))
-                notify("VibeCoded", "Void Guard Ping enabled", 3)
-            end,
-            Tooltip = "Checks for missing ground under you and warns near the void."
-        })
-
-        createModule({
-            Name = "Bed Beacon Overlay",
-            Function = function(enabled)
-                local key = "BedBeaconOverlay"
-                if vibeState[key] then
-                    destroyAll(vibeState[key].Instances)
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
-
-                local state = {Instances = {}}
-                vibeState[key] = state
-                local count = 0
-                for _, object in ipairs(workspace:GetDescendants()) do
-                    if count >= 24 then
-                        break
-                    end
-                    if object:IsA("BasePart") and containsKeyword(object.Name, {"bed"}) then
-                        count = count + 1
-                        table.insert(state.Instances, makeBillboard(object, "BED", Color3.fromRGB(255, 99, 132)))
-                        table.insert(state.Instances, createHighlight(object, Color3.fromRGB(255, 99, 132)))
-                    end
-                end
-                notify("Bed Beacon", count > 0 and ("Marked " .. tostring(count) .. " bed objects.") or "No bed objects were visible yet.", 4)
-            end,
-            Tooltip = "Marks visible bed objects with lightweight labels and highlights."
-        })
-
-        createModule({
-            Name = "Resource Beacon Overlay",
-            Function = function(enabled)
-                local key = "ResourceBeaconOverlay"
-                if vibeState[key] then
-                    disconnectAll(vibeState[key].Connections)
-                    destroyAll(vibeState[key].Instances)
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
-
-                local keywords = {"iron", "diamond", "emerald", "gold", "resource"}
-                local state = {Connections = {}, Instances = {}, Seen = {}}
-                vibeState[key] = state
-                local function mark(object)
-                    if state.Seen[object] or not object:IsA("BasePart") or not containsKeyword(object.Name, keywords) then
-                        return
-                    end
-                    state.Seen[object] = true
-                    table.insert(state.Instances, makeBillboard(object, object.Name:upper(), Color3.fromRGB(106, 255, 189)))
-                end
-                for _, object in ipairs(workspace:GetDescendants()) do
-                    mark(object)
-                end
-                table.insert(state.Connections, workspace.DescendantAdded:Connect(mark))
-                notify("VibeCoded", "Resource Beacon Overlay enabled", 3)
-            end,
-            Tooltip = "Labels visible resource drops and newly spawned resource parts."
-        })
-
-        createModule({
-            Name = "Teammate Radar HUD",
-            Function = function(enabled)
-                local key = "TeammateRadarHUD"
-                if vibeState[key] then
-                    disconnectAll(vibeState[key].Connections)
-                    destroyAll(vibeState[key].Instances)
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
-
-                local gui, label = createStatusLabel("AetherTeammateRadar", UDim2.new(1, -18, 0, 145), UDim2.fromOffset(240, 104))
-                if not gui or not label then
-                    notify("Teammate Radar", "PlayerGui was not ready.", 3)
-                    return
-                end
-                local state = {Connections = {}, Instances = {gui}, LastUpdate = 0}
-                vibeState[key] = state
-                table.insert(state.Connections, runService.Heartbeat:Connect(function()
-                    local now = os.clock()
-                    if now - state.LastUpdate < 0.35 then
-                        return
-                    end
-                    state.LastUpdate = now
-                    local _, _, rootPart = getCharacterParts()
-                    local rows = {"Teammate Radar"}
-                    if rootPart and localPlayer.Team then
-                        local entries = {}
-                        for _, player in ipairs(playersService:GetPlayers()) do
-                            local targetRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-                            if player ~= localPlayer and player.Team == localPlayer.Team and targetRoot then
-                                table.insert(entries, {Name = player.DisplayName, Distance = (targetRoot.Position - rootPart.Position).Magnitude})
-                            end
-                        end
-                        table.sort(entries, function(a, b) return a.Distance < b.Distance end)
-                        for index = 1, math.min(4, #entries) do
-                            table.insert(rows, string.format("%s  •  %d studs", entries[index].Name, math.floor(entries[index].Distance + 0.5)))
-                        end
-                    end
-                    if #rows == 1 then
-                        table.insert(rows, "No nearby teammates found.")
-                    end
-                    label.Text = table.concat(rows, "\n")
-                end))
-                notify("VibeCoded", "Teammate Radar HUD enabled", 3)
-            end,
-            Tooltip = "Shows the closest teammates and their distances."
-        })
-
-        createModule({
-            Name = "Threat Ring Highlights",
-            Function = function(enabled)
-                local key = "ThreatRingHighlights"
-                if vibeState[key] then
-                    disconnectAll(vibeState[key].Connections)
-                    destroyAll(vibeState[key].Instances)
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
-
-                local state = {Connections = {}, Instances = {}, Marked = {}, LastUpdate = 0}
-                vibeState[key] = state
-                local function clearMarks()
-                    destroyAll(state.Instances)
-                    state.Marked = {}
-                end
-                table.insert(state.Connections, runService.Heartbeat:Connect(function()
-                    local now = os.clock()
-                    if now - state.LastUpdate < 0.8 then
-                        return
-                    end
-                    state.LastUpdate = now
-                    clearMarks()
-                    local _, _, rootPart = getCharacterParts()
-                    if not rootPart then
-                        return
-                    end
-                    for _, player in ipairs(playersService:GetPlayers()) do
-                        local character = player.Character
-                        local targetRoot = character and character:FindFirstChild("HumanoidRootPart")
-                        if isOpponent(player) and targetRoot and (targetRoot.Position - rootPart.Position).Magnitude <= 80 then
-                            table.insert(state.Instances, createHighlight(character, Color3.fromRGB(255, 80, 80)))
-                        end
-                    end
-                end))
-                notify("VibeCoded", "Threat Ring Highlights enabled", 3)
-            end,
-            Tooltip = "Highlights opponents who are within 80 studs of you."
-        })
-
-        createModule({
-            Name = "Lag Spike Watcher",
-            Function = function(enabled)
-                local key = "LagSpikeWatcher"
-                if vibeState[key] then
-                    disconnectAll(vibeState[key].Connections)
-                    destroyAll(vibeState[key].Instances)
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
-
-                local gui, label = createStatusLabel("AetherLagSpikeWatcher", UDim2.new(1, -18, 0, 258), UDim2.fromOffset(240, 70))
-                if not gui or not label then
-                    notify("Lag Spike Watcher", "PlayerGui was not ready.", 3)
-                    return
-                end
-                local state = {Connections = {}, Instances = {gui}, LastUpdate = 0, Spikes = 0, Frames = 0, TotalDelta = 0}
-                vibeState[key] = state
-                table.insert(state.Connections, runService.RenderStepped:Connect(function(deltaTime)
-                    state.Frames = state.Frames + 1
-                    state.TotalDelta = state.TotalDelta + deltaTime
-                    if deltaTime >= 0.12 then
-                        state.Spikes = state.Spikes + 1
-                    end
-                    local now = os.clock()
-                    if now - state.LastUpdate >= 0.5 then
-                        state.LastUpdate = now
-                        local average = state.TotalDelta / math.max(state.Frames, 1)
-                        label.Text = string.format("Lag Spike Watcher\nAverage FPS: %d\nSpikes: %d", math.floor((1 / math.max(average, 0.001)) + 0.5), state.Spikes)
-                    end
-                end))
-                notify("VibeCoded", "Lag Spike Watcher enabled", 3)
-            end,
-            Tooltip = "Tracks average FPS and visible frame spikes during the match."
-        })
-
-        createModule({
-            Name = "Session Stopwatch HUD",
-            Function = function(enabled)
-                local key = "SessionStopwatchHUD"
-                if vibeState[key] then
-                    disconnectAll(vibeState[key].Connections)
-                    destroyAll(vibeState[key].Instances)
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
-
-                local gui, label = createStatusLabel("AetherSessionStopwatch", UDim2.new(1, -18, 0, 337), UDim2.fromOffset(240, 58))
-                if not gui or not label then
-                    notify("Session Stopwatch", "PlayerGui was not ready.", 3)
-                    return
-                end
-                local state = {Connections = {}, Instances = {gui}, StartedAt = os.clock()}
-                vibeState[key] = state
-                table.insert(state.Connections, runService.Heartbeat:Connect(function()
-                    local elapsed = math.floor(os.clock() - state.StartedAt)
-                    local minutes = math.floor(elapsed / 60)
-                    local seconds = elapsed % 60
-                    label.Text = string.format("Session Stopwatch\n%02d:%02d", minutes, seconds)
-                end))
-                notify("VibeCoded", "Session Stopwatch HUD enabled", 3)
-            end,
-            Tooltip = "Adds a clean on-screen match timer from the moment it is enabled."
-        })
-
-        createModule({
-            Name = "Focus Mute Guard",
-            Function = function(enabled)
-                local key = "FocusMuteGuard"
-                if vibeState[key] then
-                    disconnectAll(vibeState[key].Connections)
-                    if vibeState[key].OriginalVolume then
-                        soundService.Volume = vibeState[key].OriginalVolume
-                    end
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
-
-                local state = {Connections = {}, OriginalVolume = soundService.Volume}
-                vibeState[key] = state
-                table.insert(state.Connections, userInputService.WindowFocusReleased:Connect(function()
-                    state.OriginalVolume = soundService.Volume
-                    soundService.Volume = math.min(soundService.Volume, 0.08)
-                end))
-                table.insert(state.Connections, userInputService.WindowFocused:Connect(function()
-                    soundService.Volume = state.OriginalVolume or 1
-                end))
-                notify("VibeCoded", "Focus Mute Guard enabled", 3)
-            end,
-            Tooltip = "Automatically soft-mutes Roblox when the game window loses focus."
-        })
-
-        createModule({
-            Name = "Camera Comfort Boost",
-            Function = function(enabled)
-                local key = "CameraComfortBoost"
-                if vibeState[key] then
-                    disconnectAll(vibeState[key].Connections)
-                    if workspace.CurrentCamera and vibeState[key].OriginalFov then
-                        workspace.CurrentCamera.FieldOfView = vibeState[key].OriginalFov
-                    end
-                    vibeState[key] = nil
-                end
-                if not enabled then
-                    return
-                end
-
-                local state = {Connections = {}, OriginalFov = workspace.CurrentCamera and workspace.CurrentCamera.FieldOfView or 70}
-                vibeState[key] = state
-                table.insert(state.Connections, runService.RenderStepped:Connect(function()
-                    local _, humanoid = getCharacterParts()
-                    local camera = workspace.CurrentCamera
-                    if not humanoid or not camera then
-                        return
-                    end
-                    local moving = humanoid.MoveDirection.Magnitude > 0.05
-                    local targetFov = moving and math.min(state.OriginalFov + 8, 90) or state.OriginalFov
-                    camera.FieldOfView = camera.FieldOfView + ((targetFov - camera.FieldOfView) * 0.08)
-                end))
-                notify("VibeCoded", "Camera Comfort Boost enabled", 3)
-            end,
-            Tooltip = "Smoothly widens FOV while moving and restores it when disabled."
-        })
 
 
 
@@ -590,585 +229,8 @@ return function(context)
     end
 
 
-    local embeddedModuleSources = {
-        Combat = [==[
--- BedWars Combat module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Combat"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Combat category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Combat"] = true
-
-    category:CreateModule({
-        Name = "Aim Assist",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Aim Assist enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Combat bridge module."
-    })
-
-    category:CreateModule({
-        Name = "Auto Clicker",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Auto Clicker enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Combat bridge module."
-    })
-
-    category:CreateModule({
-        Name = "Reach Monitor",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Reach Monitor enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Combat bridge module."
-    })
-
-    return true
-end
-]==],
-        Blatant = [==[
--- BedWars Blatant module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Blatant"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Blatant category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Blatant"] = true
-
-    category:CreateModule({
-        Name = "Anti Fall Guard",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Anti Fall Guard enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Blatant bridge module."
-    })
-
-    category:CreateModule({
-        Name = "Movement Watchdog",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Movement Watchdog enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Blatant bridge module."
-    })
-
-    return true
-end
-]==],
-        Render = [==[
--- BedWars Render module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Render"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Render category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Render"] = true
-
-    category:CreateModule({
-        Name = "Interface Branding",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Interface Branding enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Render bridge module."
-    })
-
-    category:CreateModule({
-        Name = "Target Overlay Bridge",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Target Overlay Bridge enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Render bridge module."
-    })
-
-    return true
-end
-]==],
-        Utility = [==[
--- BedWars Utility module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Utility"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Utility category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Utility"] = true
-
-    category:CreateModule({
-        Name = "BedWars Status",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "BedWars Status enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Utility bridge module."
-    })
-
-    category:CreateModule({
-        Name = "Notification Test",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Notification Test enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Utility bridge module."
-    })
-
-    return true
-end
-]==],
-        World = [==[
--- BedWars World module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["World"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "World category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["World"] = true
-
-    category:CreateModule({
-        Name = "World Scanner",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "World Scanner enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars World bridge module."
-    })
-
-    return true
-end
-]==],
-        Inventory = [==[
--- BedWars Inventory module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Inventory"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Inventory category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Inventory"] = true
-
-    category:CreateModule({
-        Name = "Inventory Cache Bridge",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Inventory Cache Bridge enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Inventory bridge module."
-    })
-
-    return true
-end
-]==],
-        Minigames = [==[
--- BedWars Minigames module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Minigames"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Minigames category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Minigames"] = true
-
-    category:CreateModule({
-        Name = "Queue Info",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Queue Info enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Minigames bridge module."
-    })
-
-    return true
-end
-]==],
-        Friends = [==[
--- BedWars Friends module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Friends"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Friends category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Friends"] = true
-
-    category:CreateModule({
-        Name = "Friend Sync",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Friend Sync enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Friends bridge module."
-    })
-
-    return true
-end
-]==],
-        Targets = [==[
--- BedWars Targets module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Targets"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Targets category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Targets"] = true
-
-    category:CreateModule({
-        Name = "Target Sync",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Target Sync enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Targets bridge module."
-    })
-
-    return true
-end
-]==],
-        Profiles = [==[
--- BedWars Profiles module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Profiles"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Profiles category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Profiles"] = true
-
-    category:CreateModule({
-        Name = "Profile Manager",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Profile Manager enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Profiles bridge module."
-    })
-
-    return true
-end
-]==],
-        Legit = [==[
--- BedWars Legit module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Legit"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Legit category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Legit"] = true
-
-    category:CreateModule({
-        Name = "Legit Helper",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Legit Helper enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Legit bridge module."
-    })
-
-    return true
-end
-]==],
-        Kits = [==[
--- BedWars Kits module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["Kits"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "Kits category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["Kits"] = true
-
-    category:CreateModule({
-        Name = "Kit Helper",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "Kit Helper enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars Kits bridge module."
-    })
-
-    return true
-end
-]==],
-        BoostFPS = [==[
--- BedWars BoostFPS module group.
--- Lightweight AetherCore-owned registrations live here; the full compatibility
--- payload is embedded later in this place file.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local category = vape.Categories["BoostFPS"] or vape.Categories.Utility
-    if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-        return false, "BoostFPS category is unavailable"
-    end
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups["BoostFPS"] = true
-
-    category:CreateModule({
-        Name = "FPS Optimizer",
-        Function = function(callback)
-            if callback and type(shared.vape.CreateNotification) == "function" then
-                shared.vape:CreateNotification("AetherCore", "FPS Optimizer enabled", 3)
-            end
-        end,
-        Tooltip = "AetherCore BedWars BoostFPS bridge module."
-    })
-
-    return true
-end
-]==],
-        ReferenceExtras = [==[
--- BedWars reference-only module registrations.
--- These names are present in the local reference payloads but were not present
--- in AetherCore's merged compatibility payload.  They are registered as safe
--- bridge modules so premade profiles can resolve every referenced module name
--- without forcing another full legacy payload into memory.
-return function(context)
-    local vape = shared and shared.vape
-    if type(vape) ~= "table" or type(vape.Categories) ~= "table" then
-        return false, "GUI categories are unavailable"
-    end
-
-    local categories = vape.Categories
-    local function getCategory(name, fallback)
-        local category = categories[name] or categories[fallback] or categories.Utility
-        if type(category) == "table" and type(category.CreateModule) == "function" then
-            return category
-        end
-        for _, candidate in pairs(categories) do
-            if type(candidate) == "table" and type(candidate.CreateModule) == "function" then
-                return candidate
-            end
-        end
-        return nil
-    end
-
-    local definitions = {
-        {Name = "Armor Highlight", Category = "Render", Reference = "catvape"},
-        {Name = "Armor Trims", Category = "Render", Reference = "catvape"},
-        {Name = "AntiDizzy", Category = "Utility", Reference = "lionv5"},
-        {Name = "AutoEldertree", Category = "Utility", Reference = "lionv5", FormalName = "Auto Eldertree"},
-        {Name = "Auto Lasso", Category = "Utility", Reference = "catvape"},
-        {Name = "AutoRelease", Category = "Combat", Reference = "lionv5", FormalName = "Auto Release"},
-        {Name = "Back Track", Category = "Combat", Reference = "catvape"},
-        {Name = "Bed Assist", Category = "Combat", Reference = "catvape"},
-        {Name = "Bed Protector", Category = "World", Reference = "catvape"},
-        {Name = "Block Overlay", Category = "Render", Reference = "catvape"},
-        {Name = "Clutch", Category = "World", Reference = "lionv5"},
-        {Name = "Device Spoofer", Category = "Utility", Reference = "catvape"},
-        {Name = "ElektraExtender", Category = "Utility", Reference = "lionv5", FormalName = "Elektra Extender"},
-        {Name = "Fake Lag", Category = "Utility", Reference = "catvape"},
-        {Name = "Fullbright", Category = "Render", Reference = "lionv5"},
-        {Name = "KitRender (5v5)", Category = "Render", Reference = "lionv5", FormalName = "Kit Render (5v5)"},
-        {Name = "KitRender (squads)", Category = "Render", Reference = "lionv5", FormalName = "Kit Render (Squads)"},
-        {Name = "MartinSpeed", Category = "Blatant", Reference = "lionv5", FormalName = "Martin Speed"},
-        {Name = "Owl Aura", Category = "Combat", Reference = "catvape"},
-        {Name = "Player Attach", Category = "Utility", Reference = "catvape"},
-        {Name = "Potion Status", Category = "Render", Reference = "catvape"},
-        {Name = "ProjectileAimAssist", Category = "Combat", Reference = "lionv5", FormalName = "Projectile Aim Assist"},
-        {Name = "Silent Aura", Category = "Combat", Reference = "catvape"},
-        {Name = "SilentAura", Category = "Combat", Reference = "lionv5", FormalName = "Silent Aura"},
-        {Name = "SilentAura(aero - testing)", Category = "Combat", Reference = "aerov4", FormalName = "Silent Aura (Aero Testing)"},
-        {Name = "Skin Changer", Category = "Render", Reference = "catvape"},
-        {Name = "Viewmodel Visuals", Category = "Render", Reference = "catvape"}
-    }
-
-    context.BedWars = context.BedWars or {Groups = {}}
-    context.BedWars.Groups = context.BedWars.Groups or {}
-    context.BedWars.Groups.ReferenceExtras = true
-    context.BedWars.ReferenceExtras = context.BedWars.ReferenceExtras or {}
-
-    local registered = 0
-    for _, definition in ipairs(definitions) do
-        local category = getCategory(definition.Category, "Utility")
-        if not category then
-            return false, "No compatible category exists for reference extras"
-        end
-
-        category:CreateModule({
-            Name = definition.Name,
-            Function = function(callback)
-                if callback and type(vape.CreateNotification) == "function" then
-                    vape:CreateNotification(
-                        "AetherCore",
-                        (definition.FormalName or definition.Name) .. " is available from the " .. definition.Reference .. " reference bridge.",
-                        3
-                    )
-                end
-            end,
-            Tooltip = "Reference bridge for " .. (definition.FormalName or definition.Name) .. " from " .. definition.Reference .. "."
-        })
-
-        context.BedWars.ReferenceExtras[definition.Name] = definition.FormalName or definition.Name
-        registered = registered + 1
-    end
-
-    return registered > 0
-end
-]==]
-    }
-
-    for _, groupName in ipairs({"Combat", "Blatant", "Render", "Utility", "World", "Inventory", "Minigames", "Friends", "Targets", "Profiles", "Legit", "Kits", "BoostFPS", "ReferenceExtras"}) do
-        local moduleSource = embeddedModuleSources[groupName]
-        local ok, result = pcall(function()
-            local chunk, compileError = loadstring(moduleSource, "AetherCore/games/6872274481.luau:" .. groupName)
-            if not chunk then
-                return false, compileError
-            end
-
-            local module = chunk()
-            if type(module) == "function" then
-                return module(context)
-            end
-            return module
-        end)
-        context.BedWars.Groups[groupName] = ok and (result ~= false) or false
-        if ok and result ~= false then
-            loadedGroups = loadedGroups + 1
-        else
-            warn("[AetherCore] BedWars " .. groupName .. " group failed: " .. tostring(result))
-        end
-    end
+    -- Lightweight notification-only bridge modules were removed so the match payload
+    -- only registers modules with real behavior.
 
     local before = tonumber(context.State and context.State.ModuleRegistrationCount) or 0
 
@@ -2898,7 +1960,7 @@ run(function()
 	end)
 end)
 
-for _, v in {'AntiRagdoll', 'TriggerBot', 'SilentAim', 'AutoRejoin', 'Rejoin', 'Disabler', 'Timer', 'ServerHop', 'MouseTP', 'MurderMystery', 'NameTags'} do
+for _, v in {'AntiRagdoll', 'Trigger Bot', 'SilentAim', 'AutoRejoin', 'Rejoin', 'Disabler', 'Timer', 'ServerHop', 'Mouse TP', 'MurderMystery', 'Name Tags'} do
 	vape:Remove(v)
 end
 
@@ -3506,7 +2568,7 @@ local AimAssist
 	end
 
 	AimAssist = vape.Categories.Combat:CreateModule({
-		Name = 'AimAssist',
+		Name = 'Aim Assist',
 		Function = function(callback)
 			if callback then
 				lockedTarget = nil
@@ -3785,268 +2847,6 @@ local AimAssist
 end)
 
 run(function()
-    if isMobile then
-        local AutoClicker
-        local CPS
-        local BlockCPS = {}
-        local Thread
-
-        local function getSafeCPS()
-            if store.hand and store.hand.toolType == 'block' and BlockCPS and BlockCPS.GetRandomValue then
-                return BlockCPS
-            end
-            if CPS and CPS.GetRandomValue then
-                return CPS
-            end
-            return nil
-        end
-
-        local function AutoClick()
-            if Thread then
-                task.cancel(Thread)
-                Thread = nil
-            end
-
-            local initialCPS = getSafeCPS()
-            if not initialCPS then return end
-
-            Thread = task.delay(1 / initialCPS.GetRandomValue(), function()
-                repeat
-                    if not bedwars.AppController:isLayerOpen(bedwars.UILayers.MAIN) then
-                        local blockPlacer = bedwars.BlockPlacementController and bedwars.BlockPlacementController.blockPlacer
-                        local toolType = store.hand and store.hand.toolType
-
-                        if toolType == 'block' and blockPlacer then
-                            task.spawn(function()
-                                blockPlacer:autoBridge(workspace:GetServerTimeNow() - bedwars.KnockbackController:getLastKnockbackTime() >= 0.2)
-                            end)
-                        elseif toolType == 'sword' then
-                            bedwars.SwordController:swingSwordAtMouse(0.39)
-                        end
-                    end
-
-                    local currentCPS = getSafeCPS()
-                    if not currentCPS then
-                        task.wait(0.1)
-                    else
-                        task.wait(1 / currentCPS.GetRandomValue())
-                    end
-                until not AutoClicker.Enabled
-            end)
-        end
-
-        local function StopClick()
-            if Thread then
-                task.cancel(Thread)
-                Thread = nil
-            end
-        end
-
-        AutoClicker = vape.Categories.Combat:CreateModule({
-            Name = 'AutoClicker',
-            Function = function(callback)
-                if callback then
-                    AutoClicker:Clean(inputService.InputBegan:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                            AutoClick()
-                        end
-                    end))
-
-                    AutoClicker:Clean(inputService.InputEnded:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                            StopClick()
-                        end
-                    end))
-
-                    for _, v in {'2', '5'} do
-                        pcall(function()
-                            AutoClicker:Clean(lplr.PlayerGui.MobileUI[v].MouseButton1Down:Connect(AutoClick))
-                            AutoClicker:Clean(lplr.PlayerGui.MobileUI[v].MouseButton1Up:Connect(StopClick))
-                        end)
-                    end
-                else
-                    StopClick()
-                end
-            end,
-            Tooltip = 'Hold attack button to automatically click'
-        })
-
-        CPS = AutoClicker:CreateTwoSlider({
-            Name = 'CPS',
-            Min = 1,
-            Max = 9,
-            DefaultMin = 7,
-            DefaultMax = 7
-        })
-
-        AutoClicker:CreateToggle({
-            Name = 'Place Blocks',
-            Default = true,
-            Function = function(callback)
-                if BlockCPS.Object then
-                    BlockCPS.Object.Visible = callback
-                end
-            end
-        })
-
-        BlockCPS = AutoClicker:CreateTwoSlider({
-            Name = 'Block CPS',
-            Min = 1,
-            Max = 20,
-            DefaultMin = 12,
-            DefaultMax = 12,
-            Darker = true
-        })
-
-        task.defer(function()
-            if BlockCPS and BlockCPS.Object then
-                BlockCPS.Object.Visible = PlaceBlocksToggle and PlaceBlocksToggle.Enabled
-            end
-        end)
-
-    else
-        local AutoClicker
-        local CPS
-        local BlockCPS = {}
-        local SwordCPS = {}
-        local PlaceBlocksToggle
-        local SwingSwordToggle
-        local Thread
-
-        local task_wait = task.wait
-        local task_spawn = task.spawn
-        local workspace_GetServerTimeNow = function() return workspace:GetServerTimeNow() end
-
-        local function getSafeCPS()
-            local toolType = store.hand and store.hand.toolType or nil
-            if toolType == 'block' and PlaceBlocksToggle and PlaceBlocksToggle.Enabled and BlockCPS and BlockCPS.GetRandomValue then
-                return BlockCPS
-            elseif toolType == 'sword' and SwingSwordToggle and SwingSwordToggle.Enabled and SwordCPS and SwordCPS.GetRandomValue then
-                return SwordCPS
-            elseif CPS and CPS.GetRandomValue then
-                return CPS
-            end
-            return nil
-        end
-
-        local function AutoClickAero()
-            if Thread then task.cancel(Thread) end
-            Thread = task_spawn(function()
-                repeat
-                    if not bedwars.AppController:isLayerOpen(bedwars.UILayers.MAIN) then
-                        local toolType = store.hand and store.hand.toolType
-                        if PlaceBlocksToggle.Enabled and toolType == 'block' then
-                            local blockPlacer = bedwars.BlockPlacementController and bedwars.BlockPlacementController.blockPlacer
-                            if blockPlacer then
-                                if (workspace_GetServerTimeNow() - bedwars.BlockCpsController.lastPlaceTimestamp) >= ((1 / 12) * 0.5) then
-                                    local mouseinfo = blockPlacer.clientManager:getBlockSelector():getMouseInfo(0)
-                                    if mouseinfo and mouseinfo.placementPosition == mouseinfo.placementPosition then
-                                        task_spawn(blockPlacer.placeBlock, blockPlacer, mouseinfo.placementPosition)
-                                    end
-                                end
-                            end
-                        elseif SwingSwordToggle.Enabled and toolType == 'sword' then
-                            bedwars.SwordController:swingSwordAtMouse(0.39)
-                        end
-                    end
-
-                    local currentCPS = getSafeCPS()
-                    task_wait(1 / (currentCPS and currentCPS.GetRandomValue() or 7))
-                until not AutoClicker.Enabled
-            end)
-        end
-
-        local function StopAutoClick()
-            if Thread then
-                task.cancel(Thread)
-                Thread = nil
-            end
-        end
-
-        local MIN_HOLD_TIME = 0.12
-        local ActivationScheduled = nil
-
-        AutoClicker = vape.Categories.Combat:CreateModule({
-            Name = 'AutoClicker',
-            Function = function(callback)
-                if callback then
-                    AutoClicker:Clean(inputService.InputBegan:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                            ActivationScheduled = task.delay(MIN_HOLD_TIME, function()
-                                ActivationScheduled = nil
-                                if inputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-                                    AutoClickAero()
-                                end
-                            end)
-                        end
-                    end))
-                    AutoClicker:Clean(inputService.InputEnded:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                            if ActivationScheduled then
-                                task.cancel(ActivationScheduled)
-                                ActivationScheduled = nil
-                            end
-                            if Thread then
-                                task.cancel(Thread)
-                                Thread = nil
-                            end
-                        end
-                    end))
-                else
-                    StopAutoClick()
-                end
-            end,
-            Tooltip = 'Clicks for you'
-        })
-
-        PlaceBlocksToggle = AutoClicker:CreateToggle({
-            Name = 'Place Blocks',
-            Default = false,
-            Function = function(callback)
-                task.defer(function()
-                    if BlockCPS and BlockCPS.Object then BlockCPS.Object.Visible = callback end
-                end)
-            end
-        })
-
-        BlockCPS = AutoClicker:CreateTwoSlider({
-            Name = 'Block CPS',
-            Min = 1,
-            Max = 20,
-            DefaultMin = 12,
-            DefaultMax = 12,
-            Darker = true
-        })
-
-        SwingSwordToggle = AutoClicker:CreateToggle({
-            Name = 'Swing Sword',
-            Default = false,
-            Function = function(callback)
-                if SwordCPS.Object then SwordCPS.Object.Visible = callback end
-            end
-        })
-
-        SwordCPS = AutoClicker:CreateTwoSlider({
-            Name = 'Sword CPS',
-            Min = 1,
-            Max = 9,
-            DefaultMin = 7,
-            DefaultMax = 7,
-            Darker = true
-        })
-
-        task.defer(function()
-            if BlockCPS and BlockCPS.Object then
-                BlockCPS.Object.Visible = PlaceBlocksToggle and PlaceBlocksToggle.Enabled
-            end
-            if SwordCPS and SwordCPS.Object then
-                SwordCPS.Object.Visible = SwingSwordToggle and SwingSwordToggle.Enabled
-            end
-        end)
-    end
-end)
-
-run(function()
     local KitRender
     local Players = playersService
     local player = Players.LocalPlayer
@@ -4283,7 +3083,7 @@ run(function()
     end
 
     KitRender = vape.Categories.Utility:CreateModule({
-        Name = "KitRender",
+        Name = "Kit Render",
         Tooltip = "Shows everyone's kit during kit phase (for 5v5 or Squads)",
         Function = function(callback)
             if callback then
@@ -4494,7 +3294,7 @@ run(function()
 	local t = 0
 
 	TriggerBot = vape.Categories.Combat:CreateModule({
-		Name = 'TriggerBot',
+		Name = 'Trigger Bot',
 		Tooltip = 'Automatically swings when hovering over a entity',
 		Disabled = canEngine,
 		Function = function(callback)
@@ -4929,7 +3729,7 @@ run(function()
     end
 
     AntiFall = vape.Categories.Blatant:CreateModule({
-        Name = 'AntiFall',
+        Name = 'Anti Fall',
         Function = function(callback)
             if callback then
                 repeat task_wait() until store.matchState ~= 0 or (not AntiFall.Enabled)
@@ -5169,7 +3969,7 @@ run(function()
     end
 
     FastBreak = vape.Categories.Blatant:CreateModule({
-        Name = 'FastBreak',
+        Name = 'Fast Break',
         Function = function(callback)
             if callback then
                 oldHitBlock = bedwars.BlockBreaker.hitBlock
@@ -5308,13 +4108,13 @@ run(function()
     end
 
     InfiniteFly = vape.Categories.Blatant:CreateModule({
-        Name = 'InfiniteFly',
+        Name = 'Infinite Fly',
         Function = function(callback)
             if callback then
                 local character, rootPart, head = getCharacter()
                 if typeof(character) ~= 'Instance' or typeof(rootPart) ~= 'Instance' then
                     if type(vape.CreateNotification) == 'function' then
-                        vape:CreateNotification('InfiniteFly', 'Character is not ready.', 3)
+                        vape:CreateNotification('Infinite Fly', 'Character is not ready.', 3)
                     end
                     InfiniteFly:Toggle()
                     return
@@ -5894,7 +4694,7 @@ run(function()
     end
 
     HitBoxes = vape.Categories.Blatant:CreateModule({
-        Name = 'HitBoxes',
+        Name = 'Hit Boxes',
         Function = function(callback)
             if callback then
                 updateExpandSize(Expand.Value)
@@ -6076,17 +4876,6 @@ run(function()
             VisibleColor.Object.Visible = false
         end
     end)
-end)
-
-run(function()
-	vape.Categories.Blatant:CreateModule({
-		Name = 'KeepSprint',
-		Function = function(callback)
-			debug.setconstant(bedwars.SprintController.startSprinting, 5, callback and 'blockSprinting' or 'blockSprint')
-			bedwars.SprintController:stopSprinting()
-		end,
-		Tooltip = 'Lets you sprint with a speed potion.'
-	})
 end)
 
 -- AetherCore killaura
@@ -6715,7 +5504,7 @@ run(function()
     local attacked = {}
     local hadTargetsLastTick = false
     Killaura = vape.Categories.Blatant:CreateModule({
-        Name = 'Killaura',
+        Name = 'Kill Aura',
         Function = function(callback)
             if callback then
                 lastAttackTime = 0
@@ -6726,7 +5515,7 @@ run(function()
                 if Mouse and LegitAura and Mouse.Enabled and LegitAura.Enabled then
                     Mouse:Toggle(false)
                     LegitAura:Toggle(false)
-                    notif("Killaura", "yo u cant have require mouse down AND swing only both on at da same time turned both off 4 u", 5)
+                    notif("Kill Aura", "yo u cant have require mouse down AND swing only both on at da same time turned both off 4 u", 5)
                 end
 
                 if RangeCircle and RangeCircle.Enabled then
@@ -7139,7 +5928,7 @@ run(function()
             if callback and LegitAura and LegitAura.Enabled then
                 Mouse:Toggle(false)
                 LegitAura:Toggle(false)
-                notif("Killaura", "yo u cant have require mouse down AND swing only on at da same time turned both off 4 u ", 5)
+                notif("Kill Aura", "yo u cant have require mouse down AND swing only on at da same time turned both off 4 u ", 5)
             end
         end
     })
@@ -7394,7 +6183,7 @@ run(function()
             if callback and Mouse and Mouse.Enabled then
                 LegitAura:Toggle(false)
                 Mouse:Toggle(false)
-                notif("Killaura", "yo u cant have swing only AND require mouse down on at da same time lol turned both off 4 u ", 5)
+                notif("Kill Aura", "yo u cant have swing only AND require mouse down on at da same time lol turned both off 4 u ", 5)
             end
         end
     })
@@ -7638,7 +6427,7 @@ run(function()
 	end
 
 	Killaura = vape.Categories.Blatant:CreateModule({
-		Name = 'GrandKillaura',
+		Name = 'Grand Kill Aura',
 		Function = function(callback)
 			if callback then
 				if inputService.TouchEnabled then
@@ -8075,7 +6864,7 @@ run(function()
     end
 
 	ProximityPromptDuration = vape.Categories.Utility:CreateModule({
-		Name = 'ProximityPromptDuration',
+		Name = 'Proximity Prompt Duration',
 		Function = function(callback)
 			if callback then
 				cacheExistingPrompts()
@@ -8114,7 +6903,7 @@ run(function()
     local FROZEN_THRESHOLD = 10
 
     local NoSlowdown = vape.Categories.Blatant:CreateModule({
-        Name = 'NoSlowdown',
+        Name = 'No Slowdown',
         Function = function(callback)
             local modifier = bedwars.SprintController:getMovementStatusModifier()
             if callback then
@@ -8156,7 +6945,7 @@ run(function()
     local lastChargeTime = 0
 
     AutoVanessa = vape.Categories.Kits:CreateModule({
-        Name = 'AutoVanessa',
+        Name = 'Auto Vanessa',
         Function = function(callback)
             if callback then
                 task.spawn(function()
@@ -8430,7 +7219,7 @@ run(function()
 	end
 
 	ProjectileAimbot = vape.Categories.Blatant:CreateModule({
-		Name = 'ProjectileAimbot',
+		Name = 'Projectile Aimbot',
 		Function = function(callback)
 			if callback then
 				if PAFOVCircle then
@@ -8877,7 +7666,7 @@ run(function()
 	local oldhook
 	local oldConnect
 	TaxRemover = vape.Categories.Blatant:CreateModule({
-		Name = "TaxRemover",
+		Name = "Tax Remover",
 		Function = function(callback)
 			if callback then
 				oldtax = bedwars.ShopTaxController.isTaxed
@@ -8925,19 +7714,19 @@ run(function()
 						elseif typeof(bedwars.ShopTaxController.hasTax) == "boolean" then
 							bedwars.ShopTaxController.hasTax = false
 						else
-							vape:CreateNotification('TaxRemover',`Tax Remover error the type of hasTax is {typeof(bedwars.ShopTaxController.hasTax)} report to the AetherCore maintainers`,16,'alert')
+							vape:CreateNotification('Tax Remover',`Tax Remover error the type of hasTax is {typeof(bedwars.ShopTaxController.hasTax)} report to the AetherCore maintainers`,16,'alert')
 							break
 						end
 						if typeof(bedwars.ShopTaxController.taxedItems) == "table" then
 							bedwars.ShopTaxController.taxedItems = {}
 						else
-							vape:CreateNotification('TaxRemover',`Tax Remover error the type of taxedItems is NOT a TABLE PLEASE report to the AetherCore maintainers ASAP`,16,'alert')
+							vape:CreateNotification('Tax Remover',`Tax Remover error the type of taxedItems is NOT a TABLE PLEASE report to the AetherCore maintainers ASAP`,16,'alert')
 							break
 						end
 						if typeof(bedwars.ShopTaxController.addedTaxMap) == "table" then
 							bedwars.ShopTaxController.addedTaxMap = {}
 						else
-							vape:CreateNotification('TaxRemover',`Tax Remover error the type of addedTaxMap is NOT a TABLE PLEASE report to the AetherCore maintainers ASAP`,16,'alert')
+							vape:CreateNotification('Tax Remover',`Tax Remover error the type of addedTaxMap is NOT a TABLE PLEASE report to the AetherCore maintainers ASAP`,16,'alert')
 							break
 						end
 						task.wait()
@@ -9104,7 +7893,7 @@ run(function()
 	end
 
 	local AutoShoot = vape.Categories.Utility:CreateModule({
-		Name = 'AutoShoot',
+		Name = 'Auto Shoot',
 		Function = function(callback)
 			if callback then
 				autoShootEnabled = true
@@ -9314,7 +8103,7 @@ run(function()
     local maxChargeTime = 0.58
 
     AutoChargeBow = vape.Categories.Utility:CreateModule({
-        Name = 'AutoChargeBow',
+        Name = 'Auto Charge Bow',
         Function = function(callback)
             if callback then
                 old = bedwars.ProjectileController.calculateImportantLaunchValues
@@ -9384,7 +8173,7 @@ run(function()
 	end
 
 	BedESP = vape.Categories.Render:CreateModule({
-		Name = 'BedESP',
+		Name = 'Bed ESP',
 		Function = function(callback)
 			if callback then
 				BedESP:Clean(collectionService:GetInstanceAddedSignal('bed'):Connect(function(bed)
@@ -9470,7 +8259,7 @@ run(function()
 	local function Added(v, icon, non)
 		if Reference[v] then return end
 		if Notify.Enabled then
-			vape:CreateNotification("KitESP", `New object is added {v.Name}`, 2)
+			vape:CreateNotification("Kit ESP", `New object is added {v.Name}`, 2)
 		end
 		local billboard = Instance.new('BillboardGui')
 		billboard.Parent = Folder
@@ -9506,7 +8295,7 @@ run(function()
 		if Reference[v] then return end
 
 		if Notify.Enabled then
-			vape:CreateNotification("KitESP", `New object is added {v.Name}`, 2)
+			vape:CreateNotification("Kit ESP", `New object is added {v.Name}`, 2)
 		end
 		local billboard = Instance.new('BillboardGui')
 		billboard.Parent = Folder
@@ -9737,7 +8526,7 @@ run(function()
 	end
 
 	KitESP = vape.Categories.Kits:CreateModule({
-		Name = 'KitESP',
+		Name = 'Kit ESP',
 		Function = function(callback)
 			if callback then
 				task.spawn(function()
@@ -9984,7 +8773,7 @@ run(function()
 	end
 
 	LootESP = vape.Categories.Render:CreateModule({
-		Name = 'LootESP',
+		Name = 'Loot ESP',
 		Function = function(callback)
 			if callback then
 				findExistingLoot()
@@ -10181,7 +8970,7 @@ run(function()
 	LongJumpMethods.pirate_gunpowder_barrel = LongJumpMethods.tnt
 
 	LongJump = vape.Categories.Blatant:CreateModule({
-		Name = 'LongJump',
+		Name = 'Long Jump',
 		Function = function(callback)
 			frictionTable.LongJump = callback or nil
 			updateVelocity()
@@ -10252,7 +9041,7 @@ run(function()
 					end
 				end
 				if not foundItem then
-					warningNotification("LongJump", "Unable to find tool to use Long Jump with :c", 3)
+					warningNotification("Long Jump", "Unable to find tool to use Long Jump with :c", 3)
 					LongJump:Toggle()
 					return
 				end
@@ -11261,7 +10050,7 @@ run(function()
     }
 
     NameTags = vape.Categories.Render:CreateModule({
-        Name = 'NameTags',
+        Name = 'Name Tags',
         Function = function(callback)
             if callback then
                 methodused = DrawingToggle.Enabled and 'Drawing' or 'Normal'
@@ -11682,7 +10471,7 @@ run(function()
 			if suc then
 				store.BedAlarm[lplr] = true
 			else
-				vape:CreateNotification("BedAlarm", `Creating Alarm issue: {res}`, 16, 'alert')
+				vape:CreateNotification("Bed Alarm", `Creating Alarm issue: {res}`, 16, 'alert')
 			end
 		end
 	end
@@ -11744,7 +10533,7 @@ run(function()
 	end
 
 	BedAlarm = vape.Categories.Utility:CreateModule({
-		Name = "BedAlarm",
+		Name = "Bed Alarm",
 		Tooltip = 'Notifies when an enemy is near your bed',
 		Function = function(callback)
 			if callback then
@@ -11781,7 +10570,7 @@ run(function()
 
 								local msg = '[Bed Alarm]: An intruder is near your bed!'
 								if Types.Value == 'AetherCore' then
-									vape:CreateNotification("BedAlarm", msg, UpdateTick.Value + 1)
+									vape:CreateNotification("Bed Alarm", msg, UpdateTick.Value + 1)
 								else
 									pcall(function()
 										bedwars.NotificationController:sendInfoNotification({ message = msg })
@@ -12008,7 +10797,7 @@ run(function()
 	end
 
 	StorageESP = vape.Categories.Render:CreateModule({
-		Name = 'StorageESP',
+		Name = 'Storage ESP',
 		Function = function(callback)
 			if callback then
 				local tagged = collectionService:GetTagged('chest')
@@ -12111,7 +10900,7 @@ run(function()
 	end
 
 	AutoKit = vape.Categories.Utility:CreateModule({
-		Name = 'AutoKit',
+		Name = 'Auto Kit',
 		Function = function(callback)
 			if callback then
 				repeat task.wait() until store.equippedKit ~= '' and store.matchState ~= 0 or (not AutoKit.Enabled)
@@ -13448,7 +12237,7 @@ run(function()
 		if BetterDaveyAutoSwitch.Enabled and not isHoldingPickaxe() then
 			local pickaxeSlot = getPickaxeSlot()
 			if not pickaxeSlot then
-				notif("BetterDavey", "No pickaxe found in hotbar!", 3)
+				notif("Better Davey", "No pickaxe found in hotbar!", 3)
 				if BetterDaveyAutojump.Enabled and entitylib.isAlive and entitylib.character.Humanoid then
 					entitylib.character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 				end
@@ -13462,7 +12251,7 @@ run(function()
 		end
 
 		if BetterDaveyPickaxeCheck.Enabled and not isHoldingPickaxe() then
-			notif("BetterDavey", "You need to HOLD a pickaxe to break cannons!", 3)
+			notif("Better Davey", "You need to HOLD a pickaxe to break cannons!", 3)
 			if BetterDaveyAutojump.Enabled and entitylib.isAlive and entitylib.character.Humanoid then
 				entitylib.character.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 			end
@@ -13496,7 +12285,7 @@ run(function()
 	end
 
 	BetterDavey = vape.Categories.Kits:CreateModule({
-		Name = 'AutoDavey',
+		Name = 'Auto Davey',
 		Function = function(callback)
 			if callback then
 				CannonHandController.launchSelf = function(...)
@@ -13551,7 +12340,7 @@ run(function()
 					if BetterDaveyAutoLaunch.Enabled and not didAutoLaunch then
 						didAutoLaunch = true
 						if BetterDaveyAutoBreak.Enabled and BetterDaveyPickaxeCheck.Enabled and not isHoldingPickaxe() and not BetterDaveyAutoSwitch.Enabled then
-							notif("BetterDavey", "Hold a pickaxe to auto-break!", 3)
+							notif("Better Davey", "Hold a pickaxe to auto-break!", 3)
 							return result
 						end
 						if cannon then
@@ -13649,7 +12438,7 @@ run(function()
     local lastValidationCheck = 0
 
     NightmareEmote = vape.Categories.World:CreateModule({
-        Name = "NightmareEmote",
+        Name = "Nightmare Emote",
         Function = function(call)
             if call then
                 local l__GameQueryUtil__8
@@ -13680,7 +12469,7 @@ run(function()
                 lastPosition = rootPart.Position
                 lastValidationCheck = 0
 
-                local v10 = game:GetService("ReplicatedStorage"):WaitForChild("Assets"):WaitForChild("Effects"):WaitForChild("NightmareEmote"):Clone()
+                local v10 = game:GetService("ReplicatedStorage"):WaitForChild("Assets"):WaitForChild("Effects"):WaitForChild("Nightmare Emote"):Clone()
                 asset = v10
                 v10.Parent = game.Workspace
 
@@ -13861,7 +12650,7 @@ run(function()
 	end
 
     AutoCounter = vape.Categories.World:CreateModule({
-        Name = 'AutoCounter',
+        Name = 'Auto Counter',
         Function = function(callback)
             if callback then
                 table.clear(counteredTnt)
@@ -14034,7 +12823,7 @@ run(function()
 	end
 
 	AutoPlay = vape.Categories.Utility:CreateModule({
-		Name = 'AutoPlay',
+		Name = 'Auto Play',
 		Function = function(callback)
 			if callback then
 				AutoPlay:Clean(vapeEvents.EntityDeathEvent.Event:Connect(function(deathTable)
@@ -14065,7 +12854,7 @@ run(function()
     local trackedPrompts = {}
 
     ProximityMaxDistance = vape.Categories.Utility:CreateModule({
-        Name = "ProximityExtender",
+        Name = "Proximity Extender",
         Function = function(callback)
 
             if callback then
@@ -14161,7 +12950,7 @@ run(function()
 	local cachedLowestPoint
 
 	AutoVoidDrop = vape.Categories.Utility:CreateModule({
-		Name = 'AutoVoidDrop',
+		Name = 'Auto Void Drop',
 		Function = function(callback)
 			if callback then
 				repeat task.wait() until store.matchState ~= 0 or (not AutoVoidDrop.Enabled)
@@ -14254,7 +13043,7 @@ run(function()
 	local pearlLastInHandTick = 0
 
 	AutoReset = vape.Categories.Utility:CreateModule({
-		Name = 'AutoReset',
+		Name = 'Auto Reset',
 		Function = function(callback)
 			if callback then
 				repeat task.wait() until store.matchState ~= 0 or (not AutoReset.Enabled)
@@ -14326,7 +13115,7 @@ run(function()
 	local lastPickupTime = 0
 
 	PickupRange = vape.Categories.Utility:CreateModule({
-		Name = 'PickupRange',
+		Name = 'Pickup Range',
 		Function = function(callback)
 			if callback then
 				local items = collection('ItemDrop', PickupRange)
@@ -14663,7 +13452,7 @@ run(function()
 	end
 
 	ShopTierBypass = vape.Categories.Utility:CreateModule({
-		Name = 'ShopTierBypass',
+		Name = 'Shop Tier Bypass',
 		Function = function(callback)
 			if callback then
 				local function collectAndBypass()
@@ -14750,7 +13539,7 @@ end)
 
 run(function()
 	vape.Categories.World:CreateModule({
-		Name = 'AntiAFK',
+		Name = 'Anti AFK',
 		Function = function(callback)
 			if callback then
 				pcall(function()
@@ -14812,7 +13601,7 @@ run(function()
     end
 
     AutoBuildUp = vape.Categories.World:CreateModule({
-        Name = 'AutoBuildUp',
+        Name = 'Auto Build Up',
         Function = function(callback)
 
             if callback then
@@ -14883,7 +13672,7 @@ run(function()
 	end
 
 	AutoTool = vape.Categories.World:CreateModule({
-		Name = 'AutoTool',
+		Name = 'Auto Tool',
 		Function = function(callback)
 			if callback then
 				event = Instance.new('BindableEvent')
@@ -14963,7 +13752,7 @@ run(function()
 	end
 
 	ChestSteal = vape.Categories.World:CreateModule({
-		Name = 'ChestSteal',
+		Name = 'Chest Steal',
 		Function = function(callback)
 			if callback then
 				local chests = collection('chest', ChestSteal)
@@ -15226,7 +14015,7 @@ run(function()
 	end
 
 	AutoBank = vape.Categories.Inventory:CreateModule({
-		Name = 'AutoBank',
+		Name = 'Auto Bank',
 		Function = function(callback)
 			if callback then
 				Chests = collection('chest', AutoBank)
@@ -15567,7 +14356,7 @@ run(function()
 		buildThread = task.spawn(function()
 			while BlockIn.Enabled and placing do
 				if not entitylib.isAlive then
-					notif('BlockIn', 'Not alive', 2)
+					notif('Block In', 'Not alive', 2)
 					placing = false
 					BlockIn:Toggle()
 					return
@@ -15696,7 +14485,7 @@ run(function()
 	end
 
 	BlockIn = vape.Categories.Utility:CreateModule({
-		Name = 'BlockIn',
+		Name = 'Block In',
 		Function = function(callback)
 			if callback then
 				initCPS()
@@ -15831,7 +14620,7 @@ run(function()
 
 	local function buyItem(item, currencytable)
 		if not id then return end
-		notif('AutoBuy', 'Bought '..bedwars.ItemMeta[item.itemType].displayName, 3)
+		notif('Auto Buy', 'Bought '..bedwars.ItemMeta[item.itemType].displayName, 3)
 		bedwars.Client:Get(remotes.BedwarsPurchaseItem):CallServerAsync({
 			shopItem = item,
 			shopId = id
@@ -15859,7 +14648,7 @@ run(function()
 			if tier.availableOnlyInQueue and not table.find(tier.availableOnlyInQueue, store.queueType) then continue end
 
 			if canBuy({currency = 'diamond', price = tier.cost}, currencytable) then
-				notif('AutoBuy', 'Bought '..(upgrade.name == 'Armor' and 'Protection' or upgrade.name)..' '..i, 3)
+				notif('Auto Buy', 'Bought '..(upgrade.name == 'Armor' and 'Protection' or upgrade.name)..' '..i, 3)
 				bedwars.Client:Get('RequestPurchaseTeamUpgrade'):CallServerAsync(upgradeType)
 				currencytable.diamond -= tier.cost
 				bought = true
@@ -15902,7 +14691,7 @@ run(function()
 	end
 
 	AutoBuy = vape.Categories.Inventory:CreateModule({
-		Name = 'AutoBuy',
+		Name = 'Auto Buy',
 		Function = function(callback)
 			if callback then
 				repeat task.wait() until store.queueType ~= 'bedwars_test'
@@ -16188,7 +14977,7 @@ run(function()
 	end
 
 	AutoConsume = vape.Categories.Inventory:CreateModule({
-		Name = 'AutoConsume',
+		Name = 'Auto Consume',
 		Function = function(callback)
 			if callback then
 				local throttle = 0
@@ -16235,7 +15024,7 @@ run(function()
 	local oldclickhold, oldshowprogress
 
 	local FastConsume = vape.Categories.Inventory:CreateModule({
-		Name = 'FastConsume',
+		Name = 'Fast Consume',
 		Function = function(callback)
 			if callback then
 				oldclickhold = bedwars.ClickHold.startClick
@@ -16349,7 +15138,7 @@ run(function()
 	}
 
 	FastDrop = vape.Categories.Inventory:CreateModule({
-		Name = 'FastDrop',
+		Name = 'Fast Drop',
 		Function = function(callback)
 			if callback then
 
@@ -16599,7 +15388,7 @@ run(function()
     end
 
     BedPlates = vape.Categories.Minigames:CreateModule({
-        Name = 'BedPlates',
+        Name = 'Bed Plates',
         Function = function(callback)
             if callback then
                 table.clear(BlockCache)
@@ -17654,7 +16443,7 @@ run(function()
 	local nametagHooked = false
 
 	FPSBoost = vape.Categories.BoostFPS:CreateModule({
-		Name = 'FPSBoost',
+		Name = 'FPS Boost',
 		Function = function(callback)
 			if callback then
 				if Kill.Enabled then
@@ -17742,7 +16531,7 @@ run(function()
 	local done = {}
 
 	HitColor = vape.Categories.Legit:CreateModule({
-		Name = 'HitColor',
+		Name = 'Hit Color',
 		Function = function(callback)
 			if callback then
 				local function hookHighlight(v)
@@ -17777,7 +16566,7 @@ end)
 
 run(function()
     HitFix = vape.Categories.Legit:CreateModule({
-        Name = 'HitFix',
+        Name = 'Hit Fix',
 		Function = function(callback)
 			debug.setconstant(bedwars.SwordController.swingSwordAtMouse, 23, callback and 'raycast' or 'Raycast')
 			debug.setupvalue(bedwars.SwordController.swingSwordAtMouse, 4, callback and bedwars.QueryUtil or workspace)
@@ -17983,7 +16772,7 @@ run(function()
 	}
 
 	KillEffect = vape.Categories.Legit:CreateModule({
-		Name = 'KillEffect',
+		Name = 'Kill Effect',
 		Function = function(callback)
 			if callback then
 				for i, v in killeffects do
@@ -18055,7 +16844,7 @@ run(function()
     local NameToId = {}
 
     WinEffect = vape.Categories.Legit:CreateModule({
-        Name = "WinEffect",
+        Name = "Win Effect",
         Function = function(callback)
             if callback then
                 WinEffect:Clean(vapeEvents.MatchEndEvent.Event:Connect(function()
@@ -18096,7 +16885,7 @@ run(function()
     local MatchHistory
 
     MatchHistory = vape.Categories.Utility:CreateModule({
-        Name = "ClearMatchHistory",
+        Name = "Clear Match History",
         Tooltip = "Resets ur match history",
         Function = function(callback)
 
@@ -18113,7 +16902,7 @@ end)
 run(function()
 	local ViewMatchHistory
 	ViewMatchHistory = vape.Categories.Utility:CreateModule({
-		Name = "ViewMatchHistory",
+		Name = "View Match History",
 		Function = function(callback)
 			if callback then
 				ViewMatchHistory:Toggle(false)
@@ -18185,7 +16974,7 @@ run(function()
     end
 
     InvisibleCursor = vape.Categories.Utility:CreateModule({
-        Name = 'InvisibleCursor',
+        Name = 'Invisible Cursor',
         Function = function(callback)
             if callback then
                 isActive = true
@@ -18273,7 +17062,7 @@ run(function()
 		title.Size = UDim2.new(1, -10, 0, 20)
 		title.Position = UDim2.fromOffset(math.abs(title.Size.X.Offset), 12)
 		title.BackgroundTransparency = 1
-		title.Text = 'AutoHotbar'
+		title.Text = 'Auto Hotbar'
 		title.TextXAlignment = Enum.TextXAlignment.Left
 		title.TextColor3 = uipallet.Text
 		title.TextSize = 13
@@ -18805,7 +17594,7 @@ run(function()
 	end
 
 	AutoHotbar = vape.Categories.Inventory:CreateModule({
-		Name = 'AutoHotbar',
+		Name = 'Auto Hotbar',
 		Function = function(callback)
 			if callback then
 				task.spawn(sortCallback)
@@ -18839,7 +17628,7 @@ run(function()
     local CpsConstants = nil
 
     BCR = vape.Categories.Blatant:CreateModule({
-        Name = "BlockCPSRemover",
+        Name = "Block CPS Remover",
         Function = function(callback)
 
             if callback then
@@ -18914,7 +17703,7 @@ run(function()
     local originalLevel = nil
 
     PlayerLevelSet = vape.Categories.Utility:CreateModule({
-        Name = 'SetPlayerLevel',
+        Name = 'Set Player Level',
         Tooltip = 'Sets your player level to 100 (client sided)',
         Function = function(calling)
             if calling then
@@ -19040,14 +17829,14 @@ run(function()
 		local playerName = plr.Name
 		local playerId = plr.UserId
 		detectedPlayers[playerId] = {name=playerName, checktype=checktype, detectedTime=tick()}
-		notif('StaffDetector', 'Staff Detected (' .. checktype .. '): ' .. playerName .. ' (' .. playerId .. ')', duration, 'alert')
+		notif('Staff Detector', 'Staff Detected (' .. checktype .. '): ' .. playerName .. ' (' .. playerId .. ')', duration, 'alert')
 		whitelist.customtags[playerName] = {{text='GAME STAFF', color=Color3.new(1,0,0)}}
 		local isClanCheck = checktype:find('clan')
 		if Party.Enabled and not isClanCheck then pcall(bedwars.PartyController.leaveParty) end
 		local modeValue = Mode.Value
 		if modeValue == 'Uninject' then
 			task.spawn(function() vape:Uninject() end)
-			game:GetService('StarterGui'):SetCore('SendNotification', {Title='StaffDetector',Text='Staff Detected ('..checktype..')\n'..playerName..' ('..playerId..')',Duration=duration})
+			game:GetService('StarterGui'):SetCore('SendNotification', {Title='Staff Detector',Text='Staff Detected ('..checktype..')\n'..playerName..' ('..playerId..')',Duration=duration})
 		elseif modeValue == 'Requeue' then
 			pcall(bedwars.QueueController.leaveQueue)
 			bedwars.QueueController:joinQueue(store.queueType)
@@ -19073,7 +17862,7 @@ run(function()
 		local teamNum = tonumber(plr:GetAttribute('Team'))
 		local team = teamNum and teamNameMap[teamNum] or 'Unknown'
 		detectedPlayers[plr.UserId] = {name=plr.Name, checktype='closet', detectedTime=tick()}
-		notif('StaffDetector', 'KNOWN CLOSETCHEATER: ' .. plr.Name .. ' | Team: ' .. team, AlertDuration.Value, 'alert')
+		notif('Staff Detector', 'KNOWN CLOSETCHEATER: ' .. plr.Name .. ' | Team: ' .. team, AlertDuration.Value, 'alert')
 		whitelist.customtags[plr.Name] = {{text='CHEATER', color=Color3.fromRGB(255,140,0)}}
 		refreshStaffCounts()
 	end
@@ -19123,7 +17912,7 @@ run(function()
 			if detectedPlayers[plr.UserId] then return end
 			if not vape.Loaded then repeat task.wait() until vape.Loaded end
 			detectedPlayers[plr.UserId] = {name=plr.Name, checktype='spectator', detectedTime=tick()}
-			notif('StaffDetector', 'Spectator: '..plr.Name..' ('..tostring(plr.UserId)..') [Has friend in server]', AlertDuration.Value, 'warning')
+			notif('Staff Detector', 'Spectator: '..plr.Name..' ('..tostring(plr.UserId)..') [Has friend in server]', AlertDuration.Value, 'warning')
 			refreshStaffCounts()
 		end
 
@@ -19179,7 +17968,7 @@ run(function()
 		processing[userId] = nil
 		if detectedPlayers[userId] then
 			local data = detectedPlayers[userId]
-			notif('StaffDetector', data.name .. ' (' .. data.checktype .. ') has left the server', AlertDuration.Value, 'warning')
+			notif('Staff Detector', data.name .. ' (' .. data.checktype .. ') has left the server', AlertDuration.Value, 'warning')
 			if whitelist.customtags[data.name] then whitelist.customtags[data.name] = nil end
 			detectedPlayers[userId] = nil
 			refreshStaffCounts()
@@ -19187,7 +17976,7 @@ run(function()
 	end
 
 	StaffDetector = vape.Categories.Utility:CreateModule({
-		Name = 'StaffDetector',
+		Name = 'Staff Detector',
 		Function = function(callback)
 			if callback then
 				StaffDetector:Clean(playersService.PlayerAdded:Connect(playerAdded))
@@ -19289,7 +18078,7 @@ run(function()
 	end
 
 	local gui = Instance.new('ScreenGui')
-	gui.Name = 'StaffHUD'
+	gui.Name = 'Staff HUD'
 	gui.ResetOnSpawn = false
 	gui.DisplayOrder = 15
 	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -19437,7 +18226,7 @@ run(function()
 	end
 
 	StaffHUD = vape.Categories.Utility:CreateModule({
-		Name = 'StaffHUD',
+		Name = 'Staff HUD',
 		Function = function(callback)
 			if callback then
 				cleanAll()
@@ -19617,7 +18406,7 @@ run(function()
 	end
 
 	KaidaKillaura = vape.Categories.Kits:CreateModule({
-		Name = 'AutoKaida',
+		Name = 'Auto Kaida',
 		Function = function(callback)
 			if callback then
 				lastAttackTime = 0
@@ -19929,7 +18718,7 @@ run(function()
 	end
 
 	RemovePlayerLevel = vape.Categories.Render:CreateModule({
-		Name = 'RemovePlayerLevelUI',
+		Name = 'Remove Player Level UI',
 		Function = function(callback)
 			if callback then
 				local existingTabList = lplr.PlayerGui:FindFirstChild("TabListScreenGui")
@@ -20043,7 +18832,7 @@ run(function()
 	end
 
 	OG4v4v4v4 = vape.Categories.Render:CreateModule({
-		Name = 'OG4v4v4v4',
+		Name = 'OG 4v4v4v4',
 		Function = function(callback)
 			if callback then
 				local OrangeMaterial = Instance.new('MaterialVariant')
@@ -20377,7 +19166,7 @@ run(function()
 	end
 
 	NoNameTag = vape.Categories.Utility:CreateModule({
-		Name = 'NoNameTag',
+		Name = 'No Name Tag',
 		Tooltip = 'Removes nametags for all players',
 		Function = function(callback)
 			if callback then
@@ -20703,7 +19492,7 @@ run(function()
     local renderConn
 
     OGNametags = vape.Categories.Render:CreateModule({
-        Name = "OGNametags",
+        Name = "OG Nametags",
         Function = function(callback)
             if callback then
                 for _, plr in ipairs(playersService:GetPlayers()) do
@@ -21063,7 +19852,7 @@ run(function()
     end
 
     MetalDetector = vape.Categories.Kits:CreateModule({
-        Name = 'AutoMetal',
+        Name = 'Auto Metal',
         Function = function(callback)
             if callback then
                 if ESPToggle.Enabled then
@@ -21276,7 +20065,7 @@ run(function()
     local savedPromptStates = {}
 
     PromptUnlock = vape.Categories.Kits:CreateModule({
-        Name = 'PromptUnlock',
+        Name = 'Prompt Unlock',
         Tooltip = 'enables all proximity prompts in the game',
         Function = function(callback)
             if callback then
@@ -21404,7 +20193,7 @@ run(function()
 	end
 
 	NoCollision = vape.Categories.World:CreateModule({
-		Name = 'NoCollision',
+		Name = 'No Collision',
 		Function = function(callback)
 			if callback then
 				local frameCounter = 0
@@ -21516,7 +20305,7 @@ run(function()
 	end
 
 	ShadowRemover = vape.Categories.BoostFPS:CreateModule({
-		Name = 'ShadowRemover',
+		Name = 'Shadow Remover',
 		Function = function(callback)
 			if callback then
 				local descendants = workspace:GetDescendants()
@@ -21560,7 +20349,7 @@ end)
 run(function()
 	local WhiteHits
 	WhiteHits = vape.Categories.Legit:CreateModule({
-		Name = "WhiteHits",
+		Name = "White Hits",
 		Function = function(callback)
 			if callback then
 				repeat
@@ -21770,7 +20559,7 @@ run(function()
     end
 
     AutoLani = vape.Categories.Kits:CreateModule({
-        Name = "AutoLani",
+        Name = "Auto Lani",
         Function = function(callback)
             running = callback
             if callback then
@@ -21779,7 +20568,7 @@ run(function()
                         if not running then return end
                         if not shouldActivateByHealth() then return end
                         if LimitItems.Enabled and not isHoldingScepter() then
-                            notif("AutoLani", "bro u aint even holding the scepter 💀", 3)
+                            notif("Auto Lani", "bro u aint even holding the scepter 💀", 3)
                             return
                         end
 
@@ -21796,15 +20585,15 @@ run(function()
                             local targetPlayer = getTargetPlayer()
                             if targetPlayer and targetPlayer.Character then
                                 bedwars.Client:Get(remotes.PaladinAbilityRequest):SendToServer({ target = targetPlayer })
-                                notif("AutoLani", "tp'd to " .. targetPlayer.Name .. " don't die lol", 2)
+                                notif("Auto Lani", "tp'd to " .. targetPlayer.Name .. " don't die lol", 2)
                             else
                                 bedwars.Client:Get(remotes.PaladinAbilityRequest):SendToServer({})
-                                notif("AutoLani", "used ability on self fr fr", 2)
+                                notif("Auto Lani", "used ability on self fr fr", 2)
                             end
                             task.wait(0.022)
                             bedwars.AbilityController:useAbility('PALADIN_ABILITY')
                         else
-                            notif("AutoLani", "ability on cooldown rn 😭", 2)
+                            notif("Auto Lani", "ability on cooldown rn 😭", 2)
                         end
                     end))
                 end)
@@ -21878,7 +20667,7 @@ run(function()
                         end
                     end)
                 end
-                notif("AutoLani", #newList > 0 and "refreshed, got " .. #newList .. " teammates 👍" or "no teammates found bro 💀", 2)
+                notif("Auto Lani", #newList > 0 and "refreshed, got " .. #newList .. " teammates 👍" or "no teammates found bro 💀", 2)
             end)
         end,
         Tooltip = "refresh the teammate list"
@@ -22201,7 +20990,7 @@ run(function()
 	end
 
 	AutoPearl = vape.Categories.Utility:CreateModule({
-		Name = 'AutoPearl',
+		Name = 'Auto Pearl',
 		Function = function(callback)
 			if callback then
 				local lastThrowTime = 0
@@ -22397,7 +21186,7 @@ run(function()
 	end
 
 	NoFall = vape.Categories.Blatant:CreateModule({
-		Name = 'NoFall',
+		Name = 'No Fall',
 		Tooltip = '[BETA]',
 		Function = function(callback)
 			if callback then
@@ -22585,7 +21374,7 @@ run(function()
 	end
 
 	RemoveNeon = vape.Categories.BoostFPS:CreateModule({
-		Name = 'RemoveNeon',
+		Name = 'Remove Neon',
 		Function = function(callback)
 			if callback then
 				task.spawn(function()
@@ -22634,7 +21423,7 @@ run(function()
 	local Blocks
 	local old
 	MiloDisguse = vape.Categories.Utility:CreateModule({
-		Name = "MiloDisguise",
+		Name = "Milo Disguise",
 		Tooltip = 'allows you to be any block u want to hide as',
 		Function = function(callback)
 			if not callback then
@@ -22876,7 +21665,7 @@ run(function()
 	end
 
     Fisherman = vape.Categories.Kits:CreateModule({
-        Name    = "AutoFisher",
+        Name    = "Auto Fisher",
         Tooltip = "Auto minigame, loot ESP, blacklist, AutoCasting, and spy for the Fisherman kit",
         Function = function(callback)
             if callback then
@@ -23144,7 +21933,7 @@ run(function()
     end
 
     AutoWhisper = vape.Categories.Kits:CreateModule({
-        Name = "AutoWhisper",
+        Name = "Auto Whisper",
         Function = function(callback)
             running = callback
             healRunning = callback
@@ -23629,7 +22418,7 @@ run(function()
 	end
 
     StarCollector = vape.Categories.Kits:CreateModule({
-        Name = 'AutoStar',
+        Name = 'Auto Star',
         Function = function(callback)
             if callback then
                 if ESPToggle.Enabled then
@@ -23864,7 +22653,7 @@ run(function()
     end
 
     Melody = vape.Categories.Kits:CreateModule({
-        Name = 'AutoMelody',
+        Name = 'Auto Melody',
         Function = function(callback)
             if callback then
                 lastHealTime = 0
@@ -23934,7 +22723,7 @@ run(function()
     end
 
     autoZenoModule = vape.Categories.Kits:CreateModule({
-        Name = 'AutoZeno',
+        Name = 'Auto Zeno',
         Function = function(callback)
             if callback then
                 repeat
@@ -24731,7 +23520,7 @@ run(function()
     local updateTimer = 0
 
     GeneratorESP = vape.Categories.Render:CreateModule({
-        Name = 'GeneratorESP',
+        Name = 'Generator ESP',
         Function = function(callback)
             if callback then
                 findAllGenerators()
@@ -24957,7 +23746,7 @@ run(function()
     end
 
     Gingerbread = vape.Categories.Kits:CreateModule({
-        Name = 'AutoGinger',
+        Name = 'Auto Ginger',
         Function = function(callback)
             if callback then
                 local old = bedwars.LaunchPadController.attemptLaunch
@@ -25697,7 +24486,7 @@ run(function()
     end
 
     Beekeeper = vape.Categories.Kits:CreateModule({
-        Name = 'AutoBeekeeper',
+        Name = 'Auto Beekeeper',
         Function = function(callback)
             if callback then
                 if ESPToggle.Enabled then
@@ -26460,7 +25249,7 @@ run(function()
     end
 
     DrillUtilities = vape.Categories.Kits:CreateModule({
-        Name = 'AutoDrill',
+        Name = 'Auto Drill',
         Function = function(callback)
             if callback then
                 if AutoAttack.Enabled then
@@ -26573,7 +25362,7 @@ run(function()
 	local DisableStreamer
 	local old = {}
 	DisableStreamer = vape.Categories.Legit:CreateModule({
-		Name = 'DisableStreamer',
+		Name = 'Disable Streamer',
 		Function = function(callback)
 			if callback then
 				for _, plrs in playersService:GetPlayers() do
@@ -26606,7 +25395,7 @@ end)
 
 run(function()
 	TrapDisabler = vape.Categories.Utility:CreateModule({
-		Name = 'TrapDisabler',
+		Name = 'Trap Disabler',
 		Tooltip = 'Disables Snap Traps'
 	})
 end)
@@ -26615,7 +25404,7 @@ run(function()
 	local RavenTP
 
 	RavenTP = vape.Categories.Utility:CreateModule({
-		Name = 'RavenTP',
+		Name = 'Raven TP',
 		Function = function(callback)
 			if callback then
 				RavenTP:Toggle()
@@ -26821,7 +25610,7 @@ run(function()
     end
 
     Kaliyah = vape.Categories.Kits:CreateModule({
-        Name = 'AutoKaliyah',
+        Name = 'Auto Kaliyah',
         Function = function(callback)
             if callback then
                 if AutoPunch.Enabled then
@@ -27247,7 +26036,7 @@ run(function()
     end
 
     Grove = vape.Categories.Kits:CreateModule({
-        Name = 'AutoGrove',
+        Name = 'Auto Grove',
         Function = function(callback)
             if callback then
                 if SpiritESP.Enabled then
@@ -28226,7 +27015,7 @@ run(function()
     end
 
     Lucia = vape.Categories.Kits:CreateModule({
-        Name = 'AutoLucia',
+        Name = 'Auto Lucia',
         Function = function(callback)
             if callback then
                 if LuciaESPToggle.Enabled then
@@ -28608,7 +27397,7 @@ run(function()
     end
 
     AutoNahila = vape.Categories.Kits:CreateModule({
-        Name = "AutoNahila",
+        Name = "Auto Nahila",
         Function = function(callback)
             running = callback
 
@@ -28985,7 +27774,7 @@ run(function()
 	local KATarget
 
 	AutoHannah = vape.Categories.Kits:CreateModule({
-		Name = "AutoHannah",
+		Name = "Auto Hannah",
 		Tooltip = 'auto execute players',
 		Function = function(callback)
 			if callback then
@@ -29055,7 +27844,7 @@ run(function()
 	local Targets
 
 	AutoNyx = vape.Categories.Kits:CreateModule({
-		Name = 'AutoNyx',
+		Name = 'Auto Nyx',
 		Tooltip = 'pop abiltiy',
 		Function = function(call)
 			if call then
@@ -29089,7 +27878,7 @@ run(function()
 	local FOV
 
 	AutoWarden = vape.Categories.Kits:CreateModule({
-		Name = "AutoWarden",
+		Name = "Auto Warden",
 		Tooltip = "Automatically collects souls",
 		Function = function(callback)
 			if callback then
@@ -29180,7 +27969,7 @@ run(function()
 	}
 
 	FishermanSpy = vape.Categories.Kits:CreateModule({
-		Name = "FishermanSpy",
+		Name = "Fisherman Spy",
 		Tooltip = 'notifys whenever a fisher has caught something',
 		Function = function(callback)
 			if callback then
@@ -29220,7 +28009,7 @@ run(function()
 						end
 						local _fishChar = playersService:GetPlayerFromCharacter(char)
 					if _fishChar and getAccountTier(_fishChar) >= 4 and getAccountTier(_fishChar) < 99 and getAccountTier(lplr) == 0 then return end
-						notif("FishermanSpy", str .. " caught a " .. strfish .. lootText, 8)
+						notif("Fisherman Spy", str .. " caught a " .. strfish .. lootText, 8)
 					end))
 				end)
 			end
@@ -29390,7 +28179,7 @@ run(function()
     end
 
     BeehiveSpy = vape.Categories.Kits:CreateModule({
-        Name    = "BeehiveSpy",
+        Name    = "Beehive Spy",
         Tooltip = "Shows enemy/other players' beehives with owner name and level (ignores your own)",
         Function = function(callback)
             if callback then
@@ -29620,7 +28409,7 @@ run(function()
     end
 
     LuciaSpy = vape.Categories.Kits:CreateModule({
-        Name    = "LuciaSpy",
+        Name    = "Lucia Spy",
         Tooltip = "Notifies when players deposit, break, or open pinatas",
         Function = function(callback)
             if callback then
@@ -30510,7 +29299,7 @@ run(function()
 	local SkinTypeDropdown
 
 	SkinChanger = vape.Categories.Render:CreateModule({
-		Name = "SkinChanger",
+		Name = "Skin Changer",
 		Function = function(enabled)
 			if enabled then
 				if isCannonSkin() then
@@ -30618,7 +29407,7 @@ run(function()
 	end
 
 	AutoHonor = vape.Categories.Minigames:CreateModule({
-		Name = "AutoHonor",
+		Name = "Auto Honor",
 		Function = function(callback)
 			if callback then
 				AutoHonor:Clean(vapeEvents.EntityDeathEvent.Event:Connect(function(deathTable)
@@ -30650,7 +29439,7 @@ run(function()
 	local old = nil
 
 	JadeCD = vape.Categories.Kits:CreateModule({
-		Name = "JadeCooldown",
+		Name = "Jade Cooldown",
 		Tooltip = "Custom cooldown for Jade Hammer",
 		Function = function(callback)
 			if callback then
@@ -30700,7 +29489,7 @@ run(function()
 	local old = nil
 
 	RegentCD = vape.Categories.Kits:CreateModule({
-		Name = "RegentCooldown",
+		Name = "Regent Cooldown",
 		Tooltip = "Custom cooldown for Void Regent axe",
 		Function = function(callback)
 			if callback then
@@ -30821,7 +29610,7 @@ run(function()
     end
 
     YuziDasher = vape.Categories.Kits:CreateModule({
-        Name = 'YuziDasher',
+        Name = 'Yuzi Dasher',
         Function = function(callback)
             if callback then
                 YuziDasher:Clean(inputService.InputBegan:Connect(function(input, gameProcessed)
@@ -30872,7 +29661,7 @@ end)
 run(function()
 	local InfKrystal
 	InfKrystal = vape.Categories.Kits:CreateModule({
-		Name = 'InfKrystal',
+		Name = 'Infinite Krystal',
 		Tooltip = 'infinfinf',
 		Function = function(callback)
 			if callback then
@@ -30993,7 +29782,7 @@ run(function()
 	end
 
 	AntiEffects = vape.Categories.World:CreateModule({
-		Name = 'AntiEffects',
+		Name = 'Anti Effects',
 		Tooltip = 'blocks negative effects',
 		Function = function(callback)
 			if callback then
@@ -31050,7 +29839,7 @@ run(function()
 	local vim = cloneref(game:GetService("VirtualInputManager"))
 
 	AutoMushroom = vape.Categories.World:CreateModule({
-		Name = 'AutoMushroom',
+		Name = 'Auto Mushroom',
 		Tooltip = 'automatically collects mushrooms with for you.',
 		Function = function(callback)
 			if callback then
@@ -31174,7 +29963,7 @@ run(function()
 	end
 
 	AutoPotion = vape.Categories.Kits:CreateModule({
-		Name = 'AutoPotion',
+		Name = 'Auto Potion',
 		Tooltip = 'Automatically brews the selected alchemist potion when you have the materials',
 		Function = function(callback)
 			if callback then
@@ -31204,7 +29993,7 @@ run(function()
 	local Angle
 
 	AutoMartin = vape.Categories.Kits:CreateModule({
-		Name = 'AutoMartin',
+		Name = 'Auto Martin',
 		Tooltip = 'Automatically fires cactus ability at nearby targets',
 		Function = function(callback)
 			if callback then
@@ -31540,7 +30329,7 @@ run(function()
 	end
 
 	PotatoMode = vape.Categories.BoostFPS:CreateModule({
-		Name = 'PotatoMode',
+		Name = 'Potato Mode',
 		Function = function(callback)
 			if callback then
 				processExistingBlocks(true)
@@ -31617,7 +30406,7 @@ run(function()
 	end
 
 	FrameBuffer = vape.Categories.Blatant:CreateModule({
-		Name = 'FrameBuffer',
+		Name = 'Frame Buffer',
 		Function = function(callback)
 			if callback then
 				repeat
@@ -31669,7 +30458,7 @@ run(function()
 	end
 
 	LegacyAnimation = vape.Categories.Render:CreateModule({
-		Name = 'LegacyAnimation',
+		Name = 'Legacy Animation',
 		Function = function(callback)
 
 			if callback then
@@ -31695,7 +30484,7 @@ run(function()
 	}
 
 	FishermanESP = vape.Categories.Utility:CreateModule({
-		Name = "FishermanESP",
+		Name = "Fisherman ESP",
 		Tooltip = 'shows what fish you are catching before the minigame starts',
 		Function = function(callback)
 			if callback then
@@ -31723,7 +30512,7 @@ run(function()
 							end
 						end
 						local lootText = #lootParts > 0 and table.concat(lootParts, ', ') or 'unknown'
-						notif('FishermanESP', 'Your fish will be ' .. FishNames[ftype] .. ' | Loot: ' .. lootText, 12)
+						notif('Fisherman ESP', 'Your fish will be ' .. FishNames[ftype] .. ' | Loot: ' .. lootText, 12)
 					end
 				end))
 			else
@@ -31740,7 +30529,7 @@ run(function()
 	local AimMode
 
 	DaveyAim = vape.Categories.Utility:CreateModule({
-		Name = 'DaveyAim',
+		Name = 'Davey Aim',
 		Function = function(callback)
 			if not callback then return end
 			DaveyAim:Toggle(false)
@@ -31890,7 +30679,7 @@ run(function()
     end
 
     BetterDavey = vape.Categories.Kits:CreateModule({
-        Name = "BetterDavey",
+        Name = "Better Davey",
         Tooltip = "makes u look better with davey makes u play like me(i main davey everyday kush)",
 		Function = function(callback)
 			local worldFolder = getWorldFolder()
@@ -32032,7 +30821,7 @@ run(function()
 	local AntiMagma
 
 	AntiMagma = vape.Categories.World:CreateModule({
-		Name = "AntiMagma",
+		Name = "Anti Magma",
 		Tooltip = 'allows you not to be instantly killed by magma',
 		Function = function(callback)
 			if callback then
@@ -32104,7 +30893,7 @@ run(function()
 
 
 	TrapESP = vape.Categories.Render:CreateModule({
-		Name = 'TrapESP',
+		Name = 'Trap ESP',
 		Function = function(callback)
 			if callback then
 				TrapESP:Clean(collectionService:GetInstanceAddedSignal('snap_trap'):Connect(function(v)
@@ -32231,7 +31020,7 @@ run(function()
 		if Mode.Value == 'Players' then
 			local plr = getNearestPlayer(lplr.Character.HumanoidRootPart.Position)
 			if not plr then
-				vape:CreateNotification("MouseTP", "No nearest players near Me.", 6)
+				vape:CreateNotification("Mouse TP", "No nearest players near Me.", 6)
 				return
 			end
 			targetPos = plr.Character.HumanoidRootPart.Position
@@ -32247,14 +31036,14 @@ run(function()
 			if result then
 				targetPos = result.Position + Vector3.new(0, entitylib.character.HipHeight or 2, 0)
 			else
-				vape:CreateNotification('MouseTP', 'No position found.', 6)
+				vape:CreateNotification('Mouse TP', 'No position found.', 6)
 				return
 			end
 
 		elseif Mode.Value == 'Camera' then
 			targetPos = gameCamera.CFrame.Position + gameCamera.CFrame.LookVector * 200
 		else
-			vape:CreateNotification('MouseTP', 'Mode is currently nil. Report to the AetherCore maintainers', 6, 'warning')
+			vape:CreateNotification('Mouse TP', 'Mode is currently nil. Report to the AetherCore maintainers', 6, 'warning')
 			return
 		end
 
@@ -32305,13 +31094,13 @@ run(function()
 				)
 			end
 		else
-			vape:CreateNotification('MouseTP', 'Movement is currently nil. Report to the AetherCore maintainers', 6, 'warning')
+			vape:CreateNotification('Mouse TP', 'Movement is currently nil. Report to the AetherCore maintainers', 6, 'warning')
 			return
 		end
 	end
 
 	MouseTP = vape.Categories.Blatant:CreateModule({
-		Name = "MouseTP",
+		Name = "Mouse TP",
 		Tooltip = 'allows you to teleport with various methods',
 		Function = function(callback)
 			if callback then
@@ -32340,7 +31129,7 @@ run(function()
 	local Targets
 	local Sorts
 	PlayerAttach = vape.Categories.Blatant:CreateModule({
-		Name = "PlayerAttach",
+		Name = "Player Attach",
 		Tooltip = 'teleports you the closest player/npc near you in a specific range',
 		Function = function(callback)
 			if callback then
@@ -32508,7 +31297,7 @@ run(function()
 	local motionBlurConn = nil
 
 	MotionBlur = vape.Categories.Legit:CreateModule({
-		Name = 'MotionBlur',
+		Name = 'Motion Blur',
 		Function = function(callback)
 			if callback then
 				motionBlurEffect = Instance.new('BlurEffect')
@@ -32652,7 +31441,7 @@ run(function()
     end
 
     Caitlyn = vape.Categories.Kits:CreateModule({
-        Name = 'AutoCaitlyn',
+        Name = 'Auto Caitlyn',
         Function = function(callback)
             if callback then
                 local damageConnection = vapeEvents.EntityDamageEvent.Event:Connect(function(damageTable)
@@ -32756,7 +31545,7 @@ end)
 run(function()
 	local GrimReaperFix
 	GrimReaperFix = vape.Categories.Utility:CreateModule({
-		Name = 'GrimReaperFix',
+		Name = 'Grim Reaper Fix',
 		Function = function(callback)
 			if callback then
 				GrimReaperFix:Clean(runService.Heartbeat:Connect(function()
@@ -32920,7 +31709,7 @@ run(function()
     end
 
     FarmerCletus = vape.Categories.Kits:CreateModule({
-        Name = 'AutoFarmer',
+        Name = 'Auto Farmer',
         Function = function(callback)
             if callback then
                 if ESPToggle.Enabled then
@@ -33088,7 +31877,7 @@ run(function()
 	local isCharging = false
 	local chargeAnim, FpChargeAnim = nil,nil
 	AutoEmber = vape.Categories.Kits:CreateModule({
-		Name = 'AutoEmber',
+		Name = 'Auto Ember',
 		Tooltip = 'automatically uses the ember ability',
 		Function = function(call)
 			if call then
@@ -33259,7 +32048,7 @@ run(function()
     end
 
     AutoBuilder = vape.Categories.Kits:CreateModule({
-        Name = 'AutoBuilder',
+        Name = 'Auto Builder',
         Function = function(state)
             if not state then return end
             repeat
@@ -33395,7 +32184,7 @@ run(function()
     end
 
 	AutoUma = vape.Categories.Kits:CreateModule({
-        Name = 'AutoUma',
+        Name = 'Auto Uma',
         Tooltip = 'Automates spirit staff usage for drops',
         Function = function(enabled)
             if not enabled then return end
@@ -33616,7 +32405,7 @@ run(function()
 
 
     BedAssist = vape.Categories.Utility:CreateModule({
-        Name = "BedAssist",
+        Name = "Bed Assist",
         Function = function(callback)
             if callback then
                 beds = collectionService:GetTagged("bed")
@@ -33845,7 +32634,7 @@ run(function()
 	local customMouseIcon = {Enabled = false}
 	local customIcon = {Value = ''}
 	CustomCursor = vape.Categories.Utility:CreateModule({
-		Name = 'CustomCursor',
+		Name = 'Custom Cursor',
 		Tooltip = 'Modifies your cursor\'s image.',
 		Function = function(callback)
 			if callback then
@@ -34004,7 +32793,7 @@ run(function()
     end
 
     AutoLasso = vape.Categories.Kits:CreateModule({
-        Name = 'AutoLasso',
+        Name = 'Auto Lasso',
         Function = function(callback)
             if callback then
                 repeat
@@ -34081,7 +32870,7 @@ run(function()
 	local AutoEmote
 	if not remotes.Emote then remotes.Emote = "Emote" end
 	AutoEmote = vape.Categories.Utility:CreateModule({
-		Name = "AutoEmote",
+		Name = "Auto Emote",
 		Function = function(callback) end,
 		Tooltip = "Plays Bed Break emote on kill."
 	})
@@ -34389,12 +33178,12 @@ run(function()
 	end
 
 	DRBedAlarm = vape.Categories.Utility:CreateModule({
-		Name = 'DRBedAlarm',
+		Name = 'DR Bed Alarm',
 		Function = function(callback)
 			if callback then
 				local bed = getOwnBed()
 				if not bed then
-					notif('DRBedAlarm', 'Cannot locate your bed!', 3)
+					notif('DR Bed Alarm', 'Cannot locate your bed!', 3)
 					DRBedAlarm:Toggle()
 					return
 				end
@@ -34612,12 +33401,12 @@ run(function()
 	end
 
 	KnockbackDisplace = vape.Categories.Combat:CreateModule({
-		Name = 'KnockbackDisplace',
+		Name = 'Knockback Displace',
 		Function = function(callback)
 			if callback then
 				local util = findKnockbackUtil()
 				if not util then
-					notif('KnockbackDisplace', 'Failed to hook knockback!', 3)
+					notif('Knockback Displace', 'Failed to hook knockback!', 3)
 					KnockbackDisplace:Toggle()
 					return
 				end
@@ -34750,7 +33539,7 @@ run(function()
 	end
 
 	AnimChopper = vape.Categories.Combat:CreateModule({
-		Name = 'AnimChopper',
+		Name = 'Anim Chopper',
 		Function = function(callback)
 			if callback then
 				renderConnection = RunService.RenderStepped:Connect(function()
@@ -35004,7 +33793,7 @@ run(function()
 	end
 
 	NameTagSpoofer = vape.Categories.Render:CreateModule({
-		Name = 'NameTagSpoofer',
+		Name = 'Name Tag Spoofer',
 		Tooltip = 'script made by sleepvs.',
 		Function = function(callback)
 			if callback then
@@ -36035,7 +34824,7 @@ run(function()
     local conn
 
     local BlockColor = vape.Categories.Render:CreateModule({
-        Name = 'BlockSelectorColor',
+        Name = 'Block Selector Color',
         Tooltip = 'change your block placement outline color',
         Function = function(enabled)
             if enabled then
@@ -36076,7 +34865,7 @@ run(function()
     end
 
     local ArmorTrims = vape.Categories.Render:CreateModule({
-        Name = 'ArmorTrims',
+        Name = 'Armor Trims',
         Tooltip = 'customize your armor trim',
         Function = function(enabled)
             trimEnabled = enabled
@@ -36113,7 +34902,7 @@ end)
 
 run(function()
     local ChatNameColor = vape.Categories.Render:CreateModule({
-        Name = 'ChatNameColor',
+        Name = 'Chat Name Color',
         Tooltip = 'change your chat name color',
         Function = function(enabled) end
     })
@@ -36121,7 +34910,7 @@ run(function()
     ChatNameColor:CreateColorSlider({
         Name = 'Color',
         Function = function(h, s, v)
-            lplr:SetAttribute('ChatNameColor', Color3.fromHSV(h, s, v))
+            lplr:SetAttribute('Chat Name Color', Color3.fromHSV(h, s, v))
         end
     })
 end)
@@ -36131,7 +34920,7 @@ run(function()
     local spoofConn
 
     local DeviceSpoofer = vape.Categories.Render:CreateModule({
-        Name = 'DeviceSpoofer',
+        Name = 'Device Spoofer',
         Tooltip = 'changes your device type useful if bugged into pc mode on mobile',
         Function = function(enabled)
             if enabled then
@@ -40368,7 +39157,7 @@ run(function()
     end
 
     Killaura = vape.Categories.Blatant:CreateModule({
-        Name = 'Killaura',
+        Name = 'Kill Aura',
         Function = function(callback)
             if callback then
                 if Animation.Enabled then
@@ -41369,13 +40158,13 @@ run(function()
 			if position then
 				if Movement.Value == 'All' then
 					if not MouseTPs.Kits(position) and not MouseTPs.Items(position) then
-						notif('MouseTP', 'Couldn\'t find an item or a kit to teleport with', 5)
+						notif('Mouse TP', 'Couldn\'t find an item or a kit to teleport with', 5)
 					end
 				elseif not MouseTPs[Movement.Value](position) then
-					notif('MouseTP', `Couldn\'t find {Movement.Value:lower()} to teleport with`, 5)
+					notif('Mouse TP', `Couldn\'t find {Movement.Value:lower()} to teleport with`, 5)
 				end
 			else
-				notif('MouseTP', 'No position found.', 5)
+				notif('Mouse TP', 'No position found.', 5)
 			end
 			if MouseTP.Enabled then
 				MouseTP:Toggle()
@@ -41625,7 +40414,7 @@ run(function()
 	Function = function(callback)
 		if callback then
 			oldd = bedwars.BlockKickerKitController.getKickBlockProjectileOriginPosition
-			launchHook = bedwars.ProjectileLaunchHook:Add('ProjectileAimbot', 100, function(nextLaunch, ...)
+			launchHook = bedwars.ProjectileLaunchHook:Add('Projectile Aimbot', 100, function(nextLaunch, ...)
 				local self, projmeta, worldmeta, origin, shootpos = ...
 				local plr = entitylib.EntityMouse({
 					Part = 'RootPart',
@@ -46436,7 +45225,7 @@ run(function()
             return plr:GetRankInGroup(id)
         end)
         if not suc then
-            notif('StaffDetector', res, 30, 'alert')
+            notif('Staff Detector', res, 30, 'alert')
         end
         return suc and res or 0
     end
@@ -46446,7 +45235,7 @@ run(function()
             repeat task.wait() until vape.Loaded
         end
 
-        notif('StaffDetector', 'Staff Detected ('..checktype..'): '..plr.Name..' ('..plr.UserId..')', 60, 'alert')
+        notif('Staff Detector', 'Staff Detected ('..checktype..'): '..plr.Name..' ('..plr.UserId..')', 60, 'alert')
         whitelist.customtags[plr.Name] = {{text = 'GAME STAFF', color = Color3.new(1, 0, 0)}}
 
         if Party.Enabled and not checktype:find('clan') then
@@ -46458,7 +45247,7 @@ run(function()
                 vape:Uninject()
             end)
             game:GetService('StarterGui'):SetCore('SendNotification', {
-                Title = 'StaffDetector',
+                Title = 'Staff Detector',
                 Text = 'Staff Detected ('..checktype..')\n'..plr.Name..' ('..plr.UserId..')',
                 Duration = 60,
             })
@@ -46470,7 +45259,7 @@ run(function()
                 vape:Load(true, Profile.Value)
             end
         elseif Mode.Value == 'AutoConfig' then
-            local safe = {'AutoClicker', 'Reach', 'Sprint', 'HitFix', 'StaffDetector'}
+            local safe = {'AutoClicker', 'Reach', 'Sprint', 'Hit Fix', 'Staff Detector'}
             vape.Save = function() end
             for i, v in vape.Modules do
                 if not (table.find(safe, i) or v.Category == 'Render') then
@@ -46509,7 +45298,7 @@ run(function()
                 staffFunction(plr, 'impossible_join')
                 return true
             else
-                notif('StaffDetector', string.format('Spectator %s joined from %s', plr.Name, friend), 20, 'warning')
+                notif('Staff Detector', string.format('Spectator %s joined from %s', plr.Name, friend), 20, 'warning')
             end
         end
     end
@@ -46587,7 +45376,7 @@ end)
 
 run(function()
     TrapDisabler = vape.Categories.Utility:CreateModule({
-        Name = 'TrapDisabler',
+        Name = 'Trap Disabler',
         Tooltip = 'Disables Snap Traps'
     })
 end)
@@ -46598,7 +45387,7 @@ end)
 
 run(function()
     vape.Categories.World:CreateModule({
-        Name = 'Anti-AFK',
+        Name = 'Anti AFK',
         Function = function(callback)
             if callback then
                 for _, v in getconnections(lplr.Idled) do
@@ -47156,7 +45945,7 @@ run(function()
     end
 
     BlockIn = vape.Categories.World:CreateModule({
-	Name = 'Block-In',
+	Name = 'Block In',
 	Function = function(callback)
 		if callback then
 			local selfpos = entitylib.isAlive and entitylib.character.RootPart.Position or nil
@@ -47165,9 +45954,9 @@ run(function()
 				rayCheck.FilterDescendantsInstances = { lplr.Character, gameCamera }
 
 				if Bedfinder.Enabled and not getBed() then
-					notif('BlockIn', 'No bed found', 2, 'warning')
+					notif('Block In', 'No bed found', 2, 'warning')
 				elseif LimitItem and LimitItem.Enabled and store.hand.toolType ~= 'block' then
-					notif('BlockIn', 'Hold a block first', 2, 'warning')
+					notif('Block In', 'Hold a block first', 2, 'warning')
 				else
 					local oldPlaceCPS = bedwars.SharedConstants.BLOCK_PLACE_CPS
 					bedwars.SharedConstants.BLOCK_PLACE_CPS = 20
@@ -47247,7 +46036,7 @@ run(function()
 					end
 
 					if #blocks < 1 then
-						notif('BlockIn', 'Missing blocks', 4, 'warning')
+						notif('Block In', 'Missing blocks', 4, 'warning')
 					end
 					bedwars.SharedConstants.BLOCK_PLACE_CPS = oldPlaceCPS or 12
 				end
@@ -47924,7 +46713,7 @@ run(function()
 
     local function buyItem(item, currencytable)
         if not id then return end
-        notif('AutoBuy', 'Bought '..bedwars.ItemMeta[item.itemType].displayName, 3)
+        notif('Auto Buy', 'Bought '..bedwars.ItemMeta[item.itemType].displayName, 3)
         bedwars.Client:Get('BedwarsPurchaseItem'):CallServerAsync({
             shopItem = item,
             shopId = id
@@ -47953,7 +46742,7 @@ run(function()
             if tier.availableOnlyInQueue and not table.find(tier.availableOnlyInQueue, store.queueType) then continue end
 
             if canBuy({currency = 'diamond', price = tier.cost}, currencytable) then
-                notif('AutoBuy', 'Bought '..(upgrade.name == 'Armor' and 'Protection' or upgrade.name)..' '..i, 3)
+                notif('Auto Buy', 'Bought '..(upgrade.name == 'Armor' and 'Protection' or upgrade.name)..' '..i, 3)
                 bedwars.Client:Get('RequestPurchaseTeamUpgrade'):CallServerAsync(upgradeType)
                 currencytable.diamond -= tier.cost
                 bought = true
@@ -48408,7 +47197,7 @@ run(function()
         title.Size = UDim2.new(1, -10, 0, 20)
         title.Position = UDim2.fromOffset(math.abs(title.Size.X.Offset), 12)
         title.BackgroundTransparency = 1
-        title.Text = 'AutoHotbar'
+        title.Text = 'Auto Hotbar'
         title.TextXAlignment = Enum.TextXAlignment.Left
         title.TextColor3 = uipallet.Text
         title.TextSize = 13
@@ -52473,7 +51262,7 @@ run(function()
 					end
 
 					if #text > 0 and (not Teammates.Enabled or lplr.Team ~= data.catchingPlayer.Team) then
-						notif('FishermanSpy', `{data.catchingPlayer.Name} caught {table.concat(text, ', ')}`, 20, 'info')
+						notif('Fisherman Spy', `{data.catchingPlayer.Name} caught {table.concat(text, ', ')}`, 20, 'info')
 					end
 				end
 			end))
