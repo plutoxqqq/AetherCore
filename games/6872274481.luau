@@ -38394,8 +38394,11 @@ run(function()
     local Targets
     local Melee
     local Range
+    local Projectiles
 
     local oldroot, clone, hip = nil, nil, 2.5
+    local projectileDodgeUntil = 0
+    local trackedProjectiles = {}
     local rayParams = RaycastParams.new()
     rayParams.FilterType = Enum.RaycastFilterType.Include
     rayParams.RespectCanCollide = true
@@ -38423,6 +38426,81 @@ run(function()
             return true
         end
         return false
+    end
+
+    local function isTrackedProjectile(projectile)
+        if not projectile or not projectile.Parent then
+            return false
+        end
+
+        if projectile:GetAttribute('ProjectileShooter') == lplr.UserId then
+            return false
+        end
+
+        local name = projectile.Name:lower()
+        return bedwars.ProjectileMeta[projectile.Name] ~= nil or name:find('arrow') ~= nil or name:find('snowball') ~= nil or name:find('projectile') ~= nil or name:find('fireball') ~= nil
+    end
+
+    local function getProjectilePart(projectile)
+        if projectile:IsA('BasePart') then
+            return projectile
+        end
+
+        return projectile.PrimaryPart or projectile:FindFirstChildWhichIsA('BasePart')
+    end
+
+    local function projectileWillHit(projectile)
+        if not Projectiles or not Projectiles.Enabled or not entitylib.isAlive or not isTrackedProjectile(projectile) then
+            return false
+        end
+
+        local root = entitylib.character.RootPart
+        local part = getProjectilePart(projectile)
+        if not root or not part then
+            return false
+        end
+
+        local projectilePosition = part.Position
+        local projectileVelocity = part.AssemblyLinearVelocity or part.Velocity
+        local speed = projectileVelocity.Magnitude
+        if speed < 10 then
+            return false
+        end
+
+        local toPlayer = root.Position - projectilePosition
+        if toPlayer.Magnitude > 80 or projectileVelocity:Dot(toPlayer) <= 0 then
+            return false
+        end
+
+        local relativeVelocity = projectileVelocity - root.AssemblyLinearVelocity
+        local relativeSpeed = relativeVelocity.Magnitude
+        if relativeSpeed <= 0 then
+            return false
+        end
+
+        local timeToClosest = math.clamp(toPlayer:Dot(relativeVelocity) / (relativeSpeed * relativeSpeed), 0, 1.25)
+        local closestPosition = projectilePosition + projectileVelocity * timeToClosest
+        local playerPosition = root.Position + root.AssemblyLinearVelocity * timeToClosest
+        return (closestPosition - playerPosition).Magnitude <= 6
+    end
+
+    local function hasProjectileThreat()
+        if not Projectiles or not Projectiles.Enabled then
+            table.clear(trackedProjectiles)
+            projectileDodgeUntil = 0
+            return false
+        end
+
+        for projectile in trackedProjectiles do
+            if not isTrackedProjectile(projectile) then
+                trackedProjectiles[projectile] = nil
+            elseif projectileWillHit(projectile) then
+                projectileDodgeUntil = tick() + 0.45
+                return true
+            end
+        end
+
+        return tick() < projectileDodgeUntil
     end
 
     local function revertClone()
@@ -38460,6 +38538,19 @@ run(function()
 			end
 
 			rayParams.FilterDescendantsInstances = {store.map}
+            table.clear(trackedProjectiles)
+            for _, projectile in workspace:GetChildren() do
+                if isTrackedProjectile(projectile) then
+                    trackedProjectiles[projectile] = true
+                end
+            end
+            AutoDodge:Clean(workspace.ChildAdded:Connect(function(projectile)
+                task.delay(0, function()
+                    if AutoDodge.Enabled and Projectiles and Projectiles.Enabled and isTrackedProjectile(projectile) then
+                        trackedProjectiles[projectile] = true
+                    end
+                end)
+            end))
 			local lowestpoint = 9e9
 			local Dodge = 0
 			for _, v in store.blocks do
@@ -38500,7 +38591,10 @@ run(function()
                             end
                         end
 
-                        if Melee.Enabled and entitylib.EntityPosition({
+                        if hasProjectileThreat() and doClone() then
+                            Dodge = true
+                            task.wait(0.05)
+                        elseif Melee.Enabled and entitylib.EntityPosition({
                             Range = Range.Value,
                             Players = Targets.Players.Enabled,
                             NPCs = Targets.NPCs.Enabled,
@@ -38547,10 +38641,16 @@ run(function()
 	Decimal = 5,
 	Darker = true,
     })
-    AutoDodge:CreateToggle({
+    Projectiles = AutoDodge:CreateToggle({
 	Name = 'Projectiles',
 	Tooltip = 'Avoids projectiles',
 	Default = true,
+        Function = function(call)
+            if not call then
+                table.clear(trackedProjectiles)
+                projectileDodgeUntil = 0
+            end
+        end,
     })
 end)
 
