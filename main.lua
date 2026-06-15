@@ -328,10 +328,11 @@ return function(startup)
     local function collectSupportedGamePaths(currentGameId, currentPlaceId)
         local supported = storage.DecodeJson(context.Fetch("profiles/supported.json"), {}) or {}
         local paths = {}
+        local lobbyFallbackPath = nil
 
         for _, gameInfo in pairs(supported) do
             if type(gameInfo) == "table" and tonumber(gameInfo.gameid or gameInfo.GameId) == currentGameId then
-                for _, groupInfo in pairs(gameInfo) do
+                for groupName, groupInfo in pairs(gameInfo) do
                     if type(groupInfo) == "table" then
                         local groupPath = groupInfo.Path or groupInfo.path
                         local groupPlace = tonumber(groupInfo.Place or groupInfo.place)
@@ -339,10 +340,16 @@ return function(startup)
 
                         if exactMatch then
                             appendUniquePath(paths, groupPath)
+                        elseif tostring(groupName):lower() == "lobby" then
+                            lobbyFallbackPath = groupPath
                         end
                     end
                 end
             end
+        end
+
+        if #paths == 0 then
+            appendUniquePath(paths, lobbyFallbackPath)
         end
 
         return paths
@@ -379,6 +386,31 @@ return function(startup)
         warnf("custom_modules.luau is unavailable or failed: %s", tostring(customResult))
     else
         warn("[AetherCore] Custom modules loaded")
+    end
+
+    function context.SynchronizeExistingModules()
+        if type(shared) ~= "table" or type(shared.vape) ~= "table" then
+            return 0
+        end
+        local modules = type(shared.vape.Modules) == "table" and shared.vape.Modules or {}
+        shared.vape.Modules = modules
+        local synchronized = 0
+
+        for moduleName, module in pairs(modules) do
+            if type(module) == "table" and type(moduleName) == "string" and moduleName ~= "" then
+                module.Name = module.Name or moduleName
+                modules[module.Name] = module
+                modules[module.Name:gsub("%s+", "")] = modules[module.Name:gsub("%s+", "")] or module
+                synchronized = synchronized + 1
+            end
+        end
+
+        return synchronized
+    end
+
+    local synchronizedModules = context.SynchronizeExistingModules()
+    if synchronizedModules > 0 then
+        warnf("Synchronized %s existing module records", tostring(synchronizedModules))
     end
 
     local moduleAssistOk, moduleAssistResult = pcall(function()

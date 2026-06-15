@@ -35530,7 +35530,10 @@ do
 local catvapePayload = [===[
 local canDebug = true
 local run = function(func)
-	func()
+	local ok, err = xpcall(func, debug.traceback)
+	if not ok then
+		warn('[AetherCore] catvape module failed to load: ' .. tostring(err))
+	end
 end
 local cloneref = cloneref or function(obj)
 	return obj
