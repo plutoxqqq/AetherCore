@@ -18098,6 +18098,98 @@ run(function()
 end)
 
 run(function()
+	local CheatDetector
+	local cheatersFlagged = {}
+	shared.bindable = shared.bindable or Instance.new('BindableEvent')
+
+	local function added(player, reason)
+		if not player or cheatersFlagged[player] then return end
+		cheatersFlagged[player] = true
+		if whitelist and whitelist.customtags then
+			whitelist.customtags[player.Name] = {{text = 'CHEATER', color = Color3.new(1, 0, 0)}}
+		end
+		notif('Cheat Detector', player.Name .. ' flagged for ' .. tostring(reason):lower(), 10, 'info')
+	end
+
+	local function checkPoint(pos, params)
+		for _, part in workspace:GetPartBoundsInRadius(pos, 0.05, params) do
+			if part.CanCollide and (part:GetClosestPointOnSurface(pos) - pos).Magnitude <= 0.05 then
+				return false
+			end
+		end
+		return true
+	end
+
+	local overlap = OverlapParams.new()
+	overlap.FilterDescendantsInstances = {workspace:FindFirstChild('Map') or workspace}
+	overlap.FilterType = Enum.RaycastFilterType.Include
+
+	local Checks = {
+		Killaura = function()
+			local attackData = {}
+			local strikes = {}
+			CheatDetector:Clean(shared.bindable.Event:Connect(function(damageTable)
+				if damageTable.damageType == 0 and damageTable.fromEntity then
+					local from = playersService:GetPlayerFromCharacter(damageTable.fromEntity)
+					if from and from ~= lplr then
+						local lastHit = os.clock() - (attackData[from] or 0)
+						if lastHit <= 0.28 then
+							strikes[from] = (strikes[from] or 0) + 1
+							task.delay(60, function() strikes[from] = math.max((strikes[from] or 1) - 1, 0) end)
+							if strikes[from] > 2 then added(from, 'Killaura') end
+						end
+						attackData[from] = os.clock()
+					end
+				end
+			end))
+		end,
+		Reach = function()
+			CheatDetector:Clean(shared.bindable.Event:Connect(function(damageTable)
+				if damageTable.damageType == 0 and damageTable.fromEntity and damageTable.entityInstance then
+					local fromRoot = damageTable.fromEntity.PrimaryPart
+					local targetRoot = damageTable.entityInstance.PrimaryPart
+					if fromRoot and targetRoot and (fromRoot.Position - targetRoot.Position).Magnitude > (18 + lplr:GetNetworkPing()) then
+						local player = playersService:GetPlayerFromCharacter(damageTable.fromEntity)
+						if player and player ~= lplr then added(player, 'Reach') end
+					end
+				end
+			end))
+		end,
+		Invisible = function() end,
+		HighJump = function() end,
+		Phase = function() end
+	}
+
+	CheatDetector = vape.Categories.Utility:CreateModule({
+		Name = 'Cheat Detector',
+		Function = function(callback)
+			if callback then
+				for name, check in Checks do
+					if CheatDetector.Options and CheatDetector.Options[name] and CheatDetector.Options[name].Enabled then task.spawn(check) end
+				end
+				repeat
+					for _, entity in entitylib.List do
+						if entity.Player and entity.Player ~= lplr and entity.Health > 0 and not cheatersFlagged[entity.Player] then
+							if CheatDetector.Options.Invisible.Enabled and (entity.RootPart.Position - entity.Head.Position).Magnitude > 5 then added(entity.Player, 'Invisible') end
+							if CheatDetector.Options.HighJump.Enabled and entity.RootPart.AssemblyLinearVelocity.Y > 80 then added(entity.Player, 'HighJump') end
+							if CheatDetector.Options.Phase.Enabled and not checkPoint(entity.Head.Position, overlap) then added(entity.Player, 'Phase') end
+						end
+					end
+					task.wait(0.1)
+				until not CheatDetector.Enabled
+			else
+				table.clear(cheatersFlagged)
+			end
+		end,
+		Tooltip = 'Alerts for possible cheaters.'
+	})
+
+	for name in Checks do
+		CheatDetector:CreateToggle({Name = name, Default = true})
+	end
+end)
+
+run(function()
 	local StaffHUD
 	local ShowSpec
 	local ShowCloset
@@ -21283,8 +21375,8 @@ run(function()
 	end
 
 	NoFall = vape.Categories.Blatant:CreateModule({
-		Name = 'No Fall',
-		Tooltip = '[BETA]',
+		Name = 'No Fall Damage',
+		Tooltip = 'Prevents fall damage using CatV6-style TelePearl or RakNet handling.',
 		Function = function(callback)
 			if callback then
 				local fallStartY = nil
@@ -35438,7 +35530,10 @@ do
 local catvapePayload = [===[
 local canDebug = true
 local run = function(func)
-	func()
+	local ok, err = xpcall(func, debug.traceback)
+	if not ok then
+		warn('[AetherCore] catvape module failed to load: ' .. tostring(err))
+	end
 end
 local cloneref = cloneref or function(obj)
 	return obj
@@ -39223,7 +39318,7 @@ run(function()
         Function = function(callback)
             if callback then
                 repeat
-                    bedwars.Client:Get('PlayerEatCake'):SendToServer({block = replicatedStorage.Items.cake_one})
+                    bedwars.Client:Get('PlayerEatCake'):SendToServer({block = lplr})
                     task.wait(0.1)
                 until not InfiniteShield.Enabled
             end

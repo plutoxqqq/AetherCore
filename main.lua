@@ -249,19 +249,42 @@ return function(startup)
     utility.InstallCategoryFallbacks()
     utility.InstallHumanoidScaleFallbacks()
 
-    for categoryName, category in pairs(shared.vape.Categories) do
-        if type(category) == "table" and type(category.CreateModule) == "function" and category.__AetherCoreOriginalCreateModule == nil then
-            local originalCreateModule = category.CreateModule
-            category.__AetherCoreOriginalCreateModule = originalCreateModule
-            category.CreateModule = function(self, moduleOptions, ...)
-                local module = originalCreateModule(self, moduleOptions, ...)
-                if module ~= nil then
-                    local moduleName = type(moduleOptions) == "table" and moduleOptions.Name or type(module) == "table" and module.Name or nil
-                    context.RegisterModuleRecord(moduleName, categoryName, "loaded", context.CurrentSource, moduleOptions)
+    function context.InstallModuleRegistrationHooks()
+        if type(shared) ~= "table" or type(shared.vape) ~= "table" or type(shared.vape.Categories) ~= "table" then
+            return false, "GUI categories are unavailable"
+        end
+
+        shared.vape.Modules = type(shared.vape.Modules) == "table" and shared.vape.Modules or {}
+
+        for categoryName, category in pairs(shared.vape.Categories) do
+            if type(category) == "table" and type(category.CreateModule) == "function" and category.__AetherCoreOriginalCreateModule == nil then
+                local originalCreateModule = category.CreateModule
+                category.__AetherCoreOriginalCreateModule = originalCreateModule
+                category.CreateModule = function(self, moduleOptions, ...)
+                    local module = originalCreateModule(self, moduleOptions, ...)
+                    if module ~= nil then
+                        local moduleName = type(moduleOptions) == "table" and moduleOptions.Name or type(module) == "table" and module.Name or nil
+                        if type(module) == "table" then
+                            module.Name = module.Name or moduleName
+                            module.Category = module.Category or tostring(categoryName)
+                            if type(moduleName) == "string" and moduleName ~= "" then
+                                shared.vape.Modules[moduleName] = module
+                                shared.vape.Modules[moduleName:gsub("%s+", "")] = shared.vape.Modules[moduleName:gsub("%s+", "")] or module
+                            end
+                        end
+                        context.RegisterModuleRecord(moduleName, categoryName, "loaded", context.CurrentSource, moduleOptions)
+                    end
+                    return module
                 end
-                return module
             end
         end
+
+        return true
+    end
+
+    local hooksOk, hooksError = context.InstallModuleRegistrationHooks()
+    if not hooksOk then
+        fail("Failed to install module registration hooks: " .. tostring(hooksError))
     end
 
     local profileKey = tostring(game.GameId or "universal") .. "_" .. tostring(game.PlaceId or "place")
@@ -356,6 +379,31 @@ return function(startup)
         warnf("custom_modules.luau is unavailable or failed: %s", tostring(customResult))
     else
         warn("[AetherCore] Custom modules loaded")
+    end
+
+    function context.SynchronizeExistingModules()
+        if type(shared) ~= "table" or type(shared.vape) ~= "table" then
+            return 0
+        end
+        local modules = type(shared.vape.Modules) == "table" and shared.vape.Modules or {}
+        shared.vape.Modules = modules
+        local synchronized = 0
+
+        for moduleName, module in pairs(modules) do
+            if type(module) == "table" and type(moduleName) == "string" and moduleName ~= "" then
+                module.Name = module.Name or moduleName
+                modules[module.Name] = module
+                modules[module.Name:gsub("%s+", "")] = modules[module.Name:gsub("%s+", "")] or module
+                synchronized = synchronized + 1
+            end
+        end
+
+        return synchronized
+    end
+
+    local synchronizedModules = context.SynchronizeExistingModules()
+    if synchronizedModules > 0 then
+        warnf("Synchronized %s existing module records", tostring(synchronizedModules))
     end
 
     local moduleAssistOk, moduleAssistResult = pcall(function()
