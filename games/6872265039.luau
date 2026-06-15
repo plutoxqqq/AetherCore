@@ -2034,10 +2034,30 @@ run(function()
     local LARPKits
     local active = false
     local connection = nil
-    local DEFAULT_KITS = {"Barbarian", "Builder", "Croupier", "Eldertree", "Ember", "Fisherman", "Golem", "Inferno", "Knight", "Mage", "Melody", "Mineralite", "Ninja", "Ragnar", "Robinhood", "Runner", "Sentinel", "Summoner", "Thor", "Trapper", "Trinity", "Vulture", "Warrior"}
-    local KITS_TO_OWN = {}
 
-    for _, k in ipairs(DEFAULT_KITS) do table.insert(KITS_TO_OWN, k) end
+    local DEFAULT_KITS = {
+        "Abaddon", "Adetunde", "Aery", "Agni", "Alchemist", "Arachne", "Archer", "Ares",
+        "Axolotl Amy", "Baker", "Barbarian", "Beekeeper Beatrix", "Bekzat", "Bounty Hunter",
+        "Builder", "Caitlyn", "Cobalt", "Cogsworth", "Conqueror", "Crocowolf", "Crypt",
+        "Cyber", "Death Adder", "Dino Tamer Dom", "Drill", "Eldertree", "Eldric", "Elektra",
+        "Ember", "Evelynn", "Farmer Cletus", "Fisherman", "Flora", "Fortuna", "Freiya",
+        "Frosty", "Gingerbread Man", "Gompy", "Grim Reaper", "Grove", "Hannah", "Hephaestus",
+        "Ignis", "Infernal Shielder", "Isabel", "Jack", "Jade", "Kaida", "Kaliyah",
+        "Krystal", "Lani", "Lassy", "Lian", "Lucía", "Lumen", "Lyla", "Marcel",
+        "Marina", "Marrow", "Martin", "Melody", "Merchant Marco", "Metal Detector", "Milo",
+        "Miner", "Nahla", "Nazar", "Noelle", "Nyoka", "Nyx", "Pirate Davey", "Pyro",
+        "Ragnar", "Ramil", "Raven", "Santa", "Sheep Herder", "Sheila", "Sigrid", "Silas",
+        "Skoll", "Smoke", "Sophia", "Spirit Catcher", "Star Collector Stella", "Styx", "Taliyah",
+        "Terra", "Trapper", "Trinity", "Triton", "Trixie", "Uma", "Umbra", "Umeko",
+        "Vanessa", "Void Knight", "Void Regent", "Vulcan", "Warden", "Warrior", "Whim",
+        "Whisper", "Wizard", "Wren", "Xu’rot", "Yamini", "Yeti", "Yuzi", "Zarrah",
+        "Zenith", "Zeno", "Zephyr", "Zola"
+    }
+
+    local KITS_TO_OWN = {}
+    for _, kit in ipairs(DEFAULT_KITS) do
+        table.insert(KITS_TO_OWN, kit)
+    end
 
     local function getKitName(btn)
         local tag = btn:FindFirstChild("KitNameTag")
