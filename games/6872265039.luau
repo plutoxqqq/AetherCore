@@ -1,4 +1,9 @@
-local run = function(func) func() end
+local run = function(func)
+	local ok, err = xpcall(func, debug.traceback)
+	if not ok then
+		warn('[AetherCore] Lobby module block failed: ' .. tostring(err))
+	end
+end
 local cloneref = cloneref or function(obj) return obj end
 
 local playersService = cloneref(game:GetService('Players'))
@@ -42,7 +47,7 @@ run(function()
 	local OldGet, OldBreak = Client.Get
 	local function safeGetProto(func, index)
 		if not func then return nil end
-		local success, proto = pcall(safeGetProto, func, index)
+		local success, proto = pcall(debug.getproto, func, index)
 		if success then
 			return proto
 		else
@@ -1443,16 +1448,10 @@ run(function()
     })
 
     SetPlayerLevel:CreateSlider({
-        Name = "Level",
-        Min = 1,
-        Max = 1000,
-        Default = 1,
-        Decimal = 1,
+        Name = "Level", Min = 1, Max = 1000, Default = 1, Decimal = 1,
         Function = function(val)
             customLevel = math.floor(val)
-            if SetPlayerLevel.Enabled then
-                applyLevel()
-            end
+            if SetPlayerLevel.Enabled then applyLevel() end
         end
     })
 end)
@@ -1527,11 +1526,7 @@ run(function()
     local WinstreakSpoofer
     local Wins
     local wsLoop = nil
-
-    local oldSets = {
-        Wins = nil,
-        DoesExist = nil,
-    }
+    local oldSets = {Wins = nil, DoesExist = nil}
 
     local function buildWinCounter(nametag, value)
         local winStreakCounter = nametag:FindFirstChild("WinStreakCounter")
@@ -1545,7 +1540,6 @@ run(function()
             main.LayoutOrder = 3
             main.BorderSizePixel = 0
             main.Parent = nametag
-
             local icon = Instance.new("ImageLabel")
             icon.BackgroundTransparency = 1
             icon.Name = "WinStreakFire"
@@ -1554,7 +1548,6 @@ run(function()
             icon.ScaleType = Enum.ScaleType.Fit
             icon.SizeConstraint = Enum.SizeConstraint.RelativeYY
             icon.Parent = main
-
             local lbl = Instance.new("TextLabel")
             lbl.BackgroundTransparency = 1
             lbl.Name = "WinStreakValue"
@@ -1571,13 +1564,10 @@ run(function()
             lbl.TextXAlignment = Enum.TextXAlignment.Center
             lbl.AnchorPoint = Vector2.new(0.5, 0)
             lbl.Parent = main
-
             oldSets.DoesExist = false
         else
             local lbl = winStreakCounter:FindFirstChild("WinStreakValue")
-            if lbl then
-                lbl.Text = tostring(value)
-            end
+            if lbl then lbl.Text = tostring(value) end
         end
     end
 
@@ -1587,9 +1577,7 @@ run(function()
         if winStreakCounter then
             if oldSets.DoesExist then
                 local lbl = winStreakCounter:FindFirstChild("WinStreakValue")
-                if lbl then
-                    lbl.Text = tostring(oldSets.Wins)
-                end
+                if lbl then lbl.Text = tostring(oldSets.Wins) end
             else
                 winStreakCounter:Destroy()
             end
@@ -1599,18 +1587,18 @@ run(function()
     end
 
     local function getNametag(char)
-        local head = char and char:FindFirstChild("Head")
+        if not char then return nil end
+        local head = char:FindFirstChild("Head")
         if not head then return nil end
         for _ = 1, 20 do
-            local nametag = head:FindFirstChild("Nametag")
-            if nametag then return nametag end
+            local nt = head:FindFirstChild("Nametag")
+            if nt then return nt end
             task.wait(0.1)
         end
         return nil
     end
 
     local function applyToChar(char)
-        if not char then return end
         local nametag = getNametag(char)
         if not nametag then return end
         local existing = nametag:FindFirstChild("WinStreakCounter")
@@ -1630,88 +1618,51 @@ run(function()
         Tooltip = "Modifies/Adds your winstreak (client-sided)",
         Function = function(callback)
             if callback then
-                if lplr.Character then
-                    task.spawn(function()
-                        applyToChar(lplr.Character)
-                    end)
-                end
-                WinstreakSpoofer:Clean(lplr.CharacterAdded:Connect(function(char)
-                    task.spawn(function()
-                        applyToChar(char)
-                    end)
-                end))
+                if lplr.Character then task.spawn(function() applyToChar(lplr.Character) end) end
+                WinstreakSpoofer:Clean(lplr.CharacterAdded:Connect(function(char) task.spawn(function() applyToChar(char) end) end))
                 if wsLoop then task.cancel(wsLoop) end
                 wsLoop = task.spawn(function()
                     while WinstreakSpoofer.Enabled do
                         task.wait(0.1)
                         local nametag = getNametag(lplr.Character)
-                        if nametag then
-                            buildWinCounter(nametag, Wins and Wins.Value or 0)
-                        end
+                        if nametag then buildWinCounter(nametag, Wins and Wins.Value or 0) end
                     end
                 end)
             else
-                if wsLoop then
-                    task.cancel(wsLoop)
-                    wsLoop = nil
-                end
+                if wsLoop then task.cancel(wsLoop); wsLoop = nil end
                 destroyWinCounter(getNametag(lplr.Character))
             end
         end
     })
 
-    Wins = WinstreakSpoofer:CreateSlider({
-        Name = "Wins",
-        Min = 0,
-        Max = 1000,
-        Default = 0,
-        Decimal = 1,
-        Function = function() end
-    })
+    Wins = WinstreakSpoofer:CreateSlider({Name = "Wins", Min = 0, Max = 1000, Default = 0, Decimal = 1, Function = function() end})
 end)
 
 run(function()
     local Headless
     local headlessLoop = nil
-
-    local headAttachments = {
-        HatAttachment = true,
-        HairAttachment = true,
-        FaceFrontAttachment = true,
-        FaceCenterAttachment = true,
-        FaceBackAttachment = true,
-    }
-
     local removeAccs = false
+    local headAttachments = {HatAttachment = true, HairAttachment = true, FaceFrontAttachment = true, FaceCenterAttachment = true, FaceBackAttachment = true}
 
     local function applyHeadless(char)
         if not char then return end
         local head = char:FindFirstChild("Head")
         if not head then return end
-
         head.Transparency = 1
         local face = head:FindFirstChild("face")
-        if face and face:IsA("Decal") then
-            face.Transparency = 1
-        end
-
+        if face and face:IsA("Decal") then face.Transparency = 1 end
         for _, acc in ipairs(char:GetChildren()) do
             if acc:IsA("Accessory") then
                 local handle = acc:FindFirstChild("Handle")
                 if handle then
                     local isHeadAcc = false
                     for _, att in ipairs(handle:GetChildren()) do
-                        if att:IsA("Attachment") and headAttachments[att.Name] then
-                            isHeadAcc = true
-                            break
-                        end
+                        if att:IsA("Attachment") and headAttachments[att.Name] then isHeadAcc = true; break end
                     end
                     if isHeadAcc or removeAccs then
                         handle.Transparency = 1
                         for _, d in ipairs(handle:GetChildren()) do
-                            if d:IsA("Decal") or d:IsA("Texture") then
-                                d.Transparency = 1
-                            end
+                            if d:IsA("Decal") or d:IsA("Texture") then d.Transparency = 1 end
                         end
                     end
                 end
@@ -1725,9 +1676,7 @@ run(function()
         if head then
             head.Transparency = 0
             local face = head:FindFirstChild("face")
-            if face and face:IsA("Decal") then
-                face.Transparency = 0
-            end
+            if face and face:IsA("Decal") then face.Transparency = 0 end
         end
         for _, acc in ipairs(char:GetChildren()) do
             if acc:IsA("Accessory") then
@@ -1735,9 +1684,7 @@ run(function()
                 if handle then
                     handle.Transparency = 0
                     for _, d in ipairs(handle:GetChildren()) do
-                        if d:IsA("Decal") or d:IsA("Texture") then
-                            d.Transparency = 0
-                        end
+                        if d:IsA("Decal") or d:IsA("Texture") then d.Transparency = 0 end
                     end
                 end
             end
@@ -1752,20 +1699,11 @@ run(function()
             if callback then
                 if headlessLoop then task.cancel(headlessLoop) end
                 headlessLoop = task.spawn(function()
-                    while Headless.Enabled do
-                        applyHeadless(lplr.Character)
-                        task.wait(0.05)
-                    end
+                    while Headless.Enabled do applyHeadless(lplr.Character); task.wait(0.05) end
                 end)
-                Headless:Clean(lplr.CharacterAdded:Connect(function(char)
-                    task.wait(0.1)
-                    applyHeadless(char)
-                end))
+                Headless:Clean(lplr.CharacterAdded:Connect(function(char) task.wait(0.1); applyHeadless(char) end))
             else
-                if headlessLoop then
-                    task.cancel(headlessLoop)
-                    headlessLoop = nil
-                end
+                if headlessLoop then task.cancel(headlessLoop); headlessLoop = nil end
                 restoreChar(lplr.Character)
             end
         end,
@@ -1777,9 +1715,7 @@ run(function()
         Default = false,
         Function = function(state)
             removeAccs = state
-            if Headless.Enabled then
-                applyHeadless(lplr.Character)
-            end
+            if Headless.Enabled then applyHeadless(lplr.Character) end
         end
     })
 end)
@@ -2127,9 +2063,7 @@ run(function()
         local tag = btn:FindFirstChild("KitNameTag")
         if not tag then return nil end
         local lbl = tag:FindFirstChild("5") or tag:FindFirstChild("4")
-        if lbl and lbl:IsA("TextLabel") then
-            return lbl.Text
-        end
+        if lbl and lbl:IsA("TextLabel") then return lbl.Text end
         return nil
     end
 
@@ -2140,10 +2074,7 @@ run(function()
                 local name = getKitName(btn)
                 if name then
                     for _, wantedKit in ipairs(KITS_TO_OWN) do
-                        if string.lower(name) == string.lower(wantedKit) then
-                            btn.Parent = owned
-                            break
-                        end
+                        if string.lower(name) == string.lower(wantedKit) then btn.Parent = owned; break end
                     end
                 end
             end
@@ -2151,43 +2082,30 @@ run(function()
     end
 
     local function applyKits()
-        local pg = game.Players.LocalPlayer:FindFirstChild("PlayerGui")
+        local pg = lplr:FindFirstChild("PlayerGui")
         if not pg then return end
         local app = pg:FindFirstChild("KitShopApp")
         if not app then return end
         local list = app:FindFirstChild("LobbyKitShopItemList", true)
         if not list then return end
-        local notOwned = list:FindFirstChild("NotUnlockedKits")
-        local owned = list:FindFirstChild("UnlockedKits")
-        moveOwnedKits(notOwned, owned)
+        moveOwnedKits(list:FindFirstChild("NotUnlockedKits"), list:FindFirstChild("UnlockedKits"))
     end
 
     local function startAutoMove()
         if connection then return end
-        connection = game:GetService("RunService").Stepped:Connect(function()
-            if not active then return end
-            applyKits()
-        end)
+        connection = runService.Stepped:Connect(function() if active then applyKits() end end)
     end
 
     local function stopAutoMove()
-        if connection then
-            connection:Disconnect()
-            connection = nil
-        end
+        if connection then connection:Disconnect(); connection = nil end
     end
 
     LARPKits = vape.Categories.Minigames:CreateModule({
         Name = "LARPKits",
-        Tooltip = "Shows selected kits as owned in the kit shop (client-sided)",
+        Tooltip = "Shows selected kits as owned client-sided",
         Function = function(callback)
             active = callback
-            if callback then
-                startAutoMove()
-                applyKits()
-            else
-                stopAutoMove()
-            end
+            if callback then startAutoMove(); applyKits() else stopAutoMove() end
         end
     })
 
@@ -2198,13 +2116,9 @@ run(function()
         Function = function(list)
             KITS_TO_OWN = {}
             for _, name in ipairs(list) do
-                if name and name ~= "" then
-                    table.insert(KITS_TO_OWN, name)
-                end
+                if name and name ~= "" then table.insert(KITS_TO_OWN, name) end
             end
-            if active then
-                applyKits()
-            end
+            if active then applyKits() end
         end
     })
 end)
