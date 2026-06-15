@@ -5,12 +5,16 @@ end
 local cloneref = cloneref or function(obj)
 	return obj
 end
-local vapeEvents = setmetatable({}, {
+local vapeEvents = setmetatable({
+	EntityDamageEvent = Instance.new('BindableEvent')
+}, {
 	__index = function(self, index)
 		self[index] = Instance.new('BindableEvent')
 		return self[index]
 	end
 })
+shared.bindable = Instance.new('BindableEvent')
+getgenv().vapeEvents = vapeEvents
 
 local playersService = cloneref(game:GetService('Players'))
 local replicatedStorage = cloneref(game:GetService('ReplicatedStorage'))
@@ -772,6 +776,7 @@ run(function()
 	end
 end)
 
+local CheatersFlagged = {}
 run(function()
 	local KnitInit, Knit
 	repeat
@@ -1310,7 +1315,7 @@ run(function()
 	end
 
 	vape:Clean(bedwars.ZapNetworking.EntityDamageEventZap.On(function(...)
-		vapeEvents.EntityDamageEvent:Fire({
+		local a = {
 			entityInstance = ...,
 			damage = select(2, ...),
 			damageType = select(3, ...),
@@ -1319,7 +1324,9 @@ run(function()
 			knockbackMultiplier = select(6, ...),
 			knockbackId = select(7, ...),
 			disableDamageHighlight = select(13, ...)
-		})
+		}
+		shared.bindable:Fire(a)
+		vapeEvents.EntityDamageEvent:Fire(a)
 	end))
 	
 	vape:Clean(workspace.ChildAdded:Connect(function(projectile)
@@ -1376,6 +1383,16 @@ run(function()
 	local beds = sessioninfo:AddItem('Beds')
 	local wins = sessioninfo:AddItem('Wins')
 	local games = sessioninfo:AddItem('Games')
+	sessioninfo:AddItem('Cheater List', '', function()
+		local text = ''
+		for _, plr in playersService:GetPlayers() do
+			if CheatersFlagged[plr] then
+				text = text..'\n'..(plr.DisplayName ~= plr.Name and plr.DisplayName..' ('..plr.Name..')' or plr.Name)
+			end
+		end
+
+		return text
+	end, false)
 
 	local mapname = 'Unknown'
 	sessioninfo:AddItem('Map', 0, function()
@@ -1490,6 +1507,7 @@ run(function()
 		Client.Get = OldGet
 		bedwars.BlockController.isBlockBreakable = OldBreak
 		store.blockPlacer:disable()
+		shared.bindable:Destroy()
 		for _, v in vapeEvents do
 			v:Destroy()
 		end
@@ -3762,71 +3780,6 @@ run(function()
 end)
 
 run(function()
-    local InfiniteFly
-    local HiddenPart = Instance.new('Part')
-    HiddenPart.Parent = workspace
-    HiddenPart.Transparency = 1
-    HiddenPart.CanQuery = false
-    HiddenPart.CanTouch = false
-    HiddenPart.CanCollide = false
-    HiddenPart.Anchored = true
-    
-    local oldTransparency = {}
-    local function doCharacterThing()
-        if entitylib.isAlive then
-            for _, v in entitylib.character.Character:QueryDescendants('BasePart') do
-                oldTransparency[v] = v.Transparency
-                v.Transparency = 1
-            end
-        end
-    end
-    
-    local function revertCharacter()
-        if entitylib.isAlive then
-            for _, v in entitylib.character.Character:QueryDescendants('BasePart') do
-                v.Transparency = oldTransparency[v]
-            end
-        end
-    end
-    
-    InfiniteFly = vape.Categories.Blatant:CreateModule({
-        Name = 'Infinite Fly',
-        Function = function(callback)
-            gameCamera.CameraSubject = callback and HiddenPart or entitylib.character.Character
-            if callback then
-                doCharacterThing()
-                HiddenPart.CFrame = entitylib.character.Character.Head.CFrame
-                entitylib.character.RootPart.CFrame = CFrame.new(Vector3.new(entitylib.character.RootPart.CFrame.X, 210, entitylib.character.RootPart.CFrame.Z))
-                InfiniteFly:Clean(runService.RenderStepped:Connect(function(dt)
-                    if not entitylib.isAlive then
-                        return
-                    end
-    
-                    HiddenPart.CFrame = CFrame.new(Vector3.new(entitylib.character.RootPart.Position.X, HiddenPart.CFrame.Y, entitylib.character.RootPart.Position.Z))
-    
-                    if entitylib.character.RootPart.CFrame.Y < -75 then
-                        bedwars.Client:Get('GroundHit'):SendToServer(nil, Vector3.new(0, entitylib.character.RootPart.Velocity.Y, 0), workspace:GetServerTimeNow())
-                        entitylib.character.RootPart.CFrame = CFrame.new(Vector3.new(entitylib.character.RootPart.CFrame.X, 210, entitylib.character.RootPart.CFrame.Z))
-                    else
-                        local ray = workspace:Raycast(entitylib.character.RootPart.Position + Vector3.new(0, 20, 0), Vector3.new(0, -1000, 0), store.airRay)
-                        if ray then
-                            entitylib.character.RootPart.Velocity = Vector3.zero
-                            entitylib.character.RootPart.CFrame = CFrame.new(Vector3.new(entitylib.character.RootPart.CFrame.X, ray.Position.Y + 2.7, entitylib.character.RootPart.CFrame.Z))
-                        end
-                    end
-                end))
-            else
-                revertCharacter()
-            end
-        end,
-        Tooltip = 'Makes you go zoom',
-        ExtraText = function()
-            return 'Heatseeker'
-        end
-    })
-end)
-
-run(function()
     local InfiniteShield
     
     InfiniteShield = vape.Categories.Blatant:CreateModule({
@@ -3834,7 +3787,7 @@ run(function()
         Function = function(callback)
             if callback then
                 repeat
-                    bedwars.Client:Get('PlayerEatCake'):SendToServer({block = replicatedStorage.Items.cake_one})
+                    bedwars.Client:Get('PlayerEatCake'):SendToServer({block = lplr})
                     task.wait(0.1)
                 until not InfiniteShield.Enabled
             end
@@ -3918,7 +3871,7 @@ run(function()
     	for _, item in store.inventory.inventory.items do
     		local proj = bedwars.ItemMeta[item.itemType].projectileSource
     		local ammo = proj and getAmmo(proj)
-    		if ammo and table.find(Whitelist.ListEnabled, ammo) then
+    		if ammo and (table.find(Whitelist.ListEnabled, ammo) or table.find(Whitelist.ListEnabled, item.itemType)) then
     			table.insert(items, {
     				item,
     				ammo,
@@ -3938,11 +3891,7 @@ run(function()
             if not entitylib.isAlive then return false end
             if (lplr.Character:GetAttribute('StunnedUntilTime') or 0) > workspace:GetServerTimeNow() then return false end
             if lplr.Character:FindFirstChild('elk') then return false end
-            for _, v in bedwars.StatusEffectUtil:getAllActive(lplr.Character) do
-                if v.statusEffect == 'frozen' then
-                    return false
-                end
-            end -- lowkey just pasted this from my potionstatus, i remember a better way to do this but im too lazy to figure it out
+            if bedwars.StatusEffectUtil:isActive(lplr.Character, 'frozen') then return false end
         end
     
         if GUI.Enabled then
@@ -3964,6 +3913,13 @@ run(function()
         return sword, meta
     end
     
+    local part = Instance.new('Part')
+    part.Anchored = true
+    part.CanCollide = false
+    part.Size = Vector3.one
+    part.Parent = workspace
+    vape:Clean(part)
+    
     Killaura = vape.Categories.Blatant:CreateModule({
         Name = 'Killaura',
         Function = function(callback)
@@ -3983,7 +3939,7 @@ run(function()
                             }
                         }
                     }
-                    debug.setupvalue(oldSwing or bedwars.SwordController.playSwordEffect, 7, fake)
+                    debug.setupvalue(bedwars.SwordController.playSwordEffect, 7, fake)
                     debug.setupvalue(bedwars.ScytheController.playLocalAnimation, 3, fake)
     
                     task.spawn(function()
@@ -4088,7 +4044,7 @@ run(function()
     
                                 local actualRoot = v.Character.PrimaryPart
                                 if actualRoot and (not Sync.Enabled or (tick() - swingCooldown >= SwingTime.Value)) and (v.Humanoid.FloorMaterial ~= Enum.Material.Air or math.random(1, 100) < AirChance.Value) then
-                                    if UpdateRate.Value >= 240 or (tick() - lastHit) >= (1 / UpdateRate.Value) then
+                                    if UpdateRate.Value >= 120 or (tick() - lastHit) >= (1 / UpdateRate.Value) then
                                         lastHit = tick()
     
                                         local dir = CFrame.lookAt(selfpos, actualRoot.Position).LookVector
@@ -4097,7 +4053,7 @@ run(function()
                                         store.attackReach = (delta.Magnitude * 100) // 1 / 100
                                         store.attackReachUpdate = tick() + 1
                                         swingCooldown = tick()
-    
+                                        
                                         AttackRemote:FireServer({
                                             weapon = sword.tool,
                                             chargedAttack = {chargeRatio = 0},
@@ -4107,7 +4063,7 @@ run(function()
                                                     cameraPosition = {value = pos},
                                                     cursorDirection = {value = dir}
                                                 },
-                                                targetPosition = {value = Vector3.new(actualRoot.Position.X + (Vector3.new(selfpos.X - actualRoot.Position.X, 0, selfpos.Z - actualRoot.Position.Z)).Unit.X * (actualRoot.Parent:GetExtentsSize().X / 2), math.clamp(selfpos.Y, actualRoot.Position.Y - actualRoot.Parent:GetExtentsSize().Y / 2, actualRoot.Position.Y + actualRoot.Parent:GetExtentsSize().Y / 2), actualRoot.Position.Z + (Vector3.new(selfpos.X - actualRoot.Position.X, 0, selfpos.Z - actualRoot.Position.Z)).Unit.Z * (actualRoot.Parent:GetExtentsSize().Z / 2))},
+                                                targetPosition = {value = actualRoot.Position + vape.Libraries.calculatePosition(selfpos, actualRoot)},
                                                 selfPosition = {value = pos}
                                             }
                                         })
@@ -4166,12 +4122,12 @@ run(function()
                                                         end
                                                         lastShot = tick() + (lplr:GetNetworkPing() + FireRate.Value)
                                                     end
+                                                    if oldtool then
+                                                        switchItem(oldtool)
+                                                    end
                                                     task.spawn(function()
                                                         if Legit.Enabled then
                                                             hotbarSwitch(oldhotbar)
-                                                            if oldtool then
-                                                                switchItem(oldtool.tool)
-                                                            end
                                                         end
                                                     end)
                                                 end
@@ -4244,11 +4200,6 @@ run(function()
                 end
                 for _, v in Particles do
                     v.Parent = nil
-                end
-                if inputService.TouchEnabled then
-                    pcall(function()
-                        lplr.PlayerGui.MobileUI['2'].Visible = true
-                    end)
                 end
                 debug.setupvalue(oldSwing or bedwars.SwordController.playSwordEffect, 7, bedwars.Knit)
                 debug.setupvalue(bedwars.ScytheController.playLocalAnimation, 3, bedwars.Knit)
@@ -4330,18 +4281,11 @@ run(function()
         Darker = true,
         Tooltip = 'Syncs the swing time with hitreg'
     })]]
-    --[[Hitreg = Killaura:CreateSlider({
-        Name = 'Hitreg',
-        Min = 1,
-        Max = 36,
-        Default = 36,
-        Suffix = 'reg'
-    })]]
     UpdateRate = Killaura:CreateSlider({
         Name = 'Update rate',
         Min = 1,
         Max = 120,
-        Default = 120,
+        Default = 60,
         Suffix = 'hz'
     })
     FastHits = Killaura:CreateToggle({
@@ -5393,21 +5337,32 @@ run(function()
     	return items
     end
     
+    local function getTarget()
+    	local plrs = entitylib.AllPosition({
+    		Part = 'RootPart',
+    		Range = Range.Value,
+    		Sort = sortmethods[Sort.Value],
+    		Players = Targets.Players.Enabled,
+    		NPCs = Targets.NPCs.Enabled,
+    		Limit = 10
+    	})
+    	if #plrs > 0 then
+    		for _, v in plrs do
+    			if not Targets.Walls.Enabled or not entitylib.Wallcheck(entitylib.character.Head.Position, v.RootPart.Position, {gameCamera, lplr.Character, v.Character}) then
+    				return v
+    			end
+    		end
+    	end
+    	return nil
+    end
+    
     ProjectileAura = vape.Categories.Blatant:CreateModule({
     	Name = 'Projectile Aura',
     	Function = function(callback)
     		if callback then
     			repeat
     				if (workspace:GetServerTimeNow() - bedwars.SwordController.lastAttack) > 0.5 then
-    					local ent = entitylib.EntityPosition({
-    						Part = 'RootPart',
-    						Range = Range.Value,
-    						Sort = sortmethods[Sort.Value],
-    						Players = Targets.Players.Enabled,
-    						NPCs = Targets.NPCs.Enabled,
-    						Wallcheck = Targets.Walls.Enabled,
-    					})
-    
+    					local ent = getTarget()
     					if ent then
     						local pos = entitylib.character.RootPart.Position
     						for _, data in getProjectiles() do
@@ -5416,27 +5371,18 @@ run(function()
     								rayCheck.FilterDescendantsInstances = { workspace.Map }
     								local meta = bedwars.ProjectileMeta[projectile]
     								local projSpeed, gravity = meta.launchVelocity, meta.gravitationalAcceleration or 196.2
-    								local calc = prediction.SolveTrajectory(pos, projSpeed, gravity, ent.RootPart.Position + (ent.Humanoid.MoveDirection or Vector3.zero), ent.RootPart.Velocity, workspace.Gravity, ent.HipHeight + 2, ent.Jumping and 42.6 or nil, rayCheck)
-    								if calc then
-    									targetinfo.Targets[ent] = tick() + 1
-    									local switched = switchItem(item.tool)
     
-    									local v = ent.RootPart.AssemblyLinearVelocity
-    									local s = v:Lerp(ent.RootPart.AssemblyLinearVelocity, 0.5)
-    									pos = entitylib.character.RootPart.Position
-    									local ps = math.min(lplr:GetNetworkPing(), 0.5)
-    									local tpos = ent.RootPart.Position
-    									if ps > 0.06 then
-    										tpos = tpos + (v * ps)
-    									end
-    									calc = prediction.SolveTrajectory(pos, projSpeed, gravity, tpos, s, workspace.Gravity, ent.HipHeight + 2, ent.Jumping and 42.6 or nil, rayCheck)
-    									if not calc then
-                                            task.wait()
-    										continue
-    									end
+    								targetinfo.Targets[ent] = tick() + 1
+    								local switched = switchItem(item.tool)
+    								local ps = lplr:GetNetworkPing()
+    								local targetpos = ent.RootPart.Position
+    								if ps > 0.2 then
+    									targetpos = targetpos + (ent.RootPart.AssemblyLinearVelocity * ps)
+    								end
+    								local calc = prediction.SolveTrajectory(pos, projSpeed, gravity, targetpos, ent.RootPart.AssemblyLinearVelocity, workspace.Gravity, ent.HipHeight + 2, ent.Jumping and 42.6 or nil, rayCheck)
+    								if calc then
     									task.spawn(function()
-    										local dir, id =
-    											CFrame.lookAt(pos, calc).LookVector, httpService:GenerateGUID(true)
+    										local dir, id = CFrame.lookAt(pos, calc).LookVector, httpService:GenerateGUID(true)
     										local shootPosition = (CFrame.new(pos, calc) * CFrame.new(Vector3.new(-bedwars.BowConstantsTable.RelX, -bedwars.BowConstantsTable.RelY, -bedwars.BowConstantsTable.RelZ))).Position
     										projectileCooldown = 9e9
     										local _, res = pcall(function() return projectileRemote:InvokeServer(
@@ -5448,9 +5394,9 @@ run(function()
     											dir * projSpeed,
     											id,
     											{ 
-                                                    drawDurationSeconds = 1, 
-                                                    shotId = httpService:GenerateGUID(false) 
-                                                },
+    												drawDurationSeconds = 1, 
+    												shotId = httpService:GenerateGUID(false) 
+    											},
     											workspace:GetServerTimeNow() - 0.045
     										) end)
     										projectileCooldown = tick()
@@ -9045,7 +8991,7 @@ run(function()
     	for _, item in store.inventory.inventory.items do
     		local proj = bedwars.ItemMeta[item.itemType].projectileSource
     		local ammo = proj and getAmmo(proj)
-    		if ammo and table.find(Projectiles.ListEnabled, ammo) then
+    		if ammo and (table.find(Projectiles.ListEnabled, ammo) or table.find(Projectiles.ListEnabled, item.itemType)) then
     			table.insert(items, {
     				item,
     				ammo,
@@ -9458,6 +9404,117 @@ run(function()
             end
         end,
     })
+end)
+
+run(function()
+    local CheatDetector
+    
+    local function Added(player, reason)
+        if not CheatersFlagged[player] then
+            CheatersFlagged[player] = true
+            whitelist.customtags[player.Name] = {{ text = 'CHEATER', color = Color3.new(1, 0, 0)}}
+            notif('CheatDetector', `{player.Name} flagged for {reason:lower()}ing`, 10, 'info')
+        end
+    end
+    local function checkPoint(pos, params)
+        for _, v in workspace:GetPartBoundsInRadius(pos, 0, params) do
+            if v.CanCollide and (v:GetClosestPointOnSurface(pos) - pos).Magnitude <= 0 then
+                return false
+            end
+        end
+    
+        return true
+    end
+    
+    local overlap = OverlapParams.new()
+    overlap.FilterDescendantsInstances = {workspace.Map}
+    overlap.FilterType = Enum.RaycastFilterType.Include
+    
+    local Checks = {
+        Killaura = function()
+            local AttackData = {}
+            local Strikes = {}
+    
+            CheatDetector:Clean(shared.bindable.Event:Connect(function(damageTable)
+                if damageTable.damageType == 0 and damageTable.fromEntity then
+                    local from = playersService:GetPlayerFromCharacter(damageTable.fromEntity)
+    
+                    if from and from ~= lplr then
+                        local lastHit = (os.clock() - (AttackData[from] or 0))
+                        if lastHit <= 0.28 then
+                            Strikes[from] = (Strikes[from] or 0) + 1
+    
+                            task.delay(60, function()
+                                pcall(function()
+                                    Strikes[from] -= 1
+                                end)
+                            end)
+    
+                            if Strikes[from] > 2 then
+                                Added(from, 'Killaura')
+                            end
+                        end
+    
+                        AttackData[from] = os.clock()
+                    end
+                end
+            end))
+        end,
+        Reach = function()
+            CheatDetector:Clean(shared.bindable.Event:Connect(function(damageTable)
+                if damageTable.damageType == 0 and damageTable.fromEntity then
+                    local magnitude = (damageTable.fromEntity.PrimaryPart.Position - damageTable.entityInstance.PrimaryPart.Position).Magnitude
+                    if magnitude > (18 + lplr:GetNetworkPing()) then
+                        local player = playersService:GetPlayerFromCharacter(damageTable.fromEntity)
+                        if player and player ~= lplr then
+                            Added(player, 'Reach')
+                        end
+                    end
+                end
+            end))
+        end,
+        Invisible = function() end,
+        HighJump = function() end,
+        Phase = function() end
+    }
+    
+    CheatDetector = vape.Categories.Utility:CreateModule({
+        Name = 'Cheat Detector',
+        Function = function(callback)
+            if callback then
+                for i, v in Checks do
+                    if CheatDetector.Options and CheatDetector.Options[i].Enabled then
+                        task.spawn(v)
+                    end
+                end
+    
+                repeat
+                    for _, v in entitylib.List do
+                        if v.Player and v.Player ~= lplr and v.Health > 0 and not CheatersFlagged[v.Player] then
+                            if CheatDetector.Options.Invisible.Enabled and (v.RootPart.Position - v.Head.Position).Magnitude > 5 then
+                                Added(v.Player, 'Invisible')
+                            end
+                            if CheatDetector.Options.HighJump.Enabled and v.RootPart.AssemblyLinearVelocity.Y > 80 then
+                                Added(v.Player, 'HighJump')
+                            end
+                            if CheatDetector.Options.Phase.Enabled and not checkPoint(v.Head.Position, overlap) then
+                                Added(v.Player, 'Phas')
+                            end
+                        end
+                    end
+                    task.wait(0.1)
+                until not CheatDetector.Enabled
+            end
+        end,
+        Tooltip = 'Alerts for any possible cheaters.'
+    })
+    
+    for i in Checks do
+        CheatDetector:CreateToggle({
+            Name = i,
+            Default = true
+        })
+    end
 end)
 
 run(function()
@@ -10160,7 +10217,7 @@ end)
 
 run(function()
     TrapDisabler = vape.Categories.Utility:CreateModule({
-        Name = 'TrapDisabler',
+        Name = 'Trap Disabler',
         Tooltip = 'Disables Snap Traps'
     })
 end)
@@ -10896,10 +10953,8 @@ run(function()
     
             for _, v in chestitems do
                 if v:IsA('Accessory') then
-                    task.spawn(function()
-                        pcall(function()
-                            bedwars.Client:GetNamespace('Inventory'):Get('ChestGetItem'):CallServer(chest, v)
-                        end)
+                    task.spawn(pcall, function()
+                        bedwars.Client:GetNamespace('Inventory'):Get('ChestGetItem'):CallServer(chest, v)
                     end)
                 end
             end
@@ -17558,4 +17613,4 @@ run(function()
         Name = 'Effects',
         List = WinEffectName
     })
-end)end)
+end)
