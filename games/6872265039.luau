@@ -1420,12 +1420,20 @@ run(function()
     local originalLevel = nil
     local customLevel = 1
 
+    local function applyLevel()
+        lplr:SetAttribute("PlayerLevel", customLevel)
+    end
+
     SetPlayerLevel = vape.Categories.Render:CreateModule({
         Name = "SetPlayerLevel",
         Function = function(state)
             if state then
                 originalLevel = lplr:GetAttribute("PlayerLevel")
-                lplr:SetAttribute("PlayerLevel", customLevel)
+                applyLevel()
+                SetPlayerLevel:Clean(lplr.CharacterAdded:Connect(function()
+                    task.wait(0.1)
+                    applyLevel()
+                end))
             else
                 lplr:SetAttribute("PlayerLevel", originalLevel)
                 originalLevel = nil
@@ -1443,7 +1451,7 @@ run(function()
         Function = function(val)
             customLevel = math.floor(val)
             if SetPlayerLevel.Enabled then
-                lplr:SetAttribute("PlayerLevel", customLevel)
+                applyLevel()
             end
         end
     })
@@ -1518,75 +1526,136 @@ end)
 run(function()
     local WinstreakSpoofer
     local Wins
+    local wsLoop = nil
 
     local oldSets = {
         Wins = nil,
         DoesExist = nil,
     }
 
-    WinstreakSpoofer = vape.Categories.Minigames:CreateModule({
-        Name = 'WinstreakSpoofer',
-        Tooltip = 'Modifies/Adds your winstreak (client‑sided)',
-        Function = function(callback)
-            if callback then
-                if not entitylib.isAlive then return end
-                if lplr.Character.Head.Nametag then
-                    local winStreakCounter = lplr.Character.Head.Nametag:FindFirstChild("WinStreakCounter")
-                    if not winStreakCounter then
-                        local main = Instance.new('Frame')
-                        main.AnchorPoint = Vector2.new(1, 0.5)
-                        main.Name = 'WinStreakCounter'
-                        main.Size = UDim2.new(0.100000001, 0, 0.75, 0)
-                        main.Position = UDim2.new(1.04999995, 0, 0.600000024, 0)
-                        main.BackgroundTransparency = 1
-                        main.Parent = lplr.Character.Head.Nametag
-						main.LayoutOrder = 3
-						main.BorderSizePixel =0
-                        local icon = Instance.new('ImageLabel')
-                        icon.BackgroundTransparency = 1
-                        icon.Name = 'WinStreakFire'
-                        icon.Size = UDim2.fromScale(1, 1)
-                        icon.Image = 'rbxassetid://7101948108'
-                        icon.ScaleType = Enum.ScaleType.Fit
-						icon.SizeConstraint = Enum.SizeConstraint.RelativeYY
-                        icon.Parent = main
-                        local value = Instance.new("TextLabel")
-                        value.BackgroundTransparency = 1
-                        value.Name = 'WinStreakValue'
-                        value.Position = UDim2.fromScale(0.5, 0.375)
-                        value.Size = UDim2.fromScale(0.8, 0.9)
-                        value.FontFace = Font.new("Roboto", Enum.FontWeight.Bold)
-                        value.TextSize = 8
-                        oldSets.Wins = 0
-                        value.Text = tostring(Wins.Value)
-                        value.TextColor3 = Color3.fromRGB(255, 255, 255)
-                        value.TextScaled = true
-                        value.TextStrokeTransparency = 0.5
-                        value.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                        value.Parent = main
-						value.AutoLocalize = false
-						value.TextXAlignment = Enum.TextXAlignment.Center
-						value.AnchorPoint = Vector2.new(0.5,0)
-                        oldSets.DoesExist = false
-                    else
-                        oldSets.DoesExist = true
-                        oldSets.Wins = winStreakCounter.WinStreakValue.Text
-                        winStreakCounter.WinStreakValue.Text = tostring(Wins.Value)
-                    end
+    local function buildWinCounter(nametag, value)
+        local winStreakCounter = nametag:FindFirstChild("WinStreakCounter")
+        if not winStreakCounter then
+            local main = Instance.new("Frame")
+            main.AnchorPoint = Vector2.new(1, 0.5)
+            main.Name = "WinStreakCounter"
+            main.Size = UDim2.new(0.1, 0, 0.75, 0)
+            main.Position = UDim2.new(1.05, 0, 0.6, 0)
+            main.BackgroundTransparency = 1
+            main.LayoutOrder = 3
+            main.BorderSizePixel = 0
+            main.Parent = nametag
+
+            local icon = Instance.new("ImageLabel")
+            icon.BackgroundTransparency = 1
+            icon.Name = "WinStreakFire"
+            icon.Size = UDim2.fromScale(1, 1)
+            icon.Image = "rbxassetid://7101948108"
+            icon.ScaleType = Enum.ScaleType.Fit
+            icon.SizeConstraint = Enum.SizeConstraint.RelativeYY
+            icon.Parent = main
+
+            local lbl = Instance.new("TextLabel")
+            lbl.BackgroundTransparency = 1
+            lbl.Name = "WinStreakValue"
+            lbl.Position = UDim2.fromScale(0.5, 0.375)
+            lbl.Size = UDim2.fromScale(0.8, 0.9)
+            lbl.FontFace = Font.new("Roboto", Enum.FontWeight.Bold)
+            lbl.TextSize = 8
+            lbl.Text = tostring(value)
+            lbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+            lbl.TextScaled = true
+            lbl.TextStrokeTransparency = 0.5
+            lbl.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+            lbl.AutoLocalize = false
+            lbl.TextXAlignment = Enum.TextXAlignment.Center
+            lbl.AnchorPoint = Vector2.new(0.5, 0)
+            lbl.Parent = main
+
+            oldSets.DoesExist = false
+        else
+            local lbl = winStreakCounter:FindFirstChild("WinStreakValue")
+            if lbl then
+                lbl.Text = tostring(value)
+            end
+        end
+    end
+
+    local function destroyWinCounter(nametag)
+        if not nametag then return end
+        local winStreakCounter = nametag:FindFirstChild("WinStreakCounter")
+        if winStreakCounter then
+            if oldSets.DoesExist then
+                local lbl = winStreakCounter:FindFirstChild("WinStreakValue")
+                if lbl then
+                    lbl.Text = tostring(oldSets.Wins)
                 end
             else
-                if lplr.Character.Head.Nametag then
-                    local winStreakCounter = lplr.Character.Head.Nametag:FindFirstChild("WinStreakCounter")
-                    if winStreakCounter then
-                        if oldSets.DoesExist then
-                            winStreakCounter.WinStreakValue.Text = oldSets.Wins
-                        else
-                            winStreakCounter:Destroy()
+                winStreakCounter:Destroy()
+            end
+        end
+        oldSets.Wins = nil
+        oldSets.DoesExist = nil
+    end
+
+    local function getNametag(char)
+        local head = char and char:FindFirstChild("Head")
+        if not head then return nil end
+        for _ = 1, 20 do
+            local nametag = head:FindFirstChild("Nametag")
+            if nametag then return nametag end
+            task.wait(0.1)
+        end
+        return nil
+    end
+
+    local function applyToChar(char)
+        if not char then return end
+        local nametag = getNametag(char)
+        if not nametag then return end
+        local existing = nametag:FindFirstChild("WinStreakCounter")
+        if existing then
+            oldSets.DoesExist = true
+            local lbl = existing:FindFirstChild("WinStreakValue")
+            oldSets.Wins = lbl and lbl.Text or 0
+        else
+            oldSets.DoesExist = false
+            oldSets.Wins = 0
+        end
+        buildWinCounter(nametag, Wins and Wins.Value or 0)
+    end
+
+    WinstreakSpoofer = vape.Categories.Minigames:CreateModule({
+        Name = "WinstreakSpoofer",
+        Tooltip = "Modifies/Adds your winstreak (client-sided)",
+        Function = function(callback)
+            if callback then
+                if lplr.Character then
+                    task.spawn(function()
+                        applyToChar(lplr.Character)
+                    end)
+                end
+                WinstreakSpoofer:Clean(lplr.CharacterAdded:Connect(function(char)
+                    task.spawn(function()
+                        applyToChar(char)
+                    end)
+                end))
+                if wsLoop then task.cancel(wsLoop) end
+                wsLoop = task.spawn(function()
+                    while WinstreakSpoofer.Enabled do
+                        task.wait(0.1)
+                        local nametag = getNametag(lplr.Character)
+                        if nametag then
+                            buildWinCounter(nametag, Wins and Wins.Value or 0)
                         end
                     end
+                end)
+            else
+                if wsLoop then
+                    task.cancel(wsLoop)
+                    wsLoop = nil
                 end
-                oldSets.Wins = nil
-                oldSets.DoesExist = nil
+                destroyWinCounter(getNametag(lplr.Character))
             end
         end
     })
@@ -1597,149 +1666,122 @@ run(function()
         Max = 1000,
         Default = 0,
         Decimal = 1,
-        Function = function(val)
-            if WinstreakSpoofer.Enabled then
-                if lplr.Character.Head.Nametag then
-                    local winStreakCounter = lplr.Character.Head.Nametag:FindFirstChild("WinStreakCounter")
-	                if not winStreakCounter then
-                        local main = Instance.new('Frame')
-                        main.AnchorPoint = Vector2.new(1, 0.5)
-                        main.Name = 'WinStreakCounter'
-                        main.Size = UDim2.new(0.100000001, 0, 0.75, 0)
-                        main.Position = UDim2.new(1.04999995, 0, 0.600000024, 0)
-                        main.BackgroundTransparency = 1
-                        main.Parent = lplr.Character.Head.Nametag
-						main.LayoutOrder = 3
-						main.BorderSizePixel =0
-                        local icon = Instance.new('ImageLabel')
-                        icon.BackgroundTransparency = 1
-                        icon.Name = 'WinStreakFire'
-                        icon.Size = UDim2.fromScale(1, 1)
-                        icon.Image = 'rbxassetid://7101948108'
-                        icon.ScaleType = Enum.ScaleType.Fit
-						icon.SizeConstraint = Enum.SizeConstraint.RelativeYY
-                        icon.Parent = main
-                        local value = Instance.new("TextLabel")
-                        value.BackgroundTransparency = 1
-                        value.Name = 'WinStreakValue'
-                        value.Position = UDim2.fromScale(0.5, 0.375)
-                        value.Size = UDim2.fromScale(0.8, 0.9)
-                        value.FontFace = Font.new("Roboto", Enum.FontWeight.Bold)
-                        value.TextSize = 8
-                        oldSets.Wins = 0
-                        value.Text = tostring(Wins.Value)
-                        value.TextColor3 = Color3.fromRGB(255, 255, 255)
-                        value.TextScaled = true
-                        value.TextStrokeTransparency = 0.5
-                        value.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
-                        value.Parent = main
-						value.AutoLocalize = false
-						value.TextXAlignment = Enum.TextXAlignment.Center
-						value.AnchorPoint = Vector2.new(0.5,0)
-                        oldSets.DoesExist = false
-                    else
-                        winStreakCounter.WinStreakValue.Text = tostring(val)
-                    end
-                end
-            end
-        end
+        Function = function() end
     })
 end)
 
 run(function()
-	local Headless
-	local headlessLoop = nil
+    local Headless
+    local headlessLoop = nil
 
-	local headAttachments = {HatAttachment=true,HairAttachment=true,FaceFrontAttachment=true,FaceCenterAttachment=true,FaceBackAttachment=true}
-	local removeAccs = false
+    local headAttachments = {
+        HatAttachment = true,
+        HairAttachment = true,
+        FaceFrontAttachment = true,
+        FaceCenterAttachment = true,
+        FaceBackAttachment = true,
+    }
 
-	local function applyHeadless(char)
-		if not char then return end
-		local head = char:FindFirstChild("Head")
-		if not head then return end
-		head.Transparency = 1
-		local face = head:FindFirstChild('face')
-		if face and face:IsA("Decal") then
-			face.Transparency = 1
-		end
-		if removeAccs then
-			for _, acc in ipairs(char:GetChildren()) do
-				if acc:IsA("Accessory") then
-					local handle = acc:FindFirstChild("Handle")
-					if handle then
-						for _, att in ipairs(handle:GetChildren()) do
-							if att:IsA("Attachment") and headAttachments[att.Name] then
-								handle.Transparency = 1
-								for _, d in ipairs(handle:GetChildren()) do
-									if d:IsA("Decal") or d:IsA("Texture") then d.Transparency = 1 end
-								end
-								break
-							end
-						end
-					end
-				end
-			end
-		end
-	end
+    local removeAccs = false
 
-	Headless = vape.Categories.Utility:CreateModule({
-		PerformanceModeBlacklisted = true,
-		Name = 'Headless',
-		Tooltip = 'free headless 2026',
-		Function = function(callback)
-			if callback then
-				if headlessLoop then task.cancel(headlessLoop) end
-				headlessLoop = task.spawn(function()
-					while Headless.Enabled do
-						applyHeadless(lplr.Character)
-						task.wait(0.1)
-					end
-				end)
-				Headless:Clean(lplr.CharacterAdded:Connect(function(char)
-					applyHeadless(char)
-				end))
-			else
-				if headlessLoop then
-					task.cancel(headlessLoop)
-					headlessLoop = nil
-				end
-				local char = lplr.Character
-				if char then
-					local head = char:FindFirstChild("Head")
-					if head then
-						head.Transparency = 0
-						local face = head:FindFirstChild('face')
-						if face and face:IsA("Decal") then
-							face.Transparency = 0
-						end
-					end
-					for _, acc in ipairs(char:GetChildren()) do
-						if acc:IsA("Accessory") then
-							local handle = acc:FindFirstChild("Handle")
-							if handle then
-								handle.Transparency = 0
-								for _, d in ipairs(handle:GetChildren()) do
-									if d:IsA("Decal") or d:IsA("Texture") then d.Transparency = 0 end
-								end
-							end
-						end
-					end
-				end
-			end
-		end,
-		Default = false
-	})
+    local function applyHeadless(char)
+        if not char then return end
+        local head = char:FindFirstChild("Head")
+        if not head then return end
 
-	Headless:CreateToggle({
-		Name = "Remove Accessories",
-		Default = false,
-		Function = function(state)
-			removeAccs = state
-			if Headless.Enabled then
-				applyHeadless(lplr.Character)
-			end
-		end
-	})
+        head.Transparency = 1
+        local face = head:FindFirstChild("face")
+        if face and face:IsA("Decal") then
+            face.Transparency = 1
+        end
+
+        for _, acc in ipairs(char:GetChildren()) do
+            if acc:IsA("Accessory") then
+                local handle = acc:FindFirstChild("Handle")
+                if handle then
+                    local isHeadAcc = false
+                    for _, att in ipairs(handle:GetChildren()) do
+                        if att:IsA("Attachment") and headAttachments[att.Name] then
+                            isHeadAcc = true
+                            break
+                        end
+                    end
+                    if isHeadAcc or removeAccs then
+                        handle.Transparency = 1
+                        for _, d in ipairs(handle:GetChildren()) do
+                            if d:IsA("Decal") or d:IsA("Texture") then
+                                d.Transparency = 1
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local function restoreChar(char)
+        if not char then return end
+        local head = char:FindFirstChild("Head")
+        if head then
+            head.Transparency = 0
+            local face = head:FindFirstChild("face")
+            if face and face:IsA("Decal") then
+                face.Transparency = 0
+            end
+        end
+        for _, acc in ipairs(char:GetChildren()) do
+            if acc:IsA("Accessory") then
+                local handle = acc:FindFirstChild("Handle")
+                if handle then
+                    handle.Transparency = 0
+                    for _, d in ipairs(handle:GetChildren()) do
+                        if d:IsA("Decal") or d:IsA("Texture") then
+                            d.Transparency = 0
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    Headless = vape.Categories.Utility:CreateModule({
+        PerformanceModeBlacklisted = true,
+        Name = "Headless",
+        Tooltip = "Free headless 2026",
+        Function = function(callback)
+            if callback then
+                if headlessLoop then task.cancel(headlessLoop) end
+                headlessLoop = task.spawn(function()
+                    while Headless.Enabled do
+                        applyHeadless(lplr.Character)
+                        task.wait(0.05)
+                    end
+                end)
+                Headless:Clean(lplr.CharacterAdded:Connect(function(char)
+                    task.wait(0.1)
+                    applyHeadless(char)
+                end))
+            else
+                if headlessLoop then
+                    task.cancel(headlessLoop)
+                    headlessLoop = nil
+                end
+                restoreChar(lplr.Character)
+            end
+        end,
+        Default = false
+    })
+
+    Headless:CreateToggle({
+        Name = "Remove Accessories",
+        Default = false,
+        Function = function(state)
+            removeAccs = state
+            if Headless.Enabled then
+                applyHeadless(lplr.Character)
+            end
+        end
+    })
 end)
 
 run(function()
@@ -2054,9 +2096,32 @@ end)
 
 run(function()
     local LARPKits
-    local KITS_TO_OWN = {}
     local active = false
     local connection = nil
+
+    local DEFAULT_KITS = {
+        "Abaddon", "Adetunde", "Aery", "Agni", "Alchemist", "Arachne", "Archer", "Ares",
+        "Axolotl Amy", "Baker", "Barbarian", "Beekeeper Beatrix", "Bekzat", "Bounty Hunter",
+        "Builder", "Caitlyn", "Cobalt", "Cogsworth", "Conqueror", "Crocowolf", "Crypt",
+        "Cyber", "Death Adder", "Dino Tamer Dom", "Drill", "Eldertree", "Eldric", "Elektra",
+        "Ember", "Evelynn", "Farmer Cletus", "Fisherman", "Flora", "Fortuna", "Freiya",
+        "Frosty", "Gingerbread Man", "Gompy", "Grim Reaper", "Grove", "Hannah", "Hephaestus",
+        "Ignis", "Infernal Shielder", "Isabel", "Jack", "Jade", "Kaida", "Kaliyah",
+        "Krystal", "Lani", "Lassy", "Lian", "Lucía", "Lumen", "Lyla", "Marcel",
+        "Marina", "Marrow", "Martin", "Melody", "Merchant Marco", "Metal Detector", "Milo",
+        "Miner", "Nahla", "Nazar", "Noelle", "Nyoka", "Nyx", "Pirate Davey", "Pyro",
+        "Ragnar", "Ramil", "Raven", "Santa", "Sheep Herder", "Sheila", "Sigrid", "Silas",
+        "Skoll", "Smoke", "Sophia", "Spirit Catcher", "Star Collector Stella", "Styx", "Taliyah",
+        "Terra", "Trapper", "Trinity", "Triton", "Trixie", "Uma", "Umbra", "Umeko",
+        "Vanessa", "Void Knight", "Void Regent", "Vulcan", "Warden", "Warrior", "Whim",
+        "Whisper", "Wizard", "Wren", "Xu’rot", "Yamini", "Yeti", "Yuzi", "Zarrah",
+        "Zenith", "Zeno", "Zephyr", "Zola"
+    }
+
+    local KITS_TO_OWN = {}
+    for _, kit in ipairs(DEFAULT_KITS) do
+        table.insert(KITS_TO_OWN, kit)
+    end
 
     local function getKitName(btn)
         local tag = btn:FindFirstChild("KitNameTag")
@@ -2069,8 +2134,7 @@ run(function()
     end
 
     local function moveOwnedKits(notOwned, owned)
-        if not notOwned or not owned then return 0 end
-        local moved = 0
+        if not notOwned or not owned then return end
         for _, btn in ipairs(notOwned:GetChildren()) do
             if btn:IsA("ImageButton") then
                 local name = getKitName(btn)
@@ -2078,14 +2142,12 @@ run(function()
                     for _, wantedKit in ipairs(KITS_TO_OWN) do
                         if string.lower(name) == string.lower(wantedKit) then
                             btn.Parent = owned
-                            moved = moved + 1
                             break
                         end
                     end
                 end
             end
         end
-        return moved
     end
 
     local function applyKits()
@@ -2097,9 +2159,7 @@ run(function()
         if not list then return end
         local notOwned = list:FindFirstChild("NotUnlockedKits")
         local owned = list:FindFirstChild("UnlockedKits")
-        if notOwned and owned then
-            moveOwnedKits(notOwned, owned)
-        end
+        moveOwnedKits(notOwned, owned)
     end
 
     local function startAutoMove()
@@ -2119,7 +2179,7 @@ run(function()
 
     LARPKits = vape.Categories.Minigames:CreateModule({
         Name = "LARPKits",
-        Tooltip = "do u own it or not !!! (client sided pls dont be dumb)",
+        Tooltip = "Shows selected kits as owned in the kit shop (client-sided)",
         Function = function(callback)
             active = callback
             if callback then
@@ -2133,7 +2193,8 @@ run(function()
 
     LARPKits:CreateTextList({
         Name = "Kits To Own",
-        Placeholder = "Type kit names here e.g. Ragnar",
+        Placeholder = "Type kit names here, e.g. Ragnar",
+        Default = DEFAULT_KITS,
         Function = function(list)
             KITS_TO_OWN = {}
             for _, name in ipairs(list) do
