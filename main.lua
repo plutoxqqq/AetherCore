@@ -328,10 +328,11 @@ return function(startup)
     local function collectSupportedGamePaths(currentGameId, currentPlaceId)
         local supported = storage.DecodeJson(context.Fetch("profiles/supported.json"), {}) or {}
         local paths = {}
+        local lobbyFallbackPath = nil
 
         for _, gameInfo in pairs(supported) do
             if type(gameInfo) == "table" and tonumber(gameInfo.gameid or gameInfo.GameId) == currentGameId then
-                for _, groupInfo in pairs(gameInfo) do
+                for groupName, groupInfo in pairs(gameInfo) do
                     if type(groupInfo) == "table" then
                         local groupPath = groupInfo.Path or groupInfo.path
                         local groupPlace = tonumber(groupInfo.Place or groupInfo.place)
@@ -339,10 +340,16 @@ return function(startup)
 
                         if exactMatch then
                             appendUniquePath(paths, groupPath)
+                        elseif tostring(groupName):lower() == "lobby" then
+                            lobbyFallbackPath = groupPath
                         end
                     end
                 end
             end
+        end
+
+        if #paths == 0 then
+            appendUniquePath(paths, lobbyFallbackPath)
         end
 
         return paths
