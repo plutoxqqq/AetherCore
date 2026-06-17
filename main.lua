@@ -249,6 +249,53 @@ return function(startup)
     utility.InstallCategoryFallbacks()
     utility.InstallHumanoidScaleFallbacks()
 
+    function context.ValidateRequiredCategories()
+        if type(shared) ~= "table" or type(shared.vape) ~= "table" or type(shared.vape.Categories) ~= "table" then
+            return false, "GUI categories are unavailable"
+        end
+
+        local moduleAssistCategory = shared.vape.Categories["Module Assist"] or shared.vape.Categories.ModuleAssist
+        if type(moduleAssistCategory) == "table" and type(moduleAssistCategory.CreateModule) == "function" then
+            shared.vape.Categories.ModuleAssist = moduleAssistCategory
+            shared.vape.Categories["Module Assist"] = moduleAssistCategory
+        end
+
+        local requiredCategories = {
+            "Combat",
+            "Blatant",
+            "Render",
+            "Utility",
+            "World",
+            "Inventory",
+            "Minigames",
+            "Kits",
+            "Legit",
+            "BoostFPS",
+            "VibeCoded",
+            "Module Assist",
+            "Friends",
+            "Targets",
+            "Profiles"
+        }
+        local missing = {}
+        for _, categoryName in ipairs(requiredCategories) do
+            local category = shared.vape.Categories[categoryName]
+            if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
+                table.insert(missing, categoryName)
+            end
+        end
+
+        if #missing > 0 then
+            return false, "missing categories: " .. table.concat(missing, ", ")
+        end
+        return true
+    end
+
+    local categoriesOk, categoriesError = context.ValidateRequiredCategories()
+    if not categoriesOk then
+        fail("GUI category validation failed: " .. tostring(categoriesError))
+    end
+
     function context.InstallModuleRegistrationHooks()
         if type(shared) ~= "table" or type(shared.vape) ~= "table" or type(shared.vape.Categories) ~= "table" then
             return false, "GUI categories are unavailable"
@@ -364,16 +411,25 @@ return function(startup)
     end
 
     local loadedPlaceModule = false
+    local loadedGamePaths = {}
     local loadErrors = {}
     for _, candidatePath in ipairs(gamePaths) do
         local ok, loadError = context.LoadGameModule(candidatePath)
         if ok then
             loadedPlaceModule = true
+            table.insert(loadedGamePaths, candidatePath)
             warnf("Loaded place module: %s", candidatePath)
-            break
+        else
+            table.insert(loadErrors, candidatePath .. ": " .. tostring(loadError))
         end
-        table.insert(loadErrors, candidatePath .. ": " .. tostring(loadError))
     end
+    context.DetectedGame = {
+        GameId = currentGameId,
+        PlaceId = currentPlaceId,
+        CandidatePaths = gamePaths,
+        LoadedPaths = loadedGamePaths,
+        Errors = loadErrors
+    }
 
     if not loadedPlaceModule then
         warnf("No place module loaded for GameId %s PlaceId %s: %s", tostring(currentGameId or "unknown"), tostring(currentPlaceId or "unknown"), table.concat(loadErrors, " | "))

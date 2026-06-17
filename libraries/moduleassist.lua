@@ -446,7 +446,7 @@ function ModuleAssist.Install(context)
     end
 
     local module = category:CreateModule({
-        Name = "Module Assistant",
+        Name = "AI Module Helper",
         Tooltip = "Ask accurate questions about loaded AetherCore modules, including typo-tolerant follow-ups.",
         Function = function() end
     })
@@ -464,14 +464,14 @@ function ModuleAssist.Install(context)
         end
         if type(module.CreateButton) == "function" then
             module:CreateButton({
-                Name = "Ask Module Assist",
+                Name = "Ask AI Module Helper",
                 Function = function()
                     local question = assistant.PendingQuestion or (type(input) == "table" and input.Value) or ""
                     local answer = assistant.Ask(question)
                     if type(vape.CreateNotification) == "function" then
-                        vape:CreateNotification("Module Assist", answer, 10)
+                        vape:CreateNotification("AI Module Helper", answer, 10)
                     else
-                        warn("[Module Assist] " .. answer)
+                        warn("[AI Module Helper] " .. answer)
                     end
                 end
             })

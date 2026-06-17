@@ -46,13 +46,40 @@ function Gui.Finalize(context)
     local utility = context.Libraries.utility
     utility.ApplyVapeBranding()
 
-    if type(shared) == "table" and type(shared.vape) == "table" and type(shared.vape.Init) == "function" then
+    local vape = type(shared) == "table" and shared.vape or nil
+    if type(vape) ~= "table" then
+        return false, "shared.vape is unavailable"
+    end
+
+    local initFallback = vape.Init
+    vape.Init = nil
+    if type(vape.Load) == "function" and not vape.Loaded then
         local success, result = pcall(function()
-            shared.vape:Init()
+            vape:Load()
         end)
         if not success then
             return false, tostring(result)
         end
+    elseif type(initFallback) == "function" then
+        local success, result = pcall(function()
+            initFallback(vape)
+        end)
+        if not success then
+            return false, tostring(result)
+        end
+    end
+
+    if type(vape.Save) == "function" and type(task) == "table" and type(task.spawn) == "function" and not vape.__AetherCoreAutosave then
+        vape.__AetherCoreAutosave = true
+        task.spawn(function()
+            repeat
+                pcall(function()
+                    vape:Save()
+                end)
+                task.wait(10)
+            until not vape.Loaded
+            vape.__AetherCoreAutosave = nil
+        end)
     end
 
     utility.ApplyVapeBranding()
