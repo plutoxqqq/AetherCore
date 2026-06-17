@@ -218,70 +218,9 @@ return function(context)
             return module
         end
 
-        addModule({
-            Name = "Aether Status",
-            Tooltip = "Shows AetherCore runtime, place, and module registration information.",
-            Function = function(enabled)
-                local state = context.State or {}
-                local guiObject, label
-
-                if enabled then
-                    guiObject, label = createStatusLabel("AetherCoreStatus", UDim2.new(1, -18, 0, 150), UDim2.fromOffset(260, 104))
-                    if label then
-                        label.Text = string.format(
-                            "AetherCore Ready\nPlaceId: %s\nGUI: %s\nRegistered modules: %s",
-                            tostring(game.PlaceId),
-                            tostring(context.SelectedGui or "unknown"),
-                            tostring(state.ModuleRegistrationCount or 0)
-                        )
-                    end
-                    vibeState.StatusGui = guiObject
-                else
-                    if typeof(vibeState.StatusGui) == "Instance" then
-                        vibeState.StatusGui:Destroy()
-                    end
-                    vibeState.StatusGui = nil
-                end
-            end
-        })
-
-        addModule({
-            Name = "Fullbright",
-            Tooltip = "Improves client-side visibility by keeping lighting bright while enabled.",
-            Function = function(enabled)
-                local lighting = game:GetService("Lighting")
-                vibeState.FullbrightConnections = vibeState.FullbrightConnections or {}
-
-                if enabled then
-                    vibeState.FullbrightOriginal = vibeState.FullbrightOriginal or {
-                        Brightness = lighting.Brightness,
-                        ClockTime = lighting.ClockTime,
-                        FogEnd = lighting.FogEnd,
-                        GlobalShadows = lighting.GlobalShadows
-                    }
-
-                    local function applyLighting()
-                        lighting.Brightness = 2
-                        lighting.ClockTime = 14
-                        lighting.FogEnd = 100000
-                        lighting.GlobalShadows = false
-                    end
-
-                    applyLighting()
-                    table.insert(vibeState.FullbrightConnections, runService.RenderStepped:Connect(applyLighting))
-                else
-                    disconnectAll(vibeState.FullbrightConnections or {})
-                    local original = vibeState.FullbrightOriginal
-                    if type(original) == "table" then
-                        lighting.Brightness = original.Brightness
-                        lighting.ClockTime = original.ClockTime
-                        lighting.FogEnd = original.FogEnd
-                        lighting.GlobalShadows = original.GlobalShadows
-                    end
-                    vibeState.FullbrightOriginal = nil
-                end
-            end
-        })
+        -- Aether Status and Fullbright are registered by games/universal.luau
+        -- because they only depend on Roblox-wide services and should be available
+        -- outside BedWars as well.
 
         addModule({
             Name = "BedWars Module Check",
