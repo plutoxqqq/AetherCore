@@ -376,6 +376,7 @@ return function(startup)
         local supported = storage.DecodeJson(context.Fetch("profiles/supported.json"), {}) or {}
         local paths = {}
         local lobbyFallbackPath = nil
+        local mainFallbackPath = nil
 
         for _, gameInfo in pairs(supported) do
             if type(gameInfo) == "table" and tonumber(gameInfo.gameid or gameInfo.GameId) == currentGameId then
@@ -385,10 +386,13 @@ return function(startup)
                         local groupPlace = tonumber(groupInfo.Place or groupInfo.place)
                         local exactMatch = groupPlace == currentPlaceId or idListContains(groupInfo.Ids or groupInfo.ids, currentPlaceId)
 
+                        local normalizedGroupName = tostring(groupName):lower()
                         if exactMatch then
                             appendUniquePath(paths, groupPath)
-                        elseif tostring(groupName):lower() == "lobby" then
+                        elseif normalizedGroupName == "lobby" then
                             lobbyFallbackPath = groupPath
+                        elseif normalizedGroupName == "main" or normalizedGroupName == "match" then
+                            mainFallbackPath = groupPath
                         end
                     end
                 end
@@ -396,7 +400,13 @@ return function(startup)
         end
 
         if #paths == 0 then
-            appendUniquePath(paths, lobbyFallbackPath)
+            -- Never use a lobby payload as the default for an unknown place in a
+            -- supported game. BedWars can rotate or add match PlaceIds, and using
+            -- the lobby payload there registers lobby-only modules in real matches.
+            appendUniquePath(paths, mainFallbackPath)
+            if #paths == 0 and currentPlaceId ~= nil then
+                appendUniquePath(paths, lobbyFallbackPath)
+            end
         end
 
         return paths
