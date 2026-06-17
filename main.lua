@@ -296,21 +296,119 @@ return function(startup)
         fail("GUI category validation failed: " .. tostring(categoriesError))
     end
 
+    function context.NormalizeModuleName(name)
+        if type(name) ~= "string" then
+            return nil
+        end
+
+        local normalized = name:lower():gsub("[^%w]", "")
+        if normalized == "" then
+            return nil
+        end
+
+        return normalized
+    end
+
+    local function createDuplicateModuleStub(moduleName, categoryName)
+        local optionTemplate = {Value = nil, Enabled = false, List = {}}
+        function optionTemplate:SetValue(value)
+            self.Value = value
+        end
+        function optionTemplate:Toggle(value)
+            self.Enabled = value == nil and not self.Enabled or value == true
+        end
+        function optionTemplate:Change(value)
+            self.List = type(value) == "table" and value or self.List
+        end
+        function optionTemplate:SetList(value)
+            self.List = type(value) == "table" and value or self.List
+        end
+        function optionTemplate:SetVisible() end
+        function optionTemplate:Refresh(value)
+            if type(value) == "table" then
+                self.List = value
+            end
+        end
+
+        local moduleStub = {
+            Name = moduleName,
+            Category = tostring(categoryName),
+            Enabled = false,
+            Options = {},
+            Duplicate = true
+        }
+
+        local function createOption(self, options)
+            options = type(options) == "table" and options or {}
+            local option = {}
+            for key, value in pairs(optionTemplate) do
+                option[key] = value
+            end
+            option.Name = options.Name
+            if options.Default ~= nil then
+                option.Value = options.Default
+            elseif options.Value ~= nil then
+                option.Value = options.Value
+            end
+            option.Enabled = options.Default == true or options.Enabled == true
+            self.Options[tostring(option.Name or #self.Options + 1)] = option
+            return option
+        end
+
+        moduleStub.CreateToggle = createOption
+        moduleStub.CreateSlider = createOption
+        moduleStub.CreateDropdown = createOption
+        moduleStub.CreateColorSlider = createOption
+        moduleStub.CreateTextBox = createOption
+        moduleStub.CreateButton = createOption
+        moduleStub.CreateFont = createOption
+        moduleStub.CreateBind = createOption
+        function moduleStub:Clean() end
+        function moduleStub:Toggle() end
+
+        return moduleStub
+    end
+
     function context.InstallModuleRegistrationHooks()
         if type(shared) ~= "table" or type(shared.vape) ~= "table" or type(shared.vape.Categories) ~= "table" then
             return false, "GUI categories are unavailable"
         end
 
         shared.vape.Modules = type(shared.vape.Modules) == "table" and shared.vape.Modules or {}
+        state.RegisteredModuleNames = type(state.RegisteredModuleNames) == "table" and state.RegisteredModuleNames or {}
 
         for categoryName, category in pairs(shared.vape.Categories) do
             if type(category) == "table" and type(category.CreateModule) == "function" and category.__AetherCoreOriginalCreateModule == nil then
                 local originalCreateModule = category.CreateModule
                 category.__AetherCoreOriginalCreateModule = originalCreateModule
                 category.CreateModule = function(self, moduleOptions, ...)
+                    local moduleName = type(moduleOptions) == "table" and moduleOptions.Name or nil
+                    local normalizedName = context.NormalizeModuleName(moduleName)
+                    if normalizedName and state.RegisteredModuleNames[normalizedName] then
+                        local originalRecord = state.RegisteredModuleNames[normalizedName]
+                        warnf(
+                            "Skipped duplicate module '%s' from %s; already loaded as '%s' from %s",
+                            tostring(moduleName),
+                            tostring(context.CurrentSource or "unknown"),
+                            tostring(originalRecord.Name or "Unknown"),
+                            tostring(originalRecord.Source or "unknown")
+                        )
+                        state.DuplicateModulesSkipped = (tonumber(state.DuplicateModulesSkipped) or 0) + 1
+                        table.insert(state.RegisteredModules, {
+                            Name = tostring(moduleName or "Unknown"),
+                            Category = tostring(categoryName or "Unknown"),
+                            Status = "duplicate-skipped",
+                            Source = tostring(context.CurrentSource or "unknown"),
+                            Tooltip = type(moduleOptions) == "table" and type(moduleOptions.Tooltip) == "string" and moduleOptions.Tooltip or nil,
+                            Description = type(moduleOptions) == "table" and type(moduleOptions.Description) == "string" and moduleOptions.Description or nil
+                        })
+                        return createDuplicateModuleStub(moduleName, categoryName)
+                    end
+
                     local module = originalCreateModule(self, moduleOptions, ...)
                     if module ~= nil then
-                        local moduleName = type(moduleOptions) == "table" and moduleOptions.Name or type(module) == "table" and module.Name or nil
+                        moduleName = moduleName or type(module) == "table" and module.Name or nil
+                        normalizedName = context.NormalizeModuleName(moduleName)
                         if type(module) == "table" then
                             module.Name = module.Name or moduleName
                             module.Category = module.Category or tostring(categoryName)
@@ -318,6 +416,12 @@ return function(startup)
                                 shared.vape.Modules[moduleName] = module
                                 shared.vape.Modules[moduleName:gsub("%s+", "")] = shared.vape.Modules[moduleName:gsub("%s+", "")] or module
                             end
+                        end
+                        if normalizedName then
+                            state.RegisteredModuleNames[normalizedName] = {
+                                Name = tostring(moduleName or "Unknown"),
+                                Source = tostring(context.CurrentSource or "unknown")
+                            }
                         end
                         context.RegisterModuleRecord(moduleName, categoryName, "loaded", context.CurrentSource, moduleOptions)
                     end
