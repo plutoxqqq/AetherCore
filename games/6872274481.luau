@@ -336,13 +336,13 @@ return function(context)
     --// BEGIN INLINE AETHERCORE BEDWARS COMPATIBILITY PAYLOAD
 -- AetherCore unified BedWars match entrypoint
 -- games/6872274481.luau is the single source for BedWars match modules.
--- The former catvape.luau and aerov4.luau payloads are merged here so the
+-- The former legacy module payload and aerov4.luau payloads are merged here so the
 -- loader does not need to fetch separate BedWars module payload files.
 
 getgenv().AetherCore = getgenv().AetherCore or {}
 getgenv().AetherCore.Payload = {
     Name = "AetherCore Unified",
-    Sources = {"merged:aerov4", "merged:catvape"}
+    Sources = {"merged:aerov4", "merged:aethercore"}
 }
 
 --// BEGIN AETHERCORE BASE PAYLOAD (merged from former aerov4.luau)
@@ -21376,7 +21376,7 @@ run(function()
 
 	NoFall = vape.Categories.Blatant:CreateModule({
 		Name = 'No Fall Damage',
-		Tooltip = 'Prevents fall damage using CatV6-style TelePearl or RakNet handling.',
+		Tooltip = 'Prevents fall damage using AetherCore TelePearl or RakNet handling.',
 		Function = function(callback)
 			if callback then
 				local fallStartY = nil
@@ -35525,14 +35525,14 @@ end)
 --// END AETHERCORE BASE PAYLOAD
 
 do
--- Compile the merged former catvape payload separately so its many module
+-- Compile the merged former compatibility payload separately so its many module
 -- locals do not share one Luau register frame with the main BedWars payload.
-local catvapePayload = [===[
+local aetherCorePayload = [===[
 local canDebug = true
 local run = function(func)
 	local ok, err = xpcall(func, debug.traceback)
 	if not ok then
-		warn('[AetherCore] catvape module failed to load: ' .. tostring(err))
+		warn('[AetherCore] Module failed to load: ' .. tostring(err))
 	end
 end
 local cloneref = cloneref or function(obj)
@@ -35583,7 +35583,7 @@ local getcustomasset = vape.Libraries.getcustomasset
 local function downloadFile(path, func)
 	if not isfile(path) then
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/MaxlaserTech/CatV6/'..readfile('catrewrite/profiles/commit.txt')..'/'..select(1, path:gsub('catrewrite/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/'..select(1, path:gsub('AetherCore/', '')), true)
 		end)
 		if not suc or res == '404: Not Found' then
 			error(res)
@@ -35652,7 +35652,7 @@ local function addBlur(parent)
 	blur.Size = UDim2.new(1, 89, 1, 52)
 	blur.Position = UDim2.fromOffset(-48, -31)
 	blur.BackgroundTransparency = 1
-	blur.Image = getcustomasset('catrewrite/assets/new/blur.png')
+	blur.Image = getcustomasset('AetherCore/assets/new/blur.png')
 	blur.ScaleType = Enum.ScaleType.Slice
 	blur.SliceCenter = Rect.new(52, 31, 261, 502)
 	blur.Parent = parent
@@ -36292,7 +36292,7 @@ shared.gg = {}
 run(function()
 	canDebug = not table.find({'Solara', 'Xeno'}, ({identifyexecutor()})[1]) and true or false
 	if not canDebug then
-		local cheatenginelib = loadstring(downloadFile('catrewrite/libraries/cheatenginelib.lua'), 'cheatenginelib')(vape, vapeEvents, entitylib)
+		local cheatenginelib = loadstring(downloadFile('AetherCore/libraries/cheatenginelib.lua'), 'cheatenginelib')(vape, vapeEvents, entitylib)
 		require = function(v)
 			return cheatenginelib[({v:GetFullName():gsub(lplr.Name, 'PlayerTemplate')})[1]]:await()
 		end
@@ -36534,7 +36534,7 @@ run(function()
 		WarlockTarget = canDebug and getproto(Knit.Controllers.WarlockStaffController.KnitStart, 2) or function() end
 	}
 
-	local packages = httpService:JSONDecode(downloadFile('catrewrite/profiles/packages.json'))
+	local packages = httpService:JSONDecode(downloadFile('AetherCore/profiles/packages.json'))
 	local function dumpRemote(tab)
 		if not tab then return '' end
 		local ind
@@ -38091,7 +38091,7 @@ run(function()
     LegitAura = SilentAura:CreateToggle({Name = 'Swing only'})
     SilentAim = SilentAura:CreateToggle({
         Name = 'Silent Aim',
-        Tooltip = 'Uses catvape\'s aiming technology to silently aim while looking legit',
+        Tooltip = 'Uses AetherCore\'s aiming technology to silently aim while looking legit',
         Default = true,
         Function = function(callback)
             Area.Object.Visible = not callback
@@ -47517,7 +47517,7 @@ run(function()
         close.Position = UDim2.new(1, -35, 0, 9)
         close.BackgroundColor3 = Color3.new(1, 1, 1)
         close.BackgroundTransparency = 1
-        close.Image = getcustomasset('catrewrite/assets/new/close.png')
+        close.Image = getcustomasset('AetherCore/assets/new/close.png')
         close.ImageColor3 = color.Light(uipallet.Text, 0.2)
         close.ImageTransparency = 0.5
         close.AutoButtonColor = false
@@ -47631,7 +47631,7 @@ run(function()
         searchicon.Size = UDim2.fromOffset(14, 14)
         searchicon.Position = UDim2.new(1, -26, 0, 8)
         searchicon.BackgroundTransparency = 1
-        searchicon.Image = getcustomasset('catrewrite/assets/new/search.png')
+        searchicon.Image = getcustomasset('AetherCore/assets/new/search.png')
         searchicon.ImageColor3 = color.Light(uipallet.Main, 0.37)
         searchicon.Parent = searchbkg
         local children = Instance.new('ScrollingFrame')
@@ -47772,7 +47772,7 @@ run(function()
         textbuttonicon.Position = UDim2.fromScale(0.5, 0.5)
         textbuttonicon.AnchorPoint = Vector2.new(0.5, 0.5)
         textbuttonicon.BackgroundTransparency = 1
-        textbuttonicon.Image = getcustomasset('catrewrite/assets/new/add.png')
+        textbuttonicon.Image = getcustomasset('AetherCore/assets/new/add.png')
         textbuttonicon.ImageColor3 = Color3.fromHSV(0.46, 0.96, 0.52)
         textbuttonicon.Parent = textbutton
         local childrenlist = Instance.new('Frame')
@@ -47865,7 +47865,7 @@ run(function()
             close.Position = UDim2.new(1, -23, 0, 6)
             close.BackgroundColor3 = Color3.new(1, 1, 1)
             close.BackgroundTransparency = 1
-            close.Image = getcustomasset('catrewrite/assets/new/closemini.png')
+            close.Image = getcustomasset('AetherCore/assets/new/closemini.png')
             close.ImageColor3 = color.Light(uipallet.Text, 0.2)
             close.ImageTransparency = 0.5
             close.AutoButtonColor = false
@@ -48559,7 +48559,7 @@ run(function()
                         Size = UDim2.new(1, 89, 1, 52),
                         Position = UDim2.fromOffset(-48, -31),
                         BackgroundTransparency = 1,
-                        Image = getcustomasset('catrewrite/assets/new/blur.png'),
+                        Image = getcustomasset('AetherCore/assets/new/blur.png'),
                         ScaleType = Enum.ScaleType.Slice,
                         SliceCenter = Rect.new(52, 31, 261, 502)
                     }),
@@ -53121,15 +53121,15 @@ run(function()
     })
 end)end)
 ]===]
-local catvapeChunk, catvapeCompileError = loadstring(catvapePayload, 'AetherCore/games/6872274481.luau:catvape')
-if not catvapeChunk then
-	error('[AetherCore] Failed to compile merged catvape payload: ' .. tostring(catvapeCompileError))
+local aetherCoreChunk, aetherCoreCompileError = loadstring(aetherCorePayload, 'AetherCore/games/6872274481.luau:AetherCore')
+if not aetherCoreChunk then
+	error('[AetherCore] Failed to compile merged compatibility payload: ' .. tostring(aetherCoreCompileError))
 end
-local catvapeOk, catvapeError = xpcall(catvapeChunk, debug.traceback)
-if not catvapeOk then
-	error('[AetherCore] Failed to run merged catvape payload: ' .. tostring(catvapeError))
+local aetherCoreOk, aetherCoreError = xpcall(aetherCoreChunk, debug.traceback)
+if not aetherCoreOk then
+	error('[AetherCore] Failed to run merged compatibility payload: ' .. tostring(aetherCoreError))
 end
-end -- Close the isolated catvape payload block.
+end -- Close the isolated compatibility payload block.
 
     --// END INLINE AETHERCORE BEDWARS COMPATIBILITY PAYLOAD
 
