@@ -2057,9 +2057,9 @@ run(function()
 	end)
 end)
 
-for _, v in {'AntiRagdoll', 'Trigger Bot', 'SilentAim', 'AutoRejoin', 'Rejoin', 'Disabler', 'Timer', 'ServerHop', 'Mouse TP', 'MurderMystery', 'Name Tags'} do
-	vape:Remove(v)
-end
+-- Do not remove built-in or externally registered modules here. Keeping the
+-- shared module registry intact prevents missing modules and avoids breaking
+-- other scripts that run alongside AetherCore.
 
 
 local kitImageIds = {
@@ -37042,9 +37042,7 @@ run(function()
 	end)
 end)
 
-for _, v in {'Anti Ragdoll', 'Trigger Bot', 'Silent Aim', 'Auto Rejoin', 'Rejoin', 'Disabler', 'Timer', 'Server Hop', 'Mouse TP', 'Murder Mystery'} do
-	vape:Remove(v)
-end
+-- Legacy duplicate-removal disabled for module compatibility.
 
 local AntiFallDirection
 local Fly

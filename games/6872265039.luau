@@ -135,11 +135,9 @@ end
 getgenv().getAeroTier = function(player)
     return getAccountTier(player)
 end
-for moduleName, v in vape.Modules do
-	if v.Category == 'Combat' or v.Category == 'Render' then
-		vape:Remove(moduleName)
-	end
-end
+-- Keep existing GUI modules intact. Older builds removed every Combat and Render
+-- module in the lobby, which made large parts of the module list disappear and
+-- broke other scripts that expected those shared.vape entries to remain usable.
 
 run(function()
 	local Sprint

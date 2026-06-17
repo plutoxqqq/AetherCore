@@ -105,6 +105,7 @@ local cacheManifest = {
     "libraries/drawing.lua",
     "libraries/hash.lua",
     "libraries/vm.lua",
+    "libraries/moduleassist.lua",
     "profiles/gui.txt",
     "profiles/default.txt",
     "profiles/supported.json",
