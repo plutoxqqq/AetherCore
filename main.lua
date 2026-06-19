@@ -1,510 +1,193 @@
 -- AetherCore main.lua
--- Central controller: waits for Roblox, installs compatibility fallbacks, loads
--- libraries and GUI, routes universal and place-specific modules, profiles, custom modules,
--- then finalizes or cleanly reloads/uninjects.
+-- CatV6-style runtime bootstrap adapted for AetherCore's existing modules.
 return function(startup)
-    startup = startup or {}
-    local unpack = table.unpack or unpack
+    startup = type(startup) == "table" and startup or {}
+    repeat task.wait() until game:IsLoaded()
 
+    local rootUrl = startup.RootUrl or "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/"
+    local rootFolder = startup.RootFolder or "AetherCore"
+    local selectedGui = startup.SelectedGui or "new"
     local context = {
-        RootUrl = startup.RootUrl or "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/",
-        RootFolder = startup.RootFolder or "AetherCore",
-        Version = startup.Version or "3.2.2",
+        RootUrl = rootUrl,
+        RootFolder = rootFolder,
+        SelectedGui = selectedGui,
         Libraries = {},
-        LoadedGames = {},
-        LoadedModules = {},
-        LoadOrder = {},
-        SelectedGui = "new",
-        Profile = {},
-        RequiredLibraries = {"utility", "storage", "theme"},
-        OptionalLibraries = {"signal", "tween", "entity", "drawing", "prediction", "target", "hash", "vm"}
+        State = {
+            ModuleRegistrationCount = 0,
+            LoadedModules = {},
+            FailedModules = {}
+        }
     }
 
-    local function warnf(format, ...)
-        warn("[AetherCore] " .. string.format(format, ...))
-    end
-
-    local function fail(message)
-        error("[AetherCore] " .. tostring(message))
-    end
-
-    local function joinPath(...)
-        local parts = {...}
-        local output = {}
-        for _, part in ipairs(parts) do
-            part = tostring(part or "")
-            part = part:gsub("^/+", ""):gsub("/+$", "")
-            if part ~= "" then
-                table.insert(output, part)
-            end
-        end
-        return table.concat(output, "/")
-    end
-
-    context.JoinPath = joinPath
-
-    local function readLocal(path)
-        if type(readfile) ~= "function" then
-            return nil
-        end
-        local candidates = {joinPath(context.RootFolder, path), path}
-        for _, candidate in ipairs(candidates) do
-            local ok, result = pcall(readfile, candidate)
-            if ok and type(result) == "string" and result ~= "" then
-                return result, candidate
-            end
-        end
-        return nil
-    end
-
-    function context.Fetch(path)
-        path = tostring(path)
-        if type(startup.Fetch) == "function" then
-            local ok, result = pcall(startup.Fetch, path)
-            if ok and type(result) == "string" and result ~= "" then
-                return result
-            end
-        end
-        local localSource = readLocal(path)
-        if localSource then
-            return localSource
-        end
-        return game:HttpGet(context.RootUrl .. path, true)
-    end
-
-    function context.LoadModule(path)
-        if context.LoadedModules[path] ~= nil then
-            return context.LoadedModules[path]
-        end
-
-        local source = context.Fetch(path)
-        local chunk, compileError = loadstring(source, "AetherCore/" .. path)
-        if not chunk then
-            error(string.format("[AetherCore] Failed to compile %s: %s", path, tostring(compileError)))
-        end
-
-        local previousSource = context.CurrentSource
-        context.CurrentSource = path
-        local ok, result = xpcall(chunk, debug.traceback)
-        context.CurrentSource = previousSource
-        if not ok then
-            error(string.format("[AetherCore] Failed to run %s: %s", path, tostring(result)))
-        end
-
-        context.LoadedModules[path] = result == nil and true or result
-        table.insert(context.LoadOrder, path)
-        return context.LoadedModules[path]
-    end
-
-    function context.RunFunctionModule(path, ...)
-        local module = context.LoadModule(path)
-        if type(module) == "function" then
-            local previousSource = context.CurrentSource
-            local args = {...}
-            local results
-            context.CurrentSource = path
-            local ok, runtimeError = xpcall(function()
-                results = {module(context, unpack(args))}
-            end, debug.traceback)
-            context.CurrentSource = previousSource
-            if not ok then
-                error(string.format("[AetherCore] Failed to run function module %s: %s", path, tostring(runtimeError)))
-            end
-            return unpack(results)
-        end
-        return module
-    end
-
-    function context.LoadGameModule(path)
-        if context.LoadedGames[path] then
+    local function isMissingSource(contents)
+        if type(contents) ~= "string" then
             return true
         end
+        local trimmed = contents:gsub("^%s+", ""):gsub("%s+$", "")
+        return trimmed == "" or trimmed == "404: Not Found" or trimmed:find("^404", 1, false) ~= nil
+    end
 
-        local results
-        local ok, runtimeError = xpcall(function()
-            results = {context.RunFunctionModule(path)}
-        end, debug.traceback)
-        if not ok then
-            return false, tostring(runtimeError)
+    local function isFile(path)
+        if type(isfile) == "function" then
+            local ok, result = pcall(isfile, path)
+            if ok then return result end
         end
-        if results[1] == false then
-            return false, tostring(results[2] or "module returned false")
-        end
-        context.LoadedGames[path] = true
-        return true, results[1]
-    end
-
-    local function loadRequiredLibrary(name)
-        local ok, result = pcall(context.LoadModule, "libraries/" .. name .. ".lua")
-        if not ok or type(result) ~= "table" then
-            fail("required library '" .. name .. "' failed to load: " .. tostring(result))
-        end
-        context.Libraries[name] = result
-        return result
-    end
-
-    local function loadOptionalLibrary(name)
-        local ok, result = pcall(context.LoadModule, "libraries/" .. name .. ".lua")
-        if not ok or result == nil then
-            warnf("optional library '%s' failed to load: %s", name, tostring(result))
-            return nil
-        end
-        context.Libraries[name] = result
-        return result
-    end
-
-    for _, name in ipairs(context.RequiredLibraries) do
-        loadRequiredLibrary(name)
-    end
-    for _, name in ipairs(context.OptionalLibraries) do
-        loadOptionalLibrary(name)
-    end
-
-    local utility = context.Libraries.utility
-    local storage = context.Libraries.storage
-
-    utility.SetRuntimeContext(context)
-    utility.WaitForGameLoaded()
-    utility.InstallExecutorCompatibility()
-
-    local state = getgenv and getgenv().AetherCore or {}
-    state.Name = "AetherCore"
-    state.Version = context.Version
-    state.Context = context
-    state.ModuleRegistrationCount = 0
-    state.RegisteredModules = {}
-    state.Uninjected = false
-    if getgenv then
-        getgenv().AetherCore = state
-    end
-
-    context.State = state
-
-    function context.RegisterModuleRecord(name, category, status, source, details)
-        state.ModuleRegistrationCount = (tonumber(state.ModuleRegistrationCount) or 0) + 1
-        details = type(details) == "table" and details or {}
-        table.insert(state.RegisteredModules, {
-            Name = tostring(name or "Unknown"),
-            Category = tostring(category or "Unknown"),
-            Status = tostring(status or "registered"),
-            Source = tostring(source or context.CurrentSource or "unknown"),
-            Tooltip = type(details.Tooltip) == "string" and details.Tooltip or nil,
-            Description = type(details.Description) == "string" and details.Description or nil
-        })
-    end
-
-    function context.Uninject()
-        state.Uninjected = true
-        if type(shared) == "table" and type(shared.vape) == "table" then
-            if type(shared.vape.Uninject) == "function" then
-                pcall(function() shared.vape:Uninject() end)
-            elseif type(shared.vape.SelfDestruct) == "function" then
-                pcall(function() shared.vape:SelfDestruct() end)
-            end
-        end
-        warn("[AetherCore] Uninjected")
-    end
-
-    function context.Reload()
-        context.Uninject()
-        local source = context.Fetch("init.lua")
-        local chunk, compileError = loadstring(source, "AetherCore/init.lua")
-        if not chunk then
-            fail("Failed to compile init.lua during reload: " .. tostring(compileError))
-        end
-        return chunk()
-    end
-
-    local guiChoice = context.Fetch("profiles/gui.txt")
-    guiChoice = type(guiChoice) == "string" and guiChoice:gsub("%s+", ""):lower() or "new"
-    local validGuis = {new = true, old = true, rise = true, wurst = true}
-    if not validGuis[guiChoice] then
-        warnf("unknown GUI '%s'; falling back to new", tostring(guiChoice))
-        guiChoice = "new"
-    end
-    context.SelectedGui = guiChoice
-
-    local gui = context.LoadModule("guis/" .. guiChoice .. ".lua")
-    if type(gui) == "function" then
-        gui = gui(context)
-    end
-    if type(gui) ~= "table" or type(gui.Load) ~= "function" or type(gui.Finalize) ~= "function" then
-        fail("selected GUI '" .. guiChoice .. "' does not expose Load and Finalize")
-    end
-
-    local guiLoaded, guiError = gui.Load(context)
-    if not guiLoaded then
-        fail("Failed to load GUI: " .. tostring(guiError))
-    end
-    warnf("GUI loaded: %s", guiChoice)
-
-    if not utility.IsVapeCoreReady() then
-        fail("GUI core is not ready after loading " .. guiChoice)
-    end
-
-    utility.InstallGetCustomAssetFallback()
-    utility.InstallTargetInfoFallback()
-    utility.InstallSessionInfoFallback()
-    utility.InstallVapeLibraryFallbacks()
-    utility.InstallCategoryFallbacks()
-    utility.InstallHumanoidScaleFallbacks()
-
-    function context.ValidateRequiredCategories()
-        if type(shared) ~= "table" or type(shared.vape) ~= "table" or type(shared.vape.Categories) ~= "table" then
-            return false, "GUI categories are unavailable"
-        end
-
-        local moduleAssistCategory = shared.vape.Categories["Module Assist"] or shared.vape.Categories.ModuleAssist
-        if type(moduleAssistCategory) == "table" and type(moduleAssistCategory.CreateModule) == "function" then
-            shared.vape.Categories.ModuleAssist = moduleAssistCategory
-            shared.vape.Categories["Module Assist"] = moduleAssistCategory
-        end
-
-        local requiredCategories = {
-            "Combat",
-            "Blatant",
-            "Render",
-            "Utility",
-            "World",
-            "Inventory",
-            "Minigames",
-            "Kits",
-            "Legit",
-            "BoostFPS",
-            "VibeCoded",
-            "Module Assist",
-            "Friends",
-            "Targets",
-            "Profiles"
-        }
-        local missing = {}
-        for _, categoryName in ipairs(requiredCategories) do
-            local category = shared.vape.Categories[categoryName]
-            if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
-                table.insert(missing, categoryName)
-            end
-        end
-
-        if #missing > 0 then
-            return false, "missing categories: " .. table.concat(missing, ", ")
-        end
-        return true
-    end
-
-    local categoriesOk, categoriesError = context.ValidateRequiredCategories()
-    if not categoriesOk then
-        fail("GUI category validation failed: " .. tostring(categoriesError))
-    end
-
-    function context.InstallModuleRegistrationHooks()
-        if type(shared) ~= "table" or type(shared.vape) ~= "table" or type(shared.vape.Categories) ~= "table" then
-            return false, "GUI categories are unavailable"
-        end
-
-        shared.vape.Modules = type(shared.vape.Modules) == "table" and shared.vape.Modules or {}
-
-        for categoryName, category in pairs(shared.vape.Categories) do
-            if type(category) == "table" and type(category.CreateModule) == "function" and category.__AetherCoreOriginalCreateModule == nil then
-                local originalCreateModule = category.CreateModule
-                category.__AetherCoreOriginalCreateModule = originalCreateModule
-                category.CreateModule = function(self, moduleOptions, ...)
-                    local module = originalCreateModule(self, moduleOptions, ...)
-                    if module ~= nil then
-                        local moduleName = type(moduleOptions) == "table" and moduleOptions.Name or type(module) == "table" and module.Name or nil
-                        if type(module) == "table" then
-                            module.Name = module.Name or moduleName
-                            module.Category = module.Category or tostring(categoryName)
-                            if type(moduleName) == "string" and moduleName ~= "" then
-                                shared.vape.Modules[moduleName] = module
-                                shared.vape.Modules[moduleName:gsub("%s+", "")] = shared.vape.Modules[moduleName:gsub("%s+", "")] or module
-                            end
-                        end
-                        context.RegisterModuleRecord(moduleName, categoryName, "loaded", context.CurrentSource, moduleOptions)
-                    end
-                    return module
-                end
-            end
-        end
-
-        return true
-    end
-
-    local hooksOk, hooksError = context.InstallModuleRegistrationHooks()
-    if not hooksOk then
-        fail("Failed to install module registration hooks: " .. tostring(hooksError))
-    end
-
-    local profileKey = tostring(game.GameId or "universal") .. "_" .. tostring(game.PlaceId or "place")
-    context.ProfilePath = joinPath(context.RootFolder, "profiles", profileKey .. ".json")
-    context.DefaultProfile = storage.DecodeJson(context.Fetch("profiles/default.txt"), {}) or {}
-    context.Profile = storage.LoadProfile and storage.LoadProfile(context.ProfilePath, context.DefaultProfile) or context.DefaultProfile
-    if storage.MigrateLegacyProfiles then
-        storage.MigrateLegacyProfiles(context)
-    end
-
-    local universalOk, universalError = context.RunFunctionModule("games/universal.luau")
-    if universalOk == false then
-        fail("Failed to load universal modules: " .. tostring(universalError))
-    end
-    warn("[AetherCore] Universal modules loaded")
-
-    local function appendUniquePath(paths, path)
-        if type(path) ~= "string" or path == "" then
-            return
-        end
-        for _, existingPath in ipairs(paths) do
-            if existingPath == path then
-                return
-            end
-        end
-        table.insert(paths, path)
-    end
-
-    local function idListContains(list, id)
-        if type(list) ~= "table" or id == nil then
-            return false
-        end
-        for _, value in pairs(list) do
-            if tonumber(value) == id then
-                return true
-            end
+        if type(readfile) == "function" then
+            local ok, result = pcall(readfile, path)
+            return ok and type(result) == "string" and result ~= ""
         end
         return false
     end
 
-    local function collectSupportedGamePaths(currentGameId, currentPlaceId)
-        local supported = storage.DecodeJson(context.Fetch("profiles/supported.json"), {}) or {}
-        local paths = {}
-        local lobbyFallbackPath = nil
-        local mainFallbackPath = nil
+    local function read(path)
+        if type(readfile) ~= "function" then return nil end
+        local ok, result = pcall(readfile, path)
+        if ok and not isMissingSource(result) then
+            return result
+        end
+        return nil
+    end
 
-        for _, gameInfo in pairs(supported) do
-            if type(gameInfo) == "table" and tonumber(gameInfo.gameid or gameInfo.GameId) == currentGameId then
-                for groupName, groupInfo in pairs(gameInfo) do
-                    if type(groupInfo) == "table" then
-                        local groupPath = groupInfo.Path or groupInfo.path
-                        local groupPlace = tonumber(groupInfo.Place or groupInfo.place)
-                        local exactMatch = groupPlace == currentPlaceId or idListContains(groupInfo.Ids or groupInfo.ids, currentPlaceId)
+    local function write(path, contents)
+        if type(writefile) == "function" and type(contents) == "string" then
+            pcall(writefile, path, contents)
+        end
+    end
 
-                        local normalizedGroupName = tostring(groupName):lower()
-                        if exactMatch then
-                            appendUniquePath(paths, groupPath)
-                        elseif normalizedGroupName == "lobby" then
-                            lobbyFallbackPath = groupPath
-                        elseif normalizedGroupName == "main" or normalizedGroupName == "match" then
-                            mainFallbackPath = groupPath
-                        end
-                    end
+    local function fetch(path)
+        local cachePath = rootFolder .. "/" .. path
+        local cached = read(cachePath) or read(path)
+        if cached then
+            return cached
+        end
+
+        local remote
+        local ok, result = pcall(function()
+            return game:HttpGet(rootUrl .. path, true)
+        end)
+        if ok and not isMissingSource(result) then
+            remote = result
+            write(cachePath, remote)
+        end
+        if remote then
+            return remote
+        end
+        error("[AetherCore] Unable to load " .. tostring(path))
+    end
+
+    if type(writefile) == "function" and not isFile(rootFolder .. "/profiles/commit.txt") then
+        write(rootFolder .. "/profiles/commit.txt", "main")
+    end
+
+    if not startup.SelectedGui and not startup.Gui then
+        local profileGui = read(rootFolder .. "/profiles/gui.txt") or read("profiles/gui.txt")
+        if type(profileGui) == "string" and profileGui ~= "" then
+            selectedGui = profileGui:gsub("^%s+", ""):gsub("%s+$", "")
+            context.SelectedGui = selectedGui
+        end
+    end
+
+    local function runSource(path, chunkName, ...)
+        local source = fetch(path)
+        local chunk, compileError = loadstring(source, chunkName or path)
+        if not chunk then
+            error("[AetherCore] Failed to compile " .. tostring(path) .. ": " .. tostring(compileError))
+        end
+        return chunk(...)
+    end
+
+    if shared.vape and type(shared.vape.Uninject) == "function" then
+        pcall(function() shared.vape:Uninject() end)
+    end
+
+    if selectedGui == "wurst" then
+        selectedGui = "new"
+        context.SelectedGui = selectedGui
+    end
+
+    local guiPath = "guis/" .. selectedGui .. ".lua"
+    if not isFile(rootFolder .. "/" .. guiPath) and not isFile(guiPath) then
+        selectedGui = "new"
+        guiPath = "guis/new.lua"
+        context.SelectedGui = selectedGui
+    end
+
+    local vape = runSource(guiPath, "AetherCore/gui", startup.License or {})
+    _G.vape = vape
+    shared.vape = vape
+
+    local function notify(title, message, duration, kind)
+        if type(vape) == "table" and type(vape.CreateNotification) == "function" then
+            pcall(function()
+                vape:CreateNotification(title, message, duration or 5, kind)
+            end)
+        else
+            warn("[" .. title .. "] " .. tostring(message))
+        end
+    end
+
+    local originalCreateModule = {}
+    if type(vape) == "table" and type(vape.Categories) == "table" then
+        for _, category in pairs(vape.Categories) do
+            if type(category) == "table" and type(category.CreateModule) == "function" and originalCreateModule[category] == nil then
+                originalCreateModule[category] = category.CreateModule
+                category.CreateModule = function(self, moduleDefinition)
+                    context.State.ModuleRegistrationCount += 1
+                    return originalCreateModule[self](self, moduleDefinition)
                 end
             end
         end
+    end
 
-        if #paths == 0 then
-            -- Never use a lobby payload as the default for an unknown place in a
-            -- supported game. BedWars can rotate or add match PlaceIds, and using
-            -- the lobby payload there registers lobby-only modules in real matches.
-            appendUniquePath(paths, mainFallbackPath)
-            if #paths == 0 and currentPlaceId ~= nil then
-                appendUniquePath(paths, lobbyFallbackPath)
+    local utility = runSource("libraries/utility.lua", "AetherCore/libraries/utility")
+    context.Libraries.utility = utility
+    if type(utility) == "table" and type(utility.SetRuntimeContext) == "function" then
+        utility.SetRuntimeContext(context)
+    end
+
+    local function loadModule(path, required)
+        local ok, result, extra = pcall(function()
+            local loaded = runSource(path, "AetherCore/" .. path)
+            if type(loaded) == "function" then
+                return loaded(context)
             end
+            return loaded
+        end)
+        if ok and result ~= false then
+            table.insert(context.State.LoadedModules, path)
+            return true
         end
 
-        return paths
-    end
-
-    local currentGameId = tonumber(game.GameId)
-    local currentPlaceId = tonumber(game.PlaceId)
-    local placePath = "games/" .. tostring(currentPlaceId or "unknown") .. ".luau"
-    local gamePaths = {placePath}
-    for _, supportedPath in ipairs(collectSupportedGamePaths(currentGameId, currentPlaceId)) do
-        appendUniquePath(gamePaths, supportedPath)
-    end
-
-    local loadedPlaceModule = false
-    local loadedGamePaths = {}
-    local loadErrors = {}
-    for _, candidatePath in ipairs(gamePaths) do
-        local ok, loadError = context.LoadGameModule(candidatePath)
-        if ok then
-            loadedPlaceModule = true
-            table.insert(loadedGamePaths, candidatePath)
-            warnf("Loaded place module: %s", candidatePath)
+        local message = ok and tostring(extra or result or "module returned false") or tostring(result)
+        table.insert(context.State.FailedModules, {Path = path, Error = message})
+        if required then
+            notify("AetherCore", "Failed to load " .. path .. ": " .. message, 12, "alert")
         else
-            table.insert(loadErrors, candidatePath .. ": " .. tostring(loadError))
+            warn("[AetherCore] Optional module skipped: " .. path .. ": " .. message)
+        end
+        return false, message
+    end
+
+    if not shared.VapeIndependent then
+        loadModule("games/universal.luau", true)
+        loadModule("games/" .. tostring(game.PlaceId) .. ".luau", false)
+        loadModule("custom_modules.luau", false)
+    end
+
+    if type(vape) == "table" then
+        if type(vape.Load) == "function" then
+            vape:Load()
+        end
+        if type(vape.Save) == "function" then
+            task.spawn(function()
+                repeat
+                    vape:Save()
+                    task.wait(10)
+                until not vape.Loaded
+            end)
         end
     end
-    context.DetectedGame = {
-        GameId = currentGameId,
-        PlaceId = currentPlaceId,
-        CandidatePaths = gamePaths,
-        LoadedPaths = loadedGamePaths,
-        Errors = loadErrors
-    }
 
-    if not loadedPlaceModule then
-        warnf("No place module loaded for GameId %s PlaceId %s: %s", tostring(currentGameId or "unknown"), tostring(currentPlaceId or "unknown"), table.concat(loadErrors, " | "))
-    end
-
-    local customOk, customResult = pcall(function()
-        return context.RunFunctionModule("custom_modules.luau")
-    end)
-    if not customOk then
-        warnf("custom_modules.luau is unavailable or failed: %s", tostring(customResult))
-    else
-        warn("[AetherCore] Custom modules loaded")
-    end
-
-    function context.SynchronizeExistingModules()
-        if type(shared) ~= "table" or type(shared.vape) ~= "table" then
-            return 0
-        end
-        local modules = type(shared.vape.Modules) == "table" and shared.vape.Modules or {}
-        shared.vape.Modules = modules
-        local synchronized = 0
-
-        for moduleName, module in pairs(modules) do
-            if type(module) == "table" and type(moduleName) == "string" and moduleName ~= "" then
-                module.Name = module.Name or moduleName
-                modules[module.Name] = module
-                modules[module.Name:gsub("%s+", "")] = modules[module.Name:gsub("%s+", "")] or module
-                synchronized = synchronized + 1
-            end
-        end
-
-        return synchronized
-    end
-
-    local synchronizedModules = context.SynchronizeExistingModules()
-    if synchronizedModules > 0 then
-        warnf("Synchronized %s existing module records", tostring(synchronizedModules))
-    end
-
-    local moduleAssistOk, moduleAssistResult = pcall(function()
-        local moduleAssist = context.LoadModule("libraries/moduleassist.lua")
-        if type(moduleAssist) == "table" and type(moduleAssist.Install) == "function" then
-            return moduleAssist.Install(context)
-        end
-        return false, "library did not expose Install"
-    end)
-    if not moduleAssistOk or moduleAssistResult == false then
-        warnf("Module Assist failed to load: %s", tostring(moduleAssistResult))
-    else
-        warn("[AetherCore] Module Assist loaded")
-    end
-
-    if (tonumber(state.ModuleRegistrationCount) or 0) == 0 then
-        warn("[AetherCore] No modules were registered. Check game payload and module routing.")
-    end
-
-    if storage.SaveProfile then
-        storage.SaveProfile(context.ProfilePath, context.Profile)
-    end
-
-    local finalized, finalizeError = gui.Finalize(context)
-    if not finalized then
-        fail("Failed to finalize GUI: " .. tostring(finalizeError))
-    end
-
-    warn("[AetherCore] Ready")
-    return context
+    notify("AetherCore", "Finished loading " .. tostring(#context.State.LoadedModules) .. " module file(s).", 5, "info")
+    return shared.VapeIndependent and vape or context
 end

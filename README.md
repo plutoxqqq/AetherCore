@@ -1,8 +1,8 @@
 # AetherCore
 
-AetherCore is a Roblox client project organized with a VapeV4-style repository layout while keeping the loader, branding, routing, and modules AetherCore-specific.
+AetherCore is a Roblox client project organized around a CatV6-style runtime while keeping the existing AetherCore game modules.
 
-The project uses the public structure from 7GrandDadPGN's `VapeV4ForRoblox` as layout guidance for entrypoints, GUI folders, asset folders, and shared library names. Game modules and AetherCore runtime code remain project-owned.
+The loader, cache initializer, GUI implementations, and core runtime libraries now follow the public structure from `Maxlasertech/CatV6`. Game modules remain project-owned under `games/` and are loaded through the AetherCore context adapter.
 
 ## Public loadstring
 
@@ -31,7 +31,7 @@ The repository also includes a `loadstring` text file for users who want a copy-
    - Loads `games/universal.luau`, then loads the `games/<PlaceId>.luau` module when one exists.
    - Loads optional custom modules.
 4. **`NewMainScript.lua`**
-   - VapeV4-style compatibility entrypoint.
+   - Compatibility entrypoint.
    - Delegates to `loader.lua`.
    - Reserved for experimental boot code or legacy support.
 5. **`a.txt`**
@@ -73,16 +73,16 @@ AetherCore/
    └─ 6872274481.luau
 ```
 
-Additional compatibility helpers such as `libraries/utility.lua`, `libraries/storage.lua`, `libraries/theme.lua`, `libraries/signal.lua`, `libraries/tween.lua`, and `libraries/target.lua` are kept because the current AetherCore runtime uses them.
+CatV6-sourced helpers such as `libraries/base64.lua`, `libraries/cheatenginelib.lua`, `libraries/premium.lua`, and `libraries/string.lua` are included alongside the AetherCore module adapter in `libraries/utility.lua`.
 
 ## GUI selection
 
 `profiles/gui.txt` controls the selected GUI. Valid values are:
 
-- `new` – default AetherCore-branded compatibility GUI.
-- `old` – legacy compatibility alias to the default GUI.
-- `rise` – Rise-inspired theme alias to the default GUI.
-- `wurst` – Wurst-inspired theme alias to the default GUI.
+- `new` – default CatV6-style GUI adapted for AetherCore.
+- `old` – CatV6 old GUI.
+- `rise` – CatV6 Rise-style GUI.
+- `wurst` – compatibility alias to `new` because CatV6 does not ship a Wurst GUI.
 
 Unknown values fall back to `new` with a warning.
 
