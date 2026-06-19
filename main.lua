@@ -116,6 +116,23 @@ return function(startup)
     _G.vape = vape
     shared.vape = vape
 
+    local utility = runSource("libraries/utility.lua", "AetherCore/libraries/utility")
+    context.Libraries.utility = utility
+    if type(utility) == "table" then
+        if type(utility.SetRuntimeContext) == "function" then
+            utility.SetRuntimeContext(context)
+        end
+        if type(utility.InstallExecutorCompatibility) == "function" then
+            utility.InstallExecutorCompatibility()
+        end
+        if type(utility.InstallCategoryFallbacks) == "function" then
+            utility.InstallCategoryFallbacks()
+        end
+        if type(utility.ApplyVapeBranding) == "function" then
+            utility.ApplyVapeBranding()
+        end
+    end
+
     local function notify(title, message, duration, kind)
         if type(vape) == "table" and type(vape.CreateNotification) == "function" then
             pcall(function()
@@ -137,12 +154,6 @@ return function(startup)
                 end
             end
         end
-    end
-
-    local utility = runSource("libraries/utility.lua", "AetherCore/libraries/utility")
-    context.Libraries.utility = utility
-    if type(utility) == "table" and type(utility.SetRuntimeContext) == "function" then
-        utility.SetRuntimeContext(context)
     end
 
     local function loadModule(path, required)
