@@ -1,178 +1,83 @@
--- AetherCore init.lua
--- Prepares cache folders, updates core cached files when possible, then executes
--- main.lua with a startup context. Feature logic belongs in main.lua/modules.
+--!nocheck
+-- AetherCore CatV6-style cache initializer.
 local startup = getgenv and getgenv().AetherCoreStartup or {}
 local rootUrl = startup.RootUrl or "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/"
 local rootFolder = startup.RootFolder or "AetherCore"
-local versionPath = rootFolder .. "/profiles/version.txt"
-local remoteVersionPath = "profiles/version.txt"
+local selectedGui = startup.SelectedGui or startup.Gui or "new"
 
-local function hasFileSupport()
-    return type(isfolder) == "function" and type(makefolder) == "function"
+local cloneref = cloneref or function(ref) return ref end
+local coreGui = gethui and gethui() or cloneref(game:GetService("CoreGui"))
+local isfile = isfile or function(file)
+    local ok, result = pcall(function()
+        return readfile(file)
+    end)
+    return ok and type(result) == "string" and result ~= ""
 end
 
+local downloader = Instance.new("TextLabel")
+downloader.Size = UDim2.new(1, 0, 0, 40)
+downloader.BackgroundTransparency = 1
+downloader.TextStrokeTransparency = 0
+downloader.TextSize = 20
+downloader.TextColor3 = Color3.new(1, 1, 1)
+downloader.Font = Enum.Font.Arial
+downloader.Text = ""
+downloader.Parent = Instance.new("ScreenGui", coreGui)
+
 local function ensureFolder(path)
-    if hasFileSupport() then
-        local ok, exists = pcall(isfolder, path)
-        if not ok or not exists then
-            pcall(makefolder, path)
-        end
+    if type(isfolder) == "function" and type(makefolder) == "function" and not isfolder(path) then
+        downloader.Text = "Preparing " .. path
+        makefolder(path)
     end
 end
 
-local folders = {
-    rootFolder,
-    rootFolder .. "/assets",
-    rootFolder .. "/assets/new",
-    rootFolder .. "/assets/old",
-    rootFolder .. "/assets/rise",
-    rootFolder .. "/assets/wurst",
-    rootFolder .. "/assets/shared",
-    rootFolder .. "/games",
-    rootFolder .. "/guis",
-    rootFolder .. "/libraries",
-    rootFolder .. "/profiles",
-    rootFolder .. "/profiles/premade"
-}
-for _, folder in ipairs(folders) do
+for _, folder in ipairs({rootFolder, rootFolder .. "/games", rootFolder .. "/profiles", rootFolder .. "/assets", rootFolder .. "/libraries", rootFolder .. "/guis"}) do
     ensureFolder(folder)
 end
 
-local function read(path)
-    if type(readfile) ~= "function" then return nil end
-    local ok, result = pcall(readfile, path)
-    if ok and type(result) == "string" and result ~= "" then
-        return result
-    end
-    return nil
-end
-
-local function write(path, contents)
-    if type(writefile) == "function" and type(contents) == "string" then
-        pcall(writefile, path, contents)
-    end
-end
-
-local function isMissingRemote(contents)
-    if type(contents) ~= "string" then
-        return true
-    end
+local function missing(contents)
+    if type(contents) ~= "string" then return true end
     local trimmed = contents:gsub("^%s+", ""):gsub("%s+$", "")
-    return trimmed == ""
-        or trimmed == "404: Not Found"
-        or trimmed:find("^404", 1, false) ~= nil
+    return trimmed == "" or trimmed == "404: Not Found" or trimmed:find("^404", 1, false) ~= nil
 end
 
-local function fetchRemote(path)
-    return game:HttpGet(rootUrl .. path, true)
-end
-
-local remoteVersion
-pcall(function()
-    remoteVersion = fetchRemote(remoteVersionPath)
-end)
-if type(remoteVersion) == "string" then
-    remoteVersion = remoteVersion:gsub("^%s+", ""):gsub("%s+$", "")
-    if isMissingRemote(remoteVersion) then
-        remoteVersion = nil
-    end
-end
-local localVersion = read(versionPath)
-local shouldRefresh = remoteVersion and localVersion ~= remoteVersion
-
-local cacheManifest = {
-    "loader.lua",
-    "loadstring",
-    "init.lua",
-    "main.lua",
-    "NewMainScript.lua",
-    "a.txt",
-    "games/universal.luau",
-    "games/6872265039.luau",
-    "games/6872274481.luau",
-    "guis/new.lua",
-    "guis/old.lua",
-    "guis/rise.lua",
-    "guis/wurst.lua",
-    "libraries/utility.lua",
-    "libraries/storage.lua",
-    "libraries/theme.lua",
-    "libraries/signal.lua",
-    "libraries/tween.lua",
-    "libraries/entity.lua",
-    "libraries/prediction.lua",
-    "libraries/target.lua",
-    "libraries/drawing.lua",
-    "libraries/hash.lua",
-    "libraries/vm.lua",
-    "profiles/gui.txt",
-    "profiles/default.txt",
-    "profiles/supported.json",
-    "profiles/version.txt",
-    "custom_modules.luau"
-}
-
-local function fetch(path)
+local function downloadFile(path)
     local cachePath = rootFolder .. "/" .. path
-    if not shouldRefresh then
-        local cached = read(cachePath)
-        if cached then return cached end
+    if not isfile(cachePath) then
+        downloader.Text = "Downloading " .. path
+        local ok, result = pcall(function()
+            return game:HttpGet(rootUrl .. path, true)
+        end)
+        if not ok or missing(result) then
+            error("[AetherCore] Unable to download " .. path .. ": " .. tostring(result))
+        end
+        if type(writefile) == "function" then
+            writefile(cachePath, result)
+        end
+        downloader.Text = ""
     end
-
-    local ok, remote = pcall(fetchRemote, path)
-    if ok and not isMissingRemote(remote) then
-        write(cachePath, remote)
-        return remote
-    end
-
-    local cached = read(cachePath)
-    if cached then return cached end
-
-    -- Legacy local fallback is intentionally last; AetherCore/<path> is the
-    -- supported cache root.
-    local legacy = read(path)
-    if legacy then return legacy end
-
-    error("[AetherCore] Unable to load " .. tostring(path) .. ": " .. tostring(remote))
+    return readfile(cachePath)
 end
 
-if shouldRefresh then
-    for _, path in ipairs(cacheManifest) do
-        pcall(fetch, path)
-    end
-    if remoteVersion then
-        write(versionPath, remoteVersion)
-    end
+if type(writefile) == "function" and not isfile(rootFolder .. "/profiles/gui.txt") then
+    writefile(rootFolder .. "/profiles/gui.txt", selectedGui)
 end
 
-local state = getgenv and getgenv().AetherCore or {}
-state.Name = "AetherCore"
-state.Version = (remoteVersion and remoteVersion:gsub("%s+", "")) or state.Version or "3.2.0"
-state.RootUrl = rootUrl
-state.RootFolder = rootFolder
-state.CacheFolders = folders
-state.LoaderStage = "main"
-state.StartedAt = os.time()
+startup.RootUrl = rootUrl
+startup.RootFolder = rootFolder
+startup.SelectedGui = selectedGui
 if getgenv then
-    getgenv().AetherCore = state
     getgenv().AetherCoreStartup = startup
 end
 
-local mainSource = fetch("main.lua")
-local mainChunk, compileError = loadstring(mainSource, "AetherCore/main.lua")
-if not mainChunk then
+downloader.Text = ""
+local source = downloadFile("main.lua")
+local chunk, compileError = loadstring(source, "AetherCore/main.lua")
+if not chunk then
     error("[AetherCore] Failed to compile main.lua: " .. tostring(compileError))
 end
-
-local mainController = mainChunk()
-if type(mainController) ~= "function" then
-    error("[AetherCore] main.lua did not return the central controller function")
+local controller = chunk()
+if type(controller) ~= "function" then
+    error("[AetherCore] main.lua did not return a controller function")
 end
-
-return mainController({
-    RootUrl = rootUrl,
-    RootFolder = rootFolder,
-    Fetch = fetch,
-    Version = state.Version,
-    Startup = startup
-})
+return controller(startup)

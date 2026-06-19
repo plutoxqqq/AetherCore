@@ -317,7 +317,25 @@ function Utility.LoadVapeRuntimeLibrary(libraryName)
     end
 
     local success, result = pcall(function()
-        local source = game:HttpGet(Utility.VapeCoreBaseUrl .. "libraries/" .. libraryName .. ".lua", true)
+        local context = Utility.RuntimeContext or {}
+        local rootFolder = type(context.RootFolder) == "string" and context.RootFolder ~= "" and context.RootFolder or "AetherCore"
+        local relativePath = "libraries/" .. libraryName .. ".lua"
+        local source
+        if type(readfile) == "function" then
+            local readOk, cached = pcall(readfile, rootFolder .. "/" .. relativePath)
+            if readOk and type(cached) == "string" and cached ~= "" then
+                source = cached
+            else
+                readOk, cached = pcall(readfile, relativePath)
+                if readOk and type(cached) == "string" and cached ~= "" then
+                    source = cached
+                end
+            end
+        end
+        if type(source) ~= "string" or source == "" then
+            local rootUrl = type(context.RootUrl) == "string" and context.RootUrl ~= "" and context.RootUrl or "https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/"
+            source = game:HttpGet(rootUrl .. relativePath, true)
+        end
         local loader, compileError = loadstring(source, "AetherCoreRuntimeLibrary:" .. libraryName)
         if not loader then
             error(string.format("compile error: %s", tostring(compileError)))
