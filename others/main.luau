@@ -3883,18 +3883,39 @@ function mainapi:CreateCategory(categorysettings)
 			end
 		end
 
+		function moduleapi:RefreshState()
+			local rainbow = mainapi.GUIColor.Rainbow and mainapi.RainbowMode and mainapi.RainbowMode.Value ~= 'Retro'
+			divider.Visible = self.Enabled
+			gradient.Enabled = self.Enabled and rainbow and mainapi.RainbowMode.Value == 'Gradient'
+			if self.Enabled then
+				local hue, sat, val = mainapi.GUIColor.Hue, mainapi.GUIColor.Sat, mainapi.GUIColor.Value
+				modulebutton.BackgroundColor3 = rainbow and Color3.fromHSV(mainapi:Color((hue - (self.Index * 0.025)) % 1)) or Color3.fromHSV(hue, sat, val)
+				modulebutton.TextColor3 = mainapi.GUIColor.Rainbow and Color3.new(0.19, 0.19, 0.19) or mainapi:TextColor(hue, sat, val)
+				if gradient.Enabled then
+					modulebutton.BackgroundColor3 = Color3.new(1, 1, 1)
+					gradient.Color = ColorSequence.new({
+						ColorSequenceKeypoint.new(0, Color3.fromHSV(mainapi:Color((hue - (self.Index * 0.025)) % 1))),
+						ColorSequenceKeypoint.new(1, Color3.fromHSV(mainapi:Color((hue - ((self.Index + 1) * 0.025)) % 1)))
+					})
+				end
+				dots.ImageColor3 = modulebutton.TextColor3
+				bindicon.ImageColor3 = modulebutton.TextColor3
+				bindtext.TextColor3 = modulebutton.TextColor3
+			else
+				modulebutton.TextColor3 = (hovered or modulechildren.Visible) and uipallet.Text or color.Dark(uipallet.Text, 0.16)
+				modulebutton.BackgroundColor3 = (hovered or modulechildren.Visible) and color.Light(uipallet.Main, 0.02) or uipallet.Main
+				dots.ImageColor3 = color.Light(uipallet.Main, 0.37)
+				bindicon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
+				bindtext.TextColor3 = color.Dark(uipallet.Text, 0.43)
+			end
+		end
+
 		function moduleapi:Toggle(multiple)
 			if mainapi.ThreadFix then
 				setthreadidentity(8)
 			end
 			self.Enabled = not self.Enabled
-			divider.Visible = self.Enabled
-			gradient.Enabled = self.Enabled
-			modulebutton.TextColor3 = (hovered or modulechildren.Visible) and uipallet.Text or color.Dark(uipallet.Text, 0.16)
-			modulebutton.BackgroundColor3 = (hovered or modulechildren.Visible) and color.Light(uipallet.Main, 0.02) or uipallet.Main
-			dots.ImageColor3 = self.Enabled and Color3.fromRGB(50, 50, 50) or color.Light(uipallet.Main, 0.37)
-			bindicon.ImageColor3 = color.Dark(uipallet.Text, 0.43)
-			bindtext.TextColor3 = color.Dark(uipallet.Text, 0.43)
+			self:RefreshState()
 			if not self.Enabled then
 				for _, v in self.Connections do
 					v:Disconnect()
@@ -3903,6 +3924,8 @@ function mainapi:CreateCategory(categorysettings)
 			end
 			if not multiple then
 				mainapi:UpdateTextGUI()
+			else
+				mainapi:UpdateGUI(mainapi.GUIColor.Hue, mainapi.GUIColor.Sat, mainapi.GUIColor.Value, true)
 			end
 			task.spawn(modulesettings.Function, self.Enabled)
 		end
@@ -7461,47 +7484,85 @@ do
 		return character and character:FindFirstChild('HumanoidRootPart')
 	end
 
-	local function createLinearVelocity(root, name)
-		local attachment = Instance.new('Attachment')
-		attachment.Name = name..'Attachment'
-		attachment.Parent = root
-
-		local velocity = Instance.new('LinearVelocity')
-		velocity.Name = name
-		velocity.Attachment0 = attachment
-		velocity.MaxForce = math.huge
-		velocity.RelativeTo = Enum.ActuatorRelativeTo.World
-		velocity.Parent = root
-		return velocity, attachment
+	local function isAlive()
+		local humanoid, root = getHumanoid(), getRoot()
+		return humanoid and root and humanoid.Health > 0, humanoid, root
 	end
 
 	local speedSlider
 	local speedModule = mainapi.Categories.Blatant:CreateModule({
 		Name = 'Speed',
-		Tooltip = 'Sets your character to a stable movement speed with one lightweight Heartbeat update.',
+		Tooltip = 'Keeps your character at the selected walking speed without blocking normal jumping or movement.',
 		Function = function(enabled)
-			local humanoid = getHumanoid()
-			if humanoid then
-				speedModule.OriginalWalkSpeed = speedModule.OriginalWalkSpeed or humanoid.WalkSpeed
-				humanoid.WalkSpeed = enabled and speedSlider.Value or speedModule.OriginalWalkSpeed
+			local function applySpeed()
+				local humanoid = getHumanoid()
+				if not humanoid then return end
+				if not speedModule.OriginalWalkSpeed then
+					speedModule.OriginalWalkSpeed = humanoid.WalkSpeed
+				end
+				humanoid.WalkSpeed = speedSlider.Value
 			end
+
 			if enabled then
-				speedModule:Clean(runService.Heartbeat:Connect(function()
-					local currentHumanoid = getHumanoid()
-					if currentHumanoid and currentHumanoid.WalkSpeed ~= speedSlider.Value then
-						currentHumanoid.WalkSpeed = speedSlider.Value
+				applySpeed()
+				speedModule:Clean(runService.Heartbeat:Connect(applySpeed))
+				speedModule:Clean(localPlayer.CharacterAdded:Connect(function()
+					task.wait(0.2)
+					if speedModule.Enabled then
+						applySpeed()
 					end
 				end))
 			else
-				local currentHumanoid = getHumanoid()
-				if currentHumanoid and speedModule.OriginalWalkSpeed then
-					currentHumanoid.WalkSpeed = speedModule.OriginalWalkSpeed
+				local humanoid = getHumanoid()
+				if humanoid and speedModule.OriginalWalkSpeed then
+					humanoid.WalkSpeed = speedModule.OriginalWalkSpeed
 				end
 				speedModule.OriginalWalkSpeed = nil
 			end
 		end
 	})
 	speedSlider = speedModule:CreateSlider({Name = 'Speed', Min = 16, Max = 250, Default = 80, Decimal = 1, Suffix = 'studs'})
+
+	mainapi.Categories.Utility:CreateModule({
+		Name = 'Anti Ragdoll',
+		Tooltip = 'Prevents the local humanoid from entering ragdoll-like physics states.',
+		Function = function(enabled)
+			local module = mainapi.Modules['Anti Ragdoll']
+			local blockedStates = {
+				Enum.HumanoidStateType.Ragdoll,
+				Enum.HumanoidStateType.FallingDown,
+				Enum.HumanoidStateType.Physics,
+				Enum.HumanoidStateType.PlatformStanding
+			}
+			local function protectHumanoid(humanoid)
+				if not humanoid then return end
+				for _, state in blockedStates do
+					humanoid:SetStateEnabled(state, false)
+				end
+				if table.find(blockedStates, humanoid:GetState()) then
+					humanoid:ChangeState(Enum.HumanoidStateType.Running)
+				end
+			end
+			local function restoreHumanoid(humanoid)
+				if not humanoid then return end
+				for _, state in blockedStates do
+					humanoid:SetStateEnabled(state, true)
+				end
+			end
+
+			if enabled then
+				protectHumanoid(getHumanoid())
+				module:Clean(runService.Heartbeat:Connect(function()
+					protectHumanoid(getHumanoid())
+				end))
+				module:Clean(localPlayer.CharacterAdded:Connect(function(character)
+					protectHumanoid(character:WaitForChild('Humanoid', 5))
+				end))
+			else
+				restoreHumanoid(getHumanoid())
+			end
+		end
+	})
 
 	mainapi.Categories.Utility:CreateModule({
 		Name = 'Infinite Jump',
@@ -7521,30 +7582,29 @@ do
 	local flySpeed
 	local flyModule = mainapi.Categories.Blatant:CreateModule({
 		Name = 'Fly',
-		Tooltip = 'Camera-relative flight using a single LinearVelocity constraint.',
+		Tooltip = 'Camera-relative flight that preserves control and avoids freezing the character.',
 		Function = function(enabled)
-			local velocity, attachment
 			if enabled then
-				local root = getRoot()
-				if not root then return end
-				velocity, attachment = createLinearVelocity(root, 'AetherFlyVelocity')
-				flyModule:Clean(function()
-					if velocity then velocity:Destroy() end
-					if attachment then attachment:Destroy() end
-				end)
 				flyModule:Clean(runService.RenderStepped:Connect(function()
+					local alive, humanoid, root = isAlive()
 					local camera = workspaceService.CurrentCamera
-					local currentRoot = getRoot()
-					if not camera or not currentRoot or not velocity.Parent then return end
+					if not alive or not camera then return end
 					local move = Vector3.zero
 					if inputService:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
 					if inputService:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
 					if inputService:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
 					if inputService:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
 					if inputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.yAxis end
-					if inputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.yAxis end
-					velocity.VectorVelocity = move.Magnitude > 0 and move.Unit * flySpeed.Value or Vector3.zero
+					if inputService:IsKeyDown(Enum.KeyCode.LeftShift) or inputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.yAxis end
+					root.AssemblyLinearVelocity = move.Magnitude > 0 and (move.Unit * flySpeed.Value) or Vector3.new(0, 1.5, 0)
+					humanoid.PlatformStand = false
+					humanoid:ChangeState(Enum.HumanoidStateType.Running)
 				end))
+			else
+				local humanoid = getHumanoid()
+				if humanoid then
+					humanoid.PlatformStand = false
+				end
 			end
 		end
 	})
@@ -7553,7 +7613,7 @@ do
 	local function teleportTo(position)
 		local root = getRoot()
 		if root then
-			root.CFrame = CFrame.new(position + Vector3.new(0, 3, 0), position + root.CFrame.LookVector)
+			root.CFrame = CFrame.lookAlong(position + Vector3.new(0, 3, 0), root.CFrame.LookVector)
 			root.AssemblyLinearVelocity = Vector3.zero
 		end
 	end
@@ -7573,9 +7633,7 @@ do
 				end
 			end
 			table.sort(candidates, function(a, b)
-				local aNumber = tonumber(a.Name:match('%d+')) or 0
-				local bNumber = tonumber(b.Name:match('%d+')) or 0
-				return aNumber < bNumber
+				return (tonumber(a.Name:match('%d+')) or 0) < (tonumber(b.Name:match('%d+')) or 0)
 			end)
 			for _, part in candidates do
 				if not mainapi.Modules['Auto Obby'].Enabled then break end
@@ -7591,48 +7649,66 @@ do
 	local antiDeathHeight
 	local antiDeathModule = mainapi.Categories.Utility:CreateModule({
 		Name = 'Anti Death',
-		Tooltip = 'Rapidly blinks the server position upward and back while keeping the camera on your normal character.',
+		Tooltip = 'Rapidly blinks your character up and down while preserving normal walking, jumping, and velocity.',
 		Function = function(enabled)
 			if enabled then
 				antiDeathModule:Clean(runService.Heartbeat:Connect(function()
-					local humanoid = getHumanoid()
-					local root = getRoot()
-					if not humanoid or not root or humanoid.Health <= 0 then return end
-					local original = root.CFrame
-					root.CFrame = original + Vector3.new(0, antiDeathHeight.Value, 0)
-					runService.Heartbeat:Wait()
-					if root.Parent then
-						root.CFrame = original
-						root.AssemblyLinearVelocity = Vector3.zero
-					end
+					local alive, _, root = isAlive()
+					if not alive then return end
+					local originalCFrame = root.CFrame
+					local originalVelocity = root.AssemblyLinearVelocity
+					root.CFrame = originalCFrame + Vector3.new(0, antiDeathHeight.Value, 0)
+					task.defer(function()
+						if antiDeathModule.Enabled and root.Parent then
+							root.CFrame = originalCFrame - Vector3.new(0, math.min(antiDeathHeight.Value * 0.25, 35), 0)
+							root.AssemblyLinearVelocity = originalVelocity
+							task.defer(function()
+								if antiDeathModule.Enabled and root.Parent then
+									root.CFrame = originalCFrame
+									root.AssemblyLinearVelocity = originalVelocity
+								end
+							end)
+						end
+					end)
 				end))
 			end
 		end
 	})
-	antiDeathHeight = antiDeathModule:CreateSlider({Name = 'Blink Height', Min = 50, Max = 500, Default = 180, Decimal = 1, Suffix = 'studs'})
+	antiDeathHeight = antiDeathModule:CreateSlider({Name = 'Blink Height', Min = 20, Max = 500, Default = 120, Decimal = 1, Suffix = 'studs'})
 
-	mainapi.Categories.Utility:CreateModule({
-		Name = 'Void Walker',
-		Tooltip = 'Returns you to a saved safe point if you fall under the void.',
+	local antiVoidMode
+	local antiVoidModule = mainapi.Categories.Utility:CreateModule({
+		Name = 'Anti Void',
+		Tooltip = 'Returns you to the last safe ground when you fall below the void. Instant mode teleports directly to the nearest saved safe ground.',
 		Function = function(enabled)
-			local module = mainapi.Modules['Void Walker']
 			if enabled then
-				local root = getRoot()
-				module.SafeCFrame = root and root.CFrame or nil
-				module:Clean(runService.Heartbeat:Connect(function()
-					local currentRoot = getRoot()
-					local humanoid = getHumanoid()
-					if not currentRoot or not humanoid then return end
-					if humanoid.FloorMaterial ~= Enum.Material.Air then
-						module.SafeCFrame = currentRoot.CFrame
-					elseif currentRoot.Position.Y < workspaceService.FallenPartsDestroyHeight + 25 and module.SafeCFrame then
-						currentRoot.CFrame = module.SafeCFrame + Vector3.new(0, 5, 0)
-						currentRoot.AssemblyLinearVelocity = Vector3.zero
+				local params = RaycastParams.new()
+				params.FilterType = Enum.RaycastFilterType.Exclude
+				params.IgnoreWater = true
+				antiVoidModule.SafeCFrame = getRoot() and getRoot().CFrame or antiVoidModule.SafeCFrame
+				antiVoidModule:Clean(runService.Heartbeat:Connect(function()
+					local alive, humanoid, root = isAlive()
+					if not alive then return end
+					params.FilterDescendantsInstances = {getCharacter()}
+					local ground = workspaceService:Raycast(root.Position, Vector3.new(0, -10, 0), params)
+					if ground and ground.Instance and ground.Instance.CanCollide and humanoid.FloorMaterial ~= Enum.Material.Air then
+						antiVoidModule.SafeCFrame = CFrame.lookAlong(ground.Position + Vector3.new(0, 3, 0), root.CFrame.LookVector)
+					end
+					if root.Position.Y <= workspaceService.FallenPartsDestroyHeight + 35 and antiVoidModule.SafeCFrame then
+						if antiVoidMode.Value == 'Instant' then
+							root.CFrame = antiVoidModule.SafeCFrame
+							root.AssemblyLinearVelocity = Vector3.zero
+						else
+							root.CFrame = root.CFrame:Lerp(antiVoidModule.SafeCFrame, antiVoidMode.Value == 'Smooth' and 0.35 or 1)
+							root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 65, root.AssemblyLinearVelocity.Z)
+						end
 					end
 				end))
 			end
 		end
 	})
+	antiVoidMode = antiVoidModule:CreateDropdown({Name = 'Mode', List = {'Normal', 'Smooth', 'Instant'}, Default = 'Instant'})
+	antiVoidMode:SetValue('Instant')
 
 	mainapi.Categories.Utility:CreateModule({
 		Name = 'No Clip',
