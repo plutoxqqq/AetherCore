@@ -126,11 +126,8 @@ local getcustomassets = {
 	['catrewrite/assets/new/worldicon.png'] = 'rbxassetid://14368362492'
 }
 
-local isfile = isfile or function(file)
-	local suc, res = pcall(function()
-		return readfile(file)
-	end)
-	return suc and res ~= nil and res ~= ''
+local isfile = function()
+	return false
 end
 
 local getfontsize = function(text, size, font)
@@ -320,30 +317,11 @@ local function createMobileButton(buttonapi, position)
 	buttonapi.Bind = {Button = button}
 end
 
-local function downloadFile(path, func)
-	if not isfile(path) then
-		createDownloader(path)
-		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/MaxlaserTech/CatV6/'..readfile('catrewrite/profiles/commit.txt')..'/'..select(1, path:gsub('catrewrite/', '')), true)
-		end)
-		if not suc or res == '404: Not Found' then
-			error(res)
-		end
-		if path:find('.lua') then
-			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
-		end
-		writefile(path, res)
-	end
-	return (func or readfile)(path)
+local function downloadFile()
+	error('[AetherCore] External file loading is disabled for this entrypoint')
 end
 
-getcustomasset = assetfunction and function(path)
-	local suc, res = pcall(downloadFile, path, assetfunction)
-	if suc then
-		return res
-	end
-	return getcustomassets[path] or ''
-end or function(path)
+getcustomasset = function(path)
 	return getcustomassets[path] or ''
 end
 
@@ -362,15 +340,11 @@ local function loopClean(tab)
 	end
 end
 
-local function loadJson(path)
-	local suc, res = pcall(function()
-		return httpService:JSONDecode(readfile(path))
-	end)
-	return suc and type(res) == 'table' and res or nil
+local function loadJson()
+	return nil
 end
 
-downloadFile('catrewrite/profiles/features.json')
-local newModules = loadJson('catrewrite/profiles/features.json') or {}
+local newModules = {}
 local function makeDraggable(gui, window)
 	gui.InputBegan:Connect(function(inputObj)
 		if window and not window.Visible then return end
@@ -423,16 +397,6 @@ local function removeTags(str)
 end
 
 do
-	local res = isfile('catrewrite/profiles/color.txt') and loadJson('catrewrite/profiles/color.txt')
-	if res then
-		uipallet.Main = res.Main and Color3.fromRGB(unpack(res.Main)) or uipallet.Main
-		uipallet.Text = res.Text and Color3.fromRGB(unpack(res.Text)) or uipallet.Text
-		uipallet.Font = res.Font and Font.new(
-			res.Font:find('rbxasset') and res.Font
-			or string.format('rbxasset://fonts/families/%s.json', res.Font)
-		) or uipallet.Font
-		uipallet.FontSemiBold = Font.new(uipallet.Font.Family, Enum.FontWeight.SemiBold)
-	end
 	fontsize.Font = uipallet.Font
 end
 
@@ -539,7 +503,7 @@ components = {
 		label.Parent = bkg
 		addCorner(label, UDim.new(0, 4))
 		optionsettings.Function = optionsettings.Function or function() end
-		
+
 		button.MouseEnter:Connect(function()
 			tween:Tween(bkg, uipallet.Tween, {
 				BackgroundColor3 = color.Light(uipallet.Main, 0.0875)
@@ -562,7 +526,7 @@ components = {
 			Rainbow = false,
 			Index = 0
 		}
-		
+
 		local function createSlider(name, gradientColor)
 			local slider = Instance.new('TextButton')
 			slider.Name = optionsettings.Name..'Slider'..name
@@ -616,7 +580,7 @@ components = {
 			knob.BackgroundColor3 = uipallet.Text
 			knob.Parent = knobholder
 			addCorner(knob, UDim.new(1, 0))
-		
+
 			slider.InputBegan:Connect(function(inputObj)
 				if
 					(inputObj.UserInputType == Enum.UserInputType.MouseButton1 or inputObj.UserInputType == Enum.UserInputType.Touch)
@@ -627,7 +591,7 @@ components = {
 							optionapi:SetValue(nil, name == 'Saturation' and math.clamp((input.Position.X - bkg.AbsolutePosition.X) / bkg.AbsoluteSize.X, 0, 1) or nil, name == 'Vibrance' and math.clamp((input.Position.X - bkg.AbsolutePosition.X) / bkg.AbsoluteSize.X, 0, 1) or nil, name == 'Opacity' and math.clamp((input.Position.X - bkg.AbsolutePosition.X) / bkg.AbsoluteSize.X, 0, 1) or nil)
 						end
 					end)
-		
+
 					local ended
 					ended = inputObj.Changed:Connect(function()
 						if inputObj.UserInputState == Enum.UserInputState.End then
@@ -647,10 +611,10 @@ components = {
 					Size = UDim2.fromOffset(14, 14)
 				})
 			end)
-		
+
 			return slider
 		end
-		
+
 		local slider = Instance.new('TextButton')
 		slider.Name = optionsettings.Name..'Slider'
 		slider.Size = UDim2.new(1, 0, 0, 50)
@@ -780,7 +744,7 @@ components = {
 			ColorSequenceKeypoint.new(0, color.Dark(uipallet.Main, 0.02)),
 			ColorSequenceKeypoint.new(1, Color3.fromHSV(optionapi.Hue, optionapi.Sat, optionapi.Value))
 		}))
-		
+
 		function optionapi:Save(tab)
 			tab[optionsettings.Name] = {
 				Hue = self.Hue,
@@ -790,7 +754,7 @@ components = {
 				Rainbow = self.Rainbow
 			}
 		end
-		
+
 		function optionapi:Load(tab)
 			if tab.Rainbow ~= self.Rainbow then
 				self:Toggle()
@@ -799,7 +763,7 @@ components = {
 				self:SetValue(tab.Hue, tab.Sat, tab.Value, tab.Opacity)
 			end
 		end
-		
+
 		function optionapi:SetValue(h, s, v, o)
 			self.Hue = h or self.Hue
 			self.Sat = s or self.Sat
@@ -819,7 +783,7 @@ components = {
 				ColorSequenceKeypoint.new(0, color.Dark(uipallet.Main, 0.02)),
 				ColorSequenceKeypoint.new(1, Color3.fromHSV(self.Hue, self.Sat, self.Value))
 			})
-		
+
 			if self.Rainbow then
 				fill.Size = UDim2.fromScale(math.clamp(self.Hue, 0.04, 0.96), 1)
 			else
@@ -827,7 +791,7 @@ components = {
 					Size = UDim2.fromScale(math.clamp(self.Hue, 0.04, 0.96), 1)
 				})
 			end
-		
+
 			if s then
 				tween:Tween(satSlider.Slider.Fill, uipallet.Tween, {
 					Size = UDim2.fromScale(math.clamp(self.Sat, 0.04, 0.96), 1)
@@ -843,10 +807,10 @@ components = {
 					Size = UDim2.fromScale(math.clamp(self.Opacity, 0.04, 0.96), 1)
 				})
 			end
-		
+
 			optionsettings.Function(self.Hue, self.Sat, self.Value, self.Opacity)
 		end
-		
+
 		function optionapi:Toggle()
 			self.Rainbow = not self.Rainbow
 			if self.Rainbow then
@@ -876,7 +840,7 @@ components = {
 				end)
 			end
 		end
-		
+
 		local doubleClick = tick()
 		preview.MouseButton1Click:Connect(function()
 			preview.Visible = false
@@ -899,7 +863,7 @@ components = {
 						optionapi:SetValue(math.clamp((input.Position.X - bkg.AbsolutePosition.X) / bkg.AbsoluteSize.X, 0, 1))
 					end
 				end)
-		
+
 				local ended
 				ended = inputObj.Changed:Connect(function()
 					if inputObj.UserInputState == Enum.UserInputState.End then
@@ -959,10 +923,10 @@ components = {
 				end
 			end
 		end)
-		
+
 		optionapi.Object = slider
 		api.Options[optionsettings.Name] = optionapi
-		
+
 		return optionapi
 	end,
 	Dropdown = function(optionsettings, children, api)
@@ -971,7 +935,7 @@ components = {
 			Value = optionsettings.List[1] or 'None',
 			Index = 0
 		}
-		
+
 		local dropdown = Instance.new('TextButton')
 		dropdown.Name = optionsettings.Name..'Dropdown'
 		dropdown.Size = UDim2.new(1, 0, 0, 40)
@@ -1020,24 +984,24 @@ components = {
 		arrow.Parent = button
 		optionsettings.Function = optionsettings.Function or function() end
 		local dropdownchildren
-		
+
 		function optionapi:Save(tab)
 			tab[optionsettings.Name] = {Value = self.Value}
 		end
-		
+
 		function optionapi:Load(tab)
 			if self.Value ~= tab.Value then
 				self:SetValue(tab.Value)
 			end
 		end
-		
+
 		function optionapi:Change(list)
 			optionsettings.List = list or {}
 			if not table.find(optionsettings.List, self.Value) then
 				self:SetValue(self.Value)
 			end
 		end
-		
+
 		function optionapi:SetValue(val, mouse)
 			self.Value = table.find(optionsettings.List, val) and val or optionsettings.List[1] or 'None'
 			title.Text = '         '..optionsettings.Name..' - '..self.Value
@@ -1049,7 +1013,7 @@ components = {
 			end
 			optionsettings.Function(self.Value, mouse)
 		end
-		
+
 		button.MouseButton1Click:Connect(function()
 			if not dropdownchildren then
 				arrow.Rotation = 270
@@ -1106,10 +1070,10 @@ components = {
 				BackgroundColor3 = color.Light(uipallet.Main, 0.034)
 			})
 		end)
-		
+
 		optionapi.Object = dropdown
 		api.Options[optionsettings.Name] = optionapi
-		
+
 		return optionapi
 	end,
 	Font = function(optionsettings, children, api)
@@ -1122,12 +1086,12 @@ components = {
 				table.insert(fonts, v.Name)
 			end
 		end
-		
+
 		local optionapi = {Value = Font.fromEnum(Enum.Font[fonts[1]])}
 		local fontdropdown
 		local fontbox
 		optionsettings.Function = optionsettings.Function or function() end
-		
+
 		fontdropdown = components.Dropdown({
 			Name = optionsettings.Name,
 			List = fonts,
@@ -1161,11 +1125,11 @@ components = {
 			Visible = false,
 			Darker = true
 		}, children, api)
-		
+
 		fontdropdown.Object:GetPropertyChangedSignal('Visible'):Connect(function()
 			fontbox.Object.Visible = fontdropdown.Object.Visible and fontdropdown.Value == 'Custom'
 		end)
-		
+
 		return optionapi
 	end,
 	Slider = function(optionsettings, children, api)
@@ -1175,7 +1139,7 @@ components = {
 			Max = optionsettings.Max,
 			Index = getTableSize(api.Options)
 		}
-		
+
 		local slider = Instance.new('TextButton')
 		slider.Name = optionsettings.Name..'Slider'
 		slider.Size = UDim2.new(1, 0, 0, 50)
@@ -1252,26 +1216,26 @@ components = {
 		addCorner(knob, UDim.new(1, 0))
 		optionsettings.Function = optionsettings.Function or function() end
 		optionsettings.Decimal = optionsettings.Decimal or 1
-		
+
 		function optionapi:Save(tab)
 			tab[optionsettings.Name] = {
 				Value = self.Value,
 				Max = self.Max
 			}
 		end
-		
+
 		function optionapi:Load(tab)
 			local newval = tab.Value == tab.Max and tab.Max ~= self.Max and self.Max or tab.Value
 			if self.Value ~= newval then
 				self:SetValue(newval, nil, true)
 			end
 		end
-		
+
 		function optionapi:Color(hue, sat, val, rainbowcheck)
 			fill.BackgroundColor3 = rainbowcheck and Color3.fromHSV(mainapi:Color((hue - (self.Index * 0.075)) % 1)) or Color3.fromHSV(hue, sat, val)
 			knob.BackgroundColor3 = fill.BackgroundColor3
 		end
-		
+
 		function optionapi:SetValue(value, pos, final)
 			if tonumber(value) == math.huge or value ~= value then return end
 			local check = self.Value ~= value
@@ -1284,7 +1248,7 @@ components = {
 				optionsettings.Function(value, final)
 			end
 		end
-		
+
 		slider.InputBegan:Connect(function(inputObj)
 			if
 				(inputObj.UserInputType == Enum.UserInputType.MouseButton1 or inputObj.UserInputType == Enum.UserInputType.Touch)
@@ -1294,7 +1258,7 @@ components = {
 				optionapi:SetValue(math.floor((optionsettings.Min + (optionsettings.Max - optionsettings.Min) * newPosition) * optionsettings.Decimal) / optionsettings.Decimal, newPosition)
 				local lastValue = optionapi.Value
 				local lastPosition = newPosition
-		
+
 				local changed = inputService.InputChanged:Connect(function(input)
 					if input.UserInputType == (inputObj.UserInputType == Enum.UserInputType.MouseButton1 and Enum.UserInputType.MouseMovement or Enum.UserInputType.Touch) then
 						local newPosition = math.clamp((input.Position.X - bkg.AbsolutePosition.X) / bkg.AbsoluteSize.X, 0, 1)
@@ -1303,7 +1267,7 @@ components = {
 						lastPosition = newPosition
 					end
 				end)
-		
+
 				local ended
 				ended = inputObj.Changed:Connect(function()
 					if inputObj.UserInputState == Enum.UserInputState.End then
@@ -1316,7 +1280,7 @@ components = {
 						optionapi:SetValue(lastValue, lastPosition, true)
 					end
 				end)
-		
+
 			end
 		end)
 		slider.MouseEnter:Connect(function()
@@ -1342,10 +1306,10 @@ components = {
 				optionapi:SetValue(tonumber(valuebox.Text), nil, true)
 			end
 		end)
-		
+
 		optionapi.Object = slider
 		api.Options[optionsettings.Name] = optionapi
-		
+
 		return optionapi
 	end,
 	Targets = function(optionsettings, children, api)
@@ -1353,7 +1317,7 @@ components = {
 			Type = 'Targets',
 			Index = getTableSize(api.Options)
 		}
-		
+
 		local textlist = Instance.new('TextButton')
 		textlist.Name = 'Targets'
 		textlist.Size = UDim2.new(1, 0, 0, 50)
@@ -1440,7 +1404,7 @@ components = {
 		title.Parent = window
 		local close = addCloseButton(window)
 		optionsettings.Function = optionsettings.Function or function() end
-		
+
 		function optionapi:Save(tab)
 			tab.Targets = {
 				Players = self.Players.Enabled,
@@ -1449,7 +1413,7 @@ components = {
 				Walls = self.Walls.Enabled
 			}
 		end
-		
+
 		function optionapi:Load(tab)
 			if self.Players.Enabled ~= tab.Players then
 				self.Players:Toggle()
@@ -1464,7 +1428,7 @@ components = {
 				self.Walls:Toggle()
 			end
 		end
-		
+
 		function optionapi:Color(hue, sat, val, rainbowcheck)
 			bkg.BackgroundColor3 = rainbowcheck and Color3.fromHSV(mainapi:Color((hue - (self.Index * 0.075)) % 1)) or Color3.fromHSV(hue, sat, val)
 			if self.Players.Enabled then
@@ -1484,7 +1448,7 @@ components = {
 				self.Walls.Object.Knob.BackgroundColor3 = Color3.fromHSV(hue, sat, val)
 			end
 		end
-		
+
 		optionapi.Players = components.TargetsButton({
 			Position = UDim2.fromOffset(11, 45),
 			Icon = getcustomasset('catrewrite/assets/new/targetplayers1.png'),
@@ -1547,7 +1511,7 @@ components = {
 		if optionsettings.Walls then
 			optionapi.Walls:Toggle()
 		end
-		
+
 		close.MouseButton1Click:Connect(function()
 			window.Visible = false
 		end)
@@ -1577,15 +1541,15 @@ components = {
 			local actualPosition = (textlist.AbsolutePosition + Vector2.new(0, 60)) / scale.Scale
 			window.Position = UDim2.fromOffset(actualPosition.X + 220, actualPosition.Y)
 		end)
-		
+
 		optionapi.Object = textlist
 		api.Options.Targets = optionapi
-		
+
 		return optionapi
 	end,
 	TargetsButton = function(optionsettings, children, api)
 		local optionapi = {Enabled = false}
-		
+
 		local targetbutton = Instance.new('TextButton')
 		targetbutton.Size = UDim2.fromOffset(98, 31)
 		targetbutton.Position = optionsettings.Position
@@ -1612,7 +1576,7 @@ components = {
 		icon.Parent = bkg
 		optionsettings.Function = optionsettings.Function or function() end
 		local tooltipicon
-		
+
 		function optionapi:Toggle()
 			self.Enabled = not self.Enabled
 			tween:Tween(bkg, uipallet.Tween, {
@@ -1634,7 +1598,7 @@ components = {
 			end
 			optionsettings.Function(self.Enabled)
 		end
-		
+
 		targetbutton.MouseEnter:Connect(function()
 			if not optionapi.Enabled then
 				tween:Tween(bkg, uipallet.Tween, {
@@ -1658,9 +1622,9 @@ components = {
 		targetbutton.MouseButton1Click:Connect(function()
 			optionapi:Toggle()
 		end)
-		
+
 		optionapi.Object = targetbutton
-		
+
 		return optionapi
 	end,
 	TextBox = function(optionsettings, children, api)
@@ -1669,7 +1633,7 @@ components = {
 			Value = optionsettings.Default or '',
 			Index = 0
 		}
-		
+
 		local textbox = Instance.new('TextButton')
 		textbox.Name = optionsettings.Name..'TextBox'
 		textbox.Size = UDim2.new(1, 0, 0, 58)
@@ -1711,23 +1675,23 @@ components = {
 		box.ClearTextOnFocus = false
 		box.Parent = bkg
 		optionsettings.Function = optionsettings.Function or function() end
-		
+
 		function optionapi:Save(tab)
 			tab[optionsettings.Name] = {Value = self.Value}
 		end
-		
+
 		function optionapi:Load(tab)
 			if self.Value ~= tab.Value then
 				self:SetValue(tab.Value)
 			end
 		end
-		
+
 		function optionapi:SetValue(val, enter)
 			self.Value = val
 			box.Text = val
 			optionsettings.Function(enter)
 		end
-		
+
 		textbox.MouseButton1Click:Connect(function()
 			box:CaptureFocus()
 		end)
@@ -1737,10 +1701,10 @@ components = {
 		box:GetPropertyChangedSignal('Text'):Connect(function()
 			optionapi:SetValue(box.Text)
 		end)
-		
+
 		optionapi.Object = textbox
 		api.Options[optionsettings.Name] = optionapi
-		
+
 		return optionapi
 	end,
 	TextList = function(optionsettings, children, api)
@@ -1753,7 +1717,7 @@ components = {
 			Index = getTableSize(api.Options)
 		}
 		optionsettings.Color = optionsettings.Color or Color3.fromRGB(5, 134, 105)
-		
+
 		local textlist = Instance.new('TextButton')
 		textlist.Name = optionsettings.Name..'TextList'
 		textlist.Size = UDim2.new(1, 0, 0, 50)
@@ -1878,26 +1842,26 @@ components = {
 		addbutton.ImageTransparency = 0.3
 		addbutton.Parent = addbkg
 		optionsettings.Function = optionsettings.Function or function() end
-		
+
 		function optionapi:Save(tab)
 			tab[optionsettings.Name] = {
 				List = self.List,
 				ListEnabled = self.ListEnabled
 			}
 		end
-		
+
 		function optionapi:Load(tab)
 			self.List = tab.List or {}
 			self.ListEnabled = tab.ListEnabled or {}
 			self:ChangeValue()
 		end
-		
+
 		function optionapi:Color(hue, sat, val, rainbowcheck)
 			if window.Visible then
 				bkg.BackgroundColor3 = rainbowcheck and Color3.fromHSV(mainapi:Color((hue - (self.Index * 0.075)) % 1)) or Color3.fromHSV(hue, sat, val)
 			end
 		end
-		
+
 		function optionapi:ChangeValue(val)
 			if val then
 				local ind = table.find(self.List, val)
@@ -1912,7 +1876,7 @@ components = {
 					table.insert(self.ListEnabled, val)
 				end
 			end
-		
+
 			optionsettings.Function(self.List)
 			for _, v in self.Objects do
 				v:Destroy()
@@ -1920,14 +1884,14 @@ components = {
 			table.clear(self.Objects)
 			window.Size = UDim2.fromOffset(220, 85 + (#self.List * 35))
 			amount.Text = #self.List
-		
+
 			local enabledtext = 'None'
 			for i, v in self.ListEnabled do
 				if i == 1 then enabledtext = '' end
 				enabledtext = enabledtext..(i == 1 and v or ', '..v)
 			end
 			items.Text = enabledtext
-		
+
 			for i, v in self.List do
 				local enabled = table.find(self.ListEnabled, v)
 				local object = Instance.new('TextButton')
@@ -1982,7 +1946,7 @@ components = {
 				close.ImageTransparency = 0.5
 				close.Parent = object
 				addCorner(close, UDim.new(1, 0))
-		
+
 				close.MouseEnter:Connect(function()
 					close.ImageTransparency = 0.3
 					tween:Tween(close, uipallet.Tween, {
@@ -2015,21 +1979,21 @@ components = {
 						objectdot.BackgroundColor3 = optionsettings.Color
 						objectdotin.BackgroundColor3 = optionsettings.Color
 					end
-		
+
 					local enabledtext = 'None'
 					for i, v in self.ListEnabled do
 						if i == 1 then enabledtext = '' end
 						enabledtext = enabledtext..(i == 1 and v or ', '..v)
 					end
-		
+
 					items.Text = enabledtext
 					optionsettings.Function()
 				end)
-		
+
 				table.insert(self.Objects, object)
 			end
 		end
-		
+
 		addbutton.MouseEnter:Connect(function()
 			addbutton.ImageTransparency = 0
 		end)
@@ -2087,13 +2051,13 @@ components = {
 			local actualPosition = (textlist.AbsolutePosition - (api.Legit and mainapi.Legit.Window.AbsolutePosition or -guiService:GetGuiInset())) / scale.Scale
 			window.Position = UDim2.fromOffset(actualPosition.X + 220, actualPosition.Y)
 		end)
-		
+
 		if optionsettings.Default then
 			optionapi:ChangeValue()
 		end
 		optionapi.Object = textlist
 		api.Options[optionsettings.Name] = optionapi
-		
+
 		return optionapi
 	end,
 	Toggle = function(optionsettings, children, api)
@@ -2102,7 +2066,7 @@ components = {
 			Enabled = false,
 			Index = getTableSize(api.Options)
 		}
-		
+
 		local hovered = false
 		local toggle = Instance.new('TextButton')
 		toggle.Name = optionsettings.Name..'Toggle'
@@ -2131,24 +2095,24 @@ components = {
 		knob.BackgroundColor3 = uipallet.Main
 		knob.Parent = knobholder
 		optionsettings.Function = optionsettings.Function or function() end
-		
+
 		function optionapi:Save(tab)
 			tab[optionsettings.Name] = {Enabled = self.Enabled}
 		end
-		
+
 		function optionapi:Load(tab)
 			if self.Enabled ~= tab.Enabled then
 				self:Toggle()
 			end
 		end
-		
+
 		function optionapi:Color(hue, sat, val, rainbowcheck)
 			if self.Enabled then
 				tween:Cancel(knobholder)
 				knobholder.BackgroundColor3 = rainbowcheck and Color3.fromHSV(mainapi:Color((hue - (self.Index * 0.075)) % 1)) or Color3.fromHSV(hue, sat, val)
 			end
 		end
-		
+
 		function optionapi:Toggle()
 			self.Enabled = not self.Enabled
 			local rainbowcheck = mainapi.GUIColor.Rainbow and mainapi.RainbowMode.Value ~= 'Retro'
@@ -2164,10 +2128,10 @@ components = {
 				if shared.VapeDeveloper then
 					mainapi:CreateNotification('Vape', 'gui error: '.. err, 15, 'warning')
 					task.defer(error, err)
-				end	
+				end
 			end)
 		end
-		
+
 		toggle.MouseEnter:Connect(function()
 			hovered = true
 			if not optionapi.Enabled then
@@ -2187,13 +2151,13 @@ components = {
 		toggle.MouseButton1Click:Connect(function()
 			optionapi:Toggle()
 		end)
-		
+
 		if optionsettings.Default then
 			optionapi:Toggle()
 		end
 		optionapi.Object = toggle
 		api.Options[optionsettings.Name] = optionapi
-		
+
 		return optionapi
 	end,
 	TwoSlider = function(optionsettings, children, api)
@@ -2204,7 +2168,7 @@ components = {
 			Max = optionsettings.Max,
 			Index = getTableSize(api.Options)
 		}
-		
+
 		local slider = Instance.new('TextButton')
 		slider.Name = optionsettings.Name..'Slider'
 		slider.Size = UDim2.new(1, 0, 0, 50)
@@ -2303,11 +2267,11 @@ components = {
 		optionsettings.Function = optionsettings.Function or function() end
 		optionsettings.Decimal = optionsettings.Decimal or 1
 		local random = Random.new()
-		
+
 		function optionapi:Save(tab)
 			tab[optionsettings.Name] = {ValueMin = self.ValueMin, ValueMax = self.ValueMax}
 		end
-		
+
 		function optionapi:Load(tab)
 			if self.ValueMin ~= tab.ValueMin then
 				self:SetValue(false, tab.ValueMin)
@@ -2316,17 +2280,17 @@ components = {
 				self:SetValue(true, tab.ValueMax)
 			end
 		end
-		
+
 		function optionapi:Color(hue, sat, val, rainbowcheck)
 			fill.BackgroundColor3 = rainbowcheck and Color3.fromHSV(mainapi:Color((hue - (self.Index * 0.075)) % 1)) or Color3.fromHSV(hue, sat, val)
 			knob.ImageColor3 = fill.BackgroundColor3
 			knobholdermax.Knob.ImageColor3 = fill.BackgroundColor3
 		end
-		
+
 		function optionapi:GetRandomValue()
 			return random:NextNumber(optionapi.ValueMin, optionapi.ValueMax)
 		end
-		
+
 		function optionapi:SetValue(max, value)
 			if tonumber(value) == math.huge or value ~= value then return end
 			self[max and 'ValueMax' or 'ValueMin'] = value
@@ -2338,7 +2302,7 @@ components = {
 				Size = UDim2.fromScale(math.clamp(math.clamp(math.clamp(self.ValueMax / optionsettings.Max, 0.04, 0.96), 0.04, 0.96) - size, 0, 1), 1)
 			})
 		end
-		
+
 		knobholder.MouseEnter:Connect(function()
 			tween:Tween(knob, uipallet.Tween, {
 				Size = UDim2.fromOffset(11, 18)
@@ -2367,14 +2331,14 @@ components = {
 				local maxCheck = (inputObj.Position.X - knobholdermax.AbsolutePosition.X) > -10
 				local newPosition = math.clamp((inputObj.Position.X - bkg.AbsolutePosition.X) / bkg.AbsoluteSize.X, 0, 1)
 				optionapi:SetValue(maxCheck, math.floor((optionsettings.Min + (optionsettings.Max - optionsettings.Min) * newPosition) * optionsettings.Decimal) / optionsettings.Decimal, newPosition)
-		
+
 				local changed = inputService.InputChanged:Connect(function(input)
 					if input.UserInputType == (inputObj.UserInputType == Enum.UserInputType.MouseButton1 and Enum.UserInputType.MouseMovement or Enum.UserInputType.Touch) then
 						local newPosition = math.clamp((input.Position.X - bkg.AbsolutePosition.X) / bkg.AbsoluteSize.X, 0, 1)
 						optionapi:SetValue(maxCheck, math.floor((optionsettings.Min + (optionsettings.Max - optionsettings.Min) * newPosition) * optionsettings.Decimal) / optionsettings.Decimal, newPosition)
 					end
 				end)
-		
+
 				local ended
 				ended = inputObj.Changed:Connect(function()
 					if inputObj.UserInputState == Enum.UserInputState.End then
@@ -2414,10 +2378,10 @@ components = {
 				optionapi:SetValue(false, tonumber(valuebox2.Text))
 			end
 		end)
-		
+
 		optionapi.Object = slider
 		api.Options[optionsettings.Name] = optionapi
-		
+
 		return optionapi
 	end,
 	Divider = function(children, text)
@@ -2583,9 +2547,7 @@ function mainapi:CreateGUI()
 	settingsversion.Size = UDim2.new(1, 0, 0, 16)
 	settingsversion.Position = UDim2.new(0, 0, 1, -16)
 	settingsversion.BackgroundTransparency = 1
-	settingsversion.Text = 'Vape '..mainapi.Version..' '..(
-		isfile('catrewrite/profiles/commit.txt') and readfile('catrewrite/profiles/commit.txt'):sub(1, 6) or ''
-	)..' '
+	settingsversion.Text = 'AetherCore '..mainapi.Version..' '
 	settingsversion.TextColor3 = color.Dark(uipallet.Text, 0.43)
 	settingsversion.TextXAlignment = Enum.TextXAlignment.Right
 	settingsversion.TextSize = 10
@@ -5115,7 +5077,7 @@ function mainapi:CreateLegit()
 	categoryhighlight.Size = UDim2.new()
 	legitapi.Window = window
 	table.insert(mainapi.Windows, window)
-	
+
 	local function updateCheck()
 		local FocusedCategory = ''
 		for _, v in legitapi.Categories do
@@ -5149,7 +5111,7 @@ function mainapi:CreateLegit()
 		children.MouseButton1Click:Connect(function()
 			category:SetVisible()
 		end)
-		
+
 		local sizex = textService:GetTextSize(children.Text, children.TextSize, children.Font, Vector2.new(1000, 1000)).X
 		children.Size = UDim2.new(0, sizex + 30, 1, 0)
 
@@ -5704,10 +5666,7 @@ function mainapi:Load(skipgui, profile)
 	self.Categories.Main.Options.Bind:SetBind(self.Keybind)
 
 	if not inputService.KeyboardEnabled or shared.VapeDeveloper then
-		local hide = isfile('catrewrite/profiles/hide.txt') and readfile('catrewrite/profiles/hide.txt') or nil
-		if hide ~= nil then
-			hide = hide == 'true' and true or false
-		end
+		local hide = false
 		local button = Instance.new('TextButton')
 		button.LayoutOrder = -1
 		button.Size = UDim2.fromOffset(32, 32)
@@ -5752,7 +5711,7 @@ function mainapi:Load(skipgui, profile)
 				Function = function(call)
 					button.BackgroundTransparency = call and 1 or 0.35
 					image.ImageTransparency = call and 1 or 0
-					writefile('catrewrite/profiles/hide.txt', tostring(call))
+					-- File persistence is disabled for this self-contained entrypoint.
 				end
 			})
 		end
@@ -5788,50 +5747,8 @@ function mainapi:Remove(obj)
 	end
 end
 
-function mainapi:Save(newprofile)
-	if not self.Loaded then return end
-	local guidata = {
-		Categories = {},
-		Profile = newprofile or self.Profile,
-		Profiles = self.Profiles,
-		Keybind = self.Keybind
-	}
-	local savedata = {
-		Modules = {},
-		Categories = {},
-		Legit = {}
-	}
-
-	for i, v in self.Categories do
-		(v.Type ~= 'Category' and i ~= 'Main' and savedata or guidata).Categories[i] = {
-			Enabled = i ~= 'Main' and v.Button.Enabled or nil,
-			Expanded = v.Type ~= 'Overlay' and v.Expanded or nil,
-			Pinned = v.Pinned,
-			Position = {X = v.Object.Position.X.Offset, Y = v.Object.Position.Y.Offset},
-			Options = mainapi:SaveOptions(v, v.Options),
-			List = v.List,
-			ListEnabled = v.ListEnabled
-		}
-	end
-
-	for i, v in self.Modules do
-		savedata.Modules[i] = {
-			Enabled = v.Enabled,
-			Bind = v.Bind.Button and {Mobile = true, X = v.Bind.Button.Position.X.Offset, Y = v.Bind.Button.Position.Y.Offset} or v.Bind,
-			Options = mainapi:SaveOptions(v, true)
-		}
-	end
-
-	for i, v in self.Legit.Modules do
-		savedata.Legit[i] = {
-			Enabled = v.Enabled,
-			Position = v.Children and {X = v.Children.Position.X.Offset, Y = v.Children.Position.Y.Offset} or nil,
-			Options = mainapi:SaveOptions(v, v.Options)
-		}
-	end
-
-	writefile('catrewrite/profiles/'..game.GameId..'.gui.txt', httpService:JSONEncode(guidata))
-	writefile('catrewrite/profiles/'..self.Profile..self.Place..'.txt', httpService:JSONEncode(savedata))
+function mainapi:Save()
+	-- The self-contained entrypoint intentionally avoids reading from or writing to external files.
 end
 
 function mainapi:SaveOptions(object, savedoptions)
@@ -6147,16 +6064,7 @@ mainapi.MultiKeybind = general:CreateToggle({
 general:CreateButton({
 	Name = 'Reset current profile',
 	Function = function()
-	mainapi.Save = function() end
-		if isfile('catrewrite/profiles/'..mainapi.Profile..mainapi.Place..'.txt') and delfile then
-			delfile('catrewrite/profiles/'..mainapi.Profile..mainapi.Place..'.txt')
-		end
-		shared.vapereload = true
-		if shared.VapeDeveloper then
-			loadstring(readfile('catrewrite/loader.lua'), 'loader')()
-		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/MaxlaserTech/CatV6/'..readfile('catrewrite/profiles/commit.txt')..'/loader.lua', true))()
-		end
+		mainapi:CreateNotification('AetherCore', 'Profile reset is disabled in the self-contained entrypoint. Re-execute the script to reload defaults.', 5, 'alert')
 	end,
 	Tooltip = 'This will set your profile to the default settings of Vape'
 })
@@ -6170,12 +6078,7 @@ general:CreateButton({
 general:CreateButton({
 	Name = 'Reinject',
 	Function = function()
-		shared.vapereload = true
-		if shared.VapeDeveloper then
-			loadstring(readfile('catrewrite/loader.lua'), 'loader')()
-		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/MaxlaserTech/CatV6/'..readfile('catrewrite/profiles/commit.txt')..'/loader.lua', true))()
-		end
+		mainapi:CreateNotification('AetherCore', 'Reinject is disabled in the self-contained entrypoint. Re-execute the script manually to reload.', 5, 'alert')
 	end,
 	Tooltip = 'Reloads vape for debugging purposes'
 })
@@ -6283,19 +6186,9 @@ scaleslider = guipane:CreateSlider({
 })
 guipane:CreateDropdown({
 	Name = 'GUI Theme',
-	List = inputService.TouchEnabled and {'new', 'old'} or {'new', 'old', 'rise'},
-	Function = function(val, mouse)
-		if mouse then
-			writefile('catrewrite/profiles/gui.txt', val)
-			shared.vapereload = true
-			if shared.VapeDeveloper then
-				loadstring(readfile('catrewrite/loader.lua'), 'loader')()
-			else
-				loadstring(game:HttpGet('https://raw.githubusercontent.com/MaxlaserTech/CatV6/'..readfile('catrewrite/profiles/commit.txt')..'/loader.lua', true))()
-			end
-		end
-	end,
-	Tooltip = 'new - The newest vape theme to since v4.05\nold - The vape theme pre v4.05\nrise - Rise 6.0'
+	List = {'new'},
+	Function = function() end,
+	Tooltip = 'The self-contained entrypoint always uses the new GUI.'
 })
 mainapi.ToggleMode = guipane:CreateDropdown({
 	Name = 'Keybind mode',
@@ -7224,7 +7117,7 @@ local function keybindStart(inputObj)
 		if table.find(whitelist, inputObj.UserInputType) then
 			inputObj = convert(inputObj.UserInputType)
 		end
-		
+
 		table.insert(mainapi.HeldKeybinds, inputObj.KeyCode.Name)
 		if mainapi.Binding then return end
 
