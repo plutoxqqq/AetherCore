@@ -7219,6 +7219,7 @@ do
 	local runService = game:GetService('RunService')
 	local workspaceService = game:GetService('Workspace')
 	local localPlayer = playersService.LocalPlayer
+	local isnetworkowner = isnetworkowner or function() return true end
 	local boostState = {
 		Enabled = false,
 		Boosting = false,
@@ -7469,6 +7470,7 @@ do
 	local runService = game:GetService('RunService')
 	local workspaceService = game:GetService('Workspace')
 	local localPlayer = playersService.LocalPlayer
+	local isnetworkowner = isnetworkowner or function() return true end
 
 	local function getCharacter()
 		return localPlayer and localPlayer.Character
@@ -7489,27 +7491,90 @@ do
 		return humanoid and root and humanoid.Health > 0, humanoid, root
 	end
 
+	local function getHorizontalSpeed(root)
+		local velocity = root and root.AssemblyLinearVelocity or Vector3.zero
+		return Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+	end
+
+	local function getMoveDirection(humanoid, cameraRelative)
+		if not humanoid then return Vector3.zero end
+		local direction = humanoid.MoveDirection
+		if cameraRelative and direction.Magnitude > 0 then
+			local camera = workspaceService.CurrentCamera
+			if camera then
+				local look = Vector3.new(camera.CFrame.LookVector.X, 0, camera.CFrame.LookVector.Z)
+				local right = Vector3.new(camera.CFrame.RightVector.X, 0, camera.CFrame.RightVector.Z)
+				look = look.Magnitude > 0 and look.Unit or Vector3.zAxis
+				right = right.Magnitude > 0 and right.Unit or Vector3.xAxis
+				direction = (look * direction.Z) + (right * direction.X)
+			end
+		end
+		return direction.Magnitude > 0 and direction.Unit or Vector3.zero
+	end
+
 	local speedSlider
+	local speedMode
+	local speedWallCheck
+	local speedAutoJump
+	local speedAlwaysJump
 	local speedModule = mainapi.Categories.Blatant:CreateModule({
 		Name = 'Speed',
-		Tooltip = 'Keeps your character at the selected walking speed without blocking normal jumping or movement.',
+		Tooltip = 'CatV6-style speed with CFrame and WalkSpeed methods, wall checks, and optional automatic jumping.',
 		Function = function(enabled)
-			local function applySpeed()
+			local rayCheck = RaycastParams.new()
+			rayCheck.RespectCanCollide = true
+			rayCheck.FilterType = Enum.RaycastFilterType.Exclude
+
+			local function cacheWalkSpeed()
 				local humanoid = getHumanoid()
-				if not humanoid then return end
-				if not speedModule.OriginalWalkSpeed then
+				if humanoid and not speedModule.OriginalWalkSpeed then
 					speedModule.OriginalWalkSpeed = humanoid.WalkSpeed
 				end
-				humanoid.WalkSpeed = speedSlider.Value
+				return humanoid
+			end
+
+			local function applyWalkSpeed()
+				local humanoid = cacheWalkSpeed()
+				if humanoid then
+					humanoid.WalkSpeed = speedSlider.Value
+				end
 			end
 
 			if enabled then
-				applySpeed()
-				speedModule:Clean(runService.Heartbeat:Connect(applySpeed))
+				cacheWalkSpeed()
+				speedModule:Clean(runService.PreSimulation:Connect(function(dt)
+					local alive, humanoid, root = isAlive()
+					if not alive or (mainapi.Modules.Fly and mainapi.Modules.Fly.Enabled) then return end
+					if speedMode.Value == 'WalkSpeed' then
+						applyWalkSpeed()
+						return
+					end
+
+					local state = humanoid:GetState()
+					if state == Enum.HumanoidStateType.Climbing or state == Enum.HumanoidStateType.Swimming then return end
+					local moveDirection = humanoid.MoveDirection.Magnitude > 0 and humanoid.MoveDirection.Unit or Vector3.zero
+					local currentSpeed = getHorizontalSpeed(root)
+					local destination = moveDirection * math.max(speedSlider.Value - currentSpeed, 0) * dt
+
+					if speedWallCheck.Enabled and destination.Magnitude > 0 then
+						rayCheck.FilterDescendantsInstances = {getCharacter(), workspaceService.CurrentCamera}
+						rayCheck.CollisionGroup = root.CollisionGroup
+						local ray = workspaceService:Raycast(root.Position, destination, rayCheck)
+						if ray then
+							destination = (ray.Position + ray.Normal) - root.Position
+						end
+					end
+
+					root.CFrame += destination
+					root.AssemblyLinearVelocity = (moveDirection * math.max(currentSpeed, math.min(speedSlider.Value, currentSpeed + speedSlider.Value))) + Vector3.new(0, root.AssemblyLinearVelocity.Y, 0)
+					if speedAutoJump.Enabled and moveDirection ~= Vector3.zero and (speedAlwaysJump.Enabled or state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.Landed) then
+						humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+					end
+				end))
 				speedModule:Clean(localPlayer.CharacterAdded:Connect(function()
 					task.wait(0.2)
 					if speedModule.Enabled then
-						applySpeed()
+						applyWalkSpeed()
 					end
 				end))
 			else
@@ -7519,9 +7584,63 @@ do
 				end
 				speedModule.OriginalWalkSpeed = nil
 			end
+		end,
+		ExtraText = function()
+			return speedMode and speedMode.Value or nil
 		end
 	})
-	speedSlider = speedModule:CreateSlider({Name = 'Speed', Min = 16, Max = 250, Default = 80, Decimal = 1, Suffix = 'studs'})
+	speedMode = speedModule:CreateDropdown({Name = 'Method', List = {'CFrame', 'WalkSpeed'}, Default = 'CFrame'})
+	speedMode:SetValue('CFrame')
+	speedSlider = speedModule:CreateSlider({Name = 'Speed', Min = 1, Max = 250, Default = 80, Decimal = 1, Suffix = 'studs'})
+	speedWallCheck = speedModule:CreateToggle({Name = 'Wall Check', Default = true})
+	speedAutoJump = speedModule:CreateToggle({
+		Name = 'Auto Jump',
+		Function = function(callback)
+			speedAlwaysJump.Object.Visible = callback
+		end
+	})
+	speedAlwaysJump = speedModule:CreateToggle({Name = 'Always Jump', Visible = false, Darker = true})
+
+	mainapi.Categories.Utility:CreateModule({
+		Name = 'Anti Ragdoll',
+		Tooltip = 'Prevents the local humanoid from entering ragdoll-like physics states.',
+		Function = function(enabled)
+			local module = mainapi.Modules['Anti Ragdoll']
+			local blockedStates = {
+				Enum.HumanoidStateType.Ragdoll,
+				Enum.HumanoidStateType.FallingDown,
+				Enum.HumanoidStateType.Physics,
+				Enum.HumanoidStateType.PlatformStanding
+			}
+			local function protectHumanoid(humanoid)
+				if not humanoid then return end
+				for _, state in blockedStates do
+					humanoid:SetStateEnabled(state, false)
+				end
+				if table.find(blockedStates, humanoid:GetState()) then
+					humanoid:ChangeState(Enum.HumanoidStateType.Running)
+				end
+			end
+			local function restoreHumanoid(humanoid)
+				if not humanoid then return end
+				for _, state in blockedStates do
+					humanoid:SetStateEnabled(state, true)
+				end
+			end
+
+			if enabled then
+				protectHumanoid(getHumanoid())
+				module:Clean(runService.Heartbeat:Connect(function()
+					protectHumanoid(getHumanoid())
+				end))
+				module:Clean(localPlayer.CharacterAdded:Connect(function(character)
+					protectHumanoid(character:WaitForChild('Humanoid', 5))
+				end))
+			else
+				restoreHumanoid(getHumanoid())
+			end
+		end
+	})
 
 	mainapi.Categories.Utility:CreateModule({
 		Name = 'Anti Ragdoll',
@@ -7580,35 +7699,97 @@ do
 	})
 
 	local flySpeed
+	local flyVerticalSpeed
+	local flyWallCheck
+	local flyTPDown
+	local flyPopVelocity
 	local flyModule = mainapi.Categories.Blatant:CreateModule({
 		Name = 'Fly',
-		Tooltip = 'Camera-relative flight that preserves control and avoids freezing the character.',
+		Tooltip = 'CatV6-style Heatseeker fly using PreSimulation movement, vertical controls, wall checks, and optional TP-down stabilization.',
 		Function = function(enabled)
+			local rayCheck = RaycastParams.new()
+			rayCheck.RespectCanCollide = true
+			rayCheck.FilterType = Enum.RaycastFilterType.Exclude
+			local up, down = 0, 0
 			if enabled then
-				flyModule:Clean(runService.RenderStepped:Connect(function()
+				local tpTick, tpToggle, oldY = tick(), true, nil
+				flyModule:Clean(runService.PreSimulation:Connect(function(dt)
 					local alive, humanoid, root = isAlive()
-					local camera = workspaceService.CurrentCamera
-					if not alive or not camera then return end
-					local move = Vector3.zero
-					if inputService:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
-					if inputService:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
-					if inputService:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
-					if inputService:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
-					if inputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.yAxis end
-					if inputService:IsKeyDown(Enum.KeyCode.LeftShift) or inputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.yAxis end
-					root.AssemblyLinearVelocity = move.Magnitude > 0 and (move.Unit * flySpeed.Value) or Vector3.new(0, 1.5, 0)
+					if not alive or not isnetworkowner(root) then return end
+					local moveDirection = humanoid.MoveDirection.Magnitude > 0 and humanoid.MoveDirection.Unit or Vector3.zero
+					local vertical = 0.9 + ((up + down) * flyVerticalSpeed.Value)
+					local currentSpeed = getHorizontalSpeed(root)
+					local destination = moveDirection * math.max(flySpeed.Value - currentSpeed, 0) * dt
+
+					rayCheck.FilterDescendantsInstances = {getCharacter(), workspaceService.CurrentCamera}
+					rayCheck.CollisionGroup = root.CollisionGroup
+					if flyWallCheck.Enabled and destination.Magnitude > 0 then
+						local ray = workspaceService:Raycast(root.Position, destination, rayCheck)
+						if ray then
+							destination = (ray.Position + ray.Normal) - root.Position
+						end
+					end
+
+					if flyTPDown.Enabled then
+						if tpToggle then
+							local airTime = humanoid.FloorMaterial == Enum.Material.Air and (tick() - (flyModule.AirStart or tick())) or 0
+							flyModule.AirStart = humanoid.FloorMaterial == Enum.Material.Air and (flyModule.AirStart or tick()) or nil
+							if airTime > 2 and not oldY then
+								local ray = workspaceService:Raycast(root.Position, Vector3.new(0, -1000, 0), rayCheck)
+								if ray then
+									tpToggle = false
+									oldY = root.Position.Y
+									tpTick = tick() + 0.11
+									root.CFrame = CFrame.lookAlong(Vector3.new(root.Position.X, ray.Position.Y + humanoid.HipHeight, root.Position.Z), root.CFrame.LookVector)
+								end
+							end
+						elseif oldY then
+							if tpTick < tick() then
+								root.CFrame = CFrame.lookAlong(Vector3.new(root.Position.X, oldY, root.Position.Z), root.CFrame.LookVector)
+								tpToggle = true
+								oldY = nil
+							else
+								vertical = 0
+							end
+						end
+					end
+
+					root.CFrame += destination
+					root.AssemblyLinearVelocity = (moveDirection * math.max(currentSpeed, math.min(flySpeed.Value, currentSpeed + flySpeed.Value))) + Vector3.new(0, vertical, 0)
 					humanoid.PlatformStand = false
-					humanoid:ChangeState(Enum.HumanoidStateType.Running)
+				end))
+				flyModule:Clean(inputService.InputBegan:Connect(function(input)
+					if not inputService:GetFocusedTextBox() then
+						if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then
+							up = 1
+						elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.ButtonL2 then
+							down = -1
+						end
+					end
+				end))
+				flyModule:Clean(inputService.InputEnded:Connect(function(input)
+					if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then
+						up = 0
+					elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.ButtonL2 then
+						down = 0
+					end
 				end))
 			else
-				local humanoid = getHumanoid()
-				if humanoid then
-					humanoid.PlatformStand = false
-				end
+				local humanoid, root = getHumanoid(), getRoot()
+				if humanoid then humanoid.PlatformStand = false end
+				if flyPopVelocity.Enabled and root then root.AssemblyLinearVelocity = Vector3.zero end
+				flyModule.AirStart = nil
 			end
+		end,
+		ExtraText = function()
+			return 'Heatseeker'
 		end
 	})
-	flySpeed = flyModule:CreateSlider({Name = 'Fly Speed', Min = 20, Max = 250, Default = 80, Decimal = 1, Suffix = 'studs'})
+	flySpeed = flyModule:CreateSlider({Name = 'Speed', Min = 1, Max = 250, Default = 80, Decimal = 1, Suffix = 'studs'})
+	flyVerticalSpeed = flyModule:CreateSlider({Name = 'Vertical Speed', Min = 1, Max = 150, Default = 50, Decimal = 1, Suffix = 'studs'})
+	flyWallCheck = flyModule:CreateToggle({Name = 'Wall Check', Default = true})
+	flyTPDown = flyModule:CreateToggle({Name = 'TP Down', Default = true})
+	flyPopVelocity = flyModule:CreateToggle({Name = 'Clear Velocity on Disable'})
 
 	local function teleportTo(position)
 		local root = getRoot()
@@ -7647,67 +7828,105 @@ do
 	})
 
 	local antiDeathHeight
+	local antiDeathMode
+	local antiDeathThreshold
+	local antiDeathStopThreshold
+	local antiDeathDelay
+	local antiDeathNotify
 	local antiDeathModule = mainapi.Categories.Utility:CreateModule({
 		Name = 'Anti Death',
-		Tooltip = 'Rapidly blinks your character up and down while preserving normal walking, jumping, and velocity.',
+		Tooltip = 'CatV6-inspired blink protection that rapidly offsets your server position up and down without disturbing normal movement.',
 		Function = function(enabled)
+			local pausedUntil, activeUntil = 0, 0
 			if enabled then
-				antiDeathModule:Clean(runService.Heartbeat:Connect(function()
-					local alive, _, root = isAlive()
+				antiDeathModule:Clean(runService.PreSimulation:Connect(function()
+					local alive, humanoid, root = isAlive()
 					if not alive then return end
+					local healthPercent = (humanoid.Health / math.max(humanoid.MaxHealth, 1)) * 100
+					if antiDeathMode.Value == 'Health Threshold' then
+						if healthPercent <= antiDeathThreshold.Value and os.clock() >= pausedUntil then
+							activeUntil = os.clock() + antiDeathDelay.Value
+							pausedUntil = activeUntil + 0.2
+							if antiDeathNotify.Enabled then
+								mainapi:CreateNotification('Anti Death', `Health below {antiDeathThreshold.Value}%`, 3)
+							end
+						elseif healthPercent >= antiDeathStopThreshold.Value then
+							activeUntil = 0
+						end
+					else
+						activeUntil = math.huge
+					end
+					if os.clock() > activeUntil then return end
+
 					local originalCFrame = root.CFrame
 					local originalVelocity = root.AssemblyLinearVelocity
-					root.CFrame = originalCFrame + Vector3.new(0, antiDeathHeight.Value, 0)
+					local offset = (tick() % 0.12 < 0.06) and antiDeathHeight.Value or -math.min(antiDeathHeight.Value * 0.25, 35)
+					root.CFrame = originalCFrame + Vector3.new(0, offset, 0)
 					task.defer(function()
 						if antiDeathModule.Enabled and root.Parent then
-							root.CFrame = originalCFrame - Vector3.new(0, math.min(antiDeathHeight.Value * 0.25, 35), 0)
+							root.CFrame = originalCFrame
 							root.AssemblyLinearVelocity = originalVelocity
-							task.defer(function()
-								if antiDeathModule.Enabled and root.Parent then
-									root.CFrame = originalCFrame
-									root.AssemblyLinearVelocity = originalVelocity
-								end
-							end)
 						end
 					end)
 				end))
 			end
+		end,
+		ExtraText = function()
+			return antiDeathMode and antiDeathMode.Value or nil
 		end
 	})
+	antiDeathMode = antiDeathModule:CreateDropdown({Name = 'Mode', List = {'Always', 'Health Threshold'}, Default = 'Always'})
+	antiDeathMode:SetValue('Always')
 	antiDeathHeight = antiDeathModule:CreateSlider({Name = 'Blink Height', Min = 20, Max = 500, Default = 120, Decimal = 1, Suffix = 'studs'})
+	antiDeathThreshold = antiDeathModule:CreateSlider({Name = 'Threshold', Min = 1, Max = 100, Default = 30, Decimal = 1, Suffix = '%'})
+	antiDeathStopThreshold = antiDeathModule:CreateSlider({Name = 'Stop Threshold', Min = 1, Max = 100, Default = 50, Decimal = 1, Suffix = '%'})
+	antiDeathDelay = antiDeathModule:CreateSlider({Name = 'Duration', Min = 0.1, Max = 20, Default = 5, Decimal = 10, Suffix = 'seconds'})
+	antiDeathNotify = antiDeathModule:CreateToggle({Name = 'Notify on Trigger', Default = true})
 
 	local antiVoidMode
 	local antiVoidModule = mainapi.Categories.Utility:CreateModule({
 		Name = 'Anti Void',
-		Tooltip = 'Returns you to the last safe ground when you fall below the void. Instant mode teleports directly to the nearest saved safe ground.',
+		Tooltip = 'CatV6 Anti Fall-style void recovery. Instant mode returns directly to the nearest last safe ground.',
 		Function = function(enabled)
 			if enabled then
 				local params = RaycastParams.new()
 				params.FilterType = Enum.RaycastFilterType.Exclude
+				params.RespectCanCollide = true
 				params.IgnoreWater = true
-				antiVoidModule.SafeCFrame = getRoot() and getRoot().CFrame or antiVoidModule.SafeCFrame
-				antiVoidModule:Clean(runService.Heartbeat:Connect(function()
+				antiVoidModule.SafePoints = antiVoidModule.SafePoints or {}
+				antiVoidModule:Clean(runService.PreSimulation:Connect(function(dt)
 					local alive, humanoid, root = isAlive()
 					if not alive then return end
-					params.FilterDescendantsInstances = {getCharacter()}
-					local ground = workspaceService:Raycast(root.Position, Vector3.new(0, -10, 0), params)
+					params.FilterDescendantsInstances = {getCharacter(), workspaceService.CurrentCamera}
+					params.CollisionGroup = root.CollisionGroup
+					local ground = workspaceService:Raycast(root.Position, Vector3.new(0, -12, 0), params)
 					if ground and ground.Instance and ground.Instance.CanCollide and humanoid.FloorMaterial ~= Enum.Material.Air then
-						antiVoidModule.SafeCFrame = CFrame.lookAlong(ground.Position + Vector3.new(0, 3, 0), root.CFrame.LookVector)
+						table.insert(antiVoidModule.SafePoints, 1, CFrame.lookAlong(ground.Position + Vector3.new(0, humanoid.HipHeight + 1, 0), root.CFrame.LookVector))
+						while #antiVoidModule.SafePoints > 12 do
+							table.remove(antiVoidModule.SafePoints)
+						end
 					end
-					if root.Position.Y <= workspaceService.FallenPartsDestroyHeight + 35 and antiVoidModule.SafeCFrame then
+					if root.Position.Y <= workspaceService.FallenPartsDestroyHeight + 35 and antiVoidModule.SafePoints[1] then
+						local safest = antiVoidModule.SafePoints[1]
 						if antiVoidMode.Value == 'Instant' then
-							root.CFrame = antiVoidModule.SafeCFrame
+							root.CFrame = safest
 							root.AssemblyLinearVelocity = Vector3.zero
-						else
-							root.CFrame = root.CFrame:Lerp(antiVoidModule.SafeCFrame, antiVoidMode.Value == 'Smooth' and 0.35 or 1)
+						elseif antiVoidMode.Value == 'Smooth' then
+							local delta = (safest.Position - root.Position) * Vector3.new(1, 0, 1)
+							root.CFrame += Vector3.new(0, safest.Position.Y - root.Position.Y, 0) + ((delta.Magnitude > 0 and delta.Unit or Vector3.zero) * math.min(delta.Magnitude, 80 * dt))
 							root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 65, root.AssemblyLinearVelocity.Z)
+						else
+							root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 100, root.AssemblyLinearVelocity.Z)
 						end
 					end
 				end))
 			end
+		end,
+		ExtraText = function()
+			return antiVoidMode and antiVoidMode.Value or nil
 		end
 	})
-	antiVoidMode = antiVoidModule:CreateDropdown({Name = 'Mode', List = {'Normal', 'Smooth', 'Instant'}, Default = 'Instant'})
+	antiVoidMode = antiVoidModule:CreateDropdown({Name = 'Mode', List = {'Instant', 'Smooth', 'Velocity'}, Default = 'Instant'})
 	antiVoidMode:SetValue('Instant')
 
 	mainapi.Categories.Utility:CreateModule({
