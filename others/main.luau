@@ -7643,6 +7643,47 @@ do
 	})
 
 	mainapi.Categories.Utility:CreateModule({
+		Name = 'Anti Ragdoll',
+		Tooltip = 'Prevents the local humanoid from entering ragdoll-like physics states.',
+		Function = function(enabled)
+			local module = mainapi.Modules['Anti Ragdoll']
+			local blockedStates = {
+				Enum.HumanoidStateType.Ragdoll,
+				Enum.HumanoidStateType.FallingDown,
+				Enum.HumanoidStateType.Physics,
+				Enum.HumanoidStateType.PlatformStanding
+			}
+			local function protectHumanoid(humanoid)
+				if not humanoid then return end
+				for _, state in blockedStates do
+					humanoid:SetStateEnabled(state, false)
+				end
+				if table.find(blockedStates, humanoid:GetState()) then
+					humanoid:ChangeState(Enum.HumanoidStateType.Running)
+				end
+			end
+			local function restoreHumanoid(humanoid)
+				if not humanoid then return end
+				for _, state in blockedStates do
+					humanoid:SetStateEnabled(state, true)
+				end
+			end
+
+			if enabled then
+				protectHumanoid(getHumanoid())
+				module:Clean(runService.Heartbeat:Connect(function()
+					protectHumanoid(getHumanoid())
+				end))
+				module:Clean(localPlayer.CharacterAdded:Connect(function(character)
+					protectHumanoid(character:WaitForChild('Humanoid', 5))
+				end))
+			else
+				restoreHumanoid(getHumanoid())
+			end
+		end
+	})
+
+	mainapi.Categories.Utility:CreateModule({
 		Name = 'Infinite Jump',
 		Tooltip = 'Lets you jump again while airborne.',
 		Function = function(enabled)
