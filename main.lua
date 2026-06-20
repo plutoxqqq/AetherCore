@@ -19,6 +19,19 @@ return function(startup)
         }
     }
 
+    local function ensureFolder(path)
+        if type(isfolder) == "function" and type(makefolder) == "function" then
+            local ok, exists = pcall(isfolder, path)
+            if ok and not exists then
+                pcall(makefolder, path)
+            end
+        end
+    end
+
+    for _, folder in ipairs({rootFolder, rootFolder .. "/games", rootFolder .. "/profiles", rootFolder .. "/assets", rootFolder .. "/assets/new", rootFolder .. "/libraries", rootFolder .. "/guis"}) do
+        ensureFolder(folder)
+    end
+
     local function isMissingSource(contents)
         if type(contents) ~= "string" then
             return true

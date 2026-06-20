@@ -4,6 +4,40 @@ local Utility = {}
 Utility.BrandName = "AetherCore"
 Utility.RuntimeContext = nil
 Utility.BrandTextAsset = nil -- Binary branding assets are intentionally not tracked in Git.
+function Utility.Trim(text)
+    return type(text) == "string" and text:gsub("^%s+", ""):gsub("%s+$", "") or text
+end
+
+function Utility.IsMissingSource(contents)
+    if type(contents) ~= "string" then
+        return true
+    end
+    local trimmed = Utility.Trim(contents)
+    return trimmed == "" or trimmed == "404: Not Found" or trimmed:find("^404", 1, false) ~= nil
+end
+
+function Utility.NormalizeAssetPath(path)
+    if type(path) ~= "string" or path == "" then
+        return path
+    end
+
+    return path:gsub("\\", "/")
+        :gsub("^AetherCore/", "")
+        :gsub("^newvape/assets/", "assets/")
+        :gsub("^catrewrite/assets/", "assets/")
+        :gsub("^newvape/", "assets/")
+        :gsub("^catrewrite/", "assets/")
+end
+
+function Utility.GetRootFolder()
+    local context = Utility.RuntimeContext or {}
+    return type(context.RootFolder) == "string" and context.RootFolder ~= "" and context.RootFolder or "AetherCore"
+end
+
+function Utility.GetRootUrl()
+    local context = Utility.RuntimeContext or {}
+    return type(context.RootUrl) == "string" and context.RootUrl ~= "" and context.RootUrl or nil
+end
 Utility.VapeCoreBaseUrl = "https://raw.githubusercontent.com/7GrandDadPGN/Vape" .. string.char(86, 52) .. "ForRoblox/main/"
 Utility.VapeCoreUrl = Utility.VapeCoreBaseUrl .. "NewMainScript.lua"
 
@@ -14,26 +48,30 @@ function Utility.SetRuntimeContext(context)
 end
 
 function Utility.GetRuntimeAssetPath(relativePath)
-    local context = Utility.RuntimeContext or {}
-    local rootFolder = type(context.RootFolder) == "string" and context.RootFolder ~= "" and context.RootFolder or "AetherCore"
-    local cachePath = rootFolder .. "/" .. relativePath
+    local normalizedPath = Utility.NormalizeAssetPath(relativePath)
+    local rootFolder = Utility.GetRootFolder()
+    local cachePath = rootFolder .. "/" .. normalizedPath
 
     if type(readfile) == "function" then
-        local readOk, contents = pcall(readfile, cachePath)
-        if readOk and type(contents) == "string" and contents ~= "" then
-            return cachePath
+        for _, candidate in ipairs({cachePath, normalizedPath, relativePath}) do
+            local readOk, contents = pcall(readfile, candidate)
+            if readOk and not Utility.IsMissingSource(contents) then
+                return candidate
+            end
         end
     end
 
-    if type(writefile) == "function" and game ~= nil and type(game.HttpGet) == "function" then
-        local rootUrl = type(context.RootUrl) == "string" and context.RootUrl ~= "" and context.RootUrl or nil
+    if type(writefile) == "function" and game ~= nil then
+        local rootUrl = Utility.GetRootUrl()
         if rootUrl then
-            local fetchOk, contents = pcall(function()
-                return game:HttpGet(rootUrl .. relativePath, true)
-            end)
-            if fetchOk and type(contents) == "string" and contents ~= "" then
-                pcall(writefile, cachePath, contents)
-                return cachePath
+            for _, remotePath in ipairs({normalizedPath, relativePath}) do
+                local fetchOk, contents = pcall(function()
+                    return game:HttpGet(rootUrl .. remotePath, true)
+                end)
+                if fetchOk and not Utility.IsMissingSource(contents) then
+                    pcall(writefile, cachePath, contents)
+                    return cachePath
+                end
             end
         end
     end
@@ -360,13 +398,16 @@ function Utility.InstallGetCustomAssetFallback()
     end
 
     shared.vape.Libraries.getcustomasset = function(path)
+        local runtimePath = Utility.GetRuntimeAssetPath(path)
         if type(getcustomasset) == "function" then
-            local ok, result = pcall(getcustomasset, path)
-            if ok then
-                return result
+            for _, candidate in ipairs({runtimePath, path}) do
+                local ok, result = pcall(getcustomasset, candidate)
+                if ok and type(result) == "string" and result ~= "" then
+                    return result
+                end
             end
         end
-        return path
+        return runtimePath
     end
 end
 
@@ -506,7 +547,7 @@ function Utility.InstallCategoryFallbacks()
                 return asset
             end
         end
-        return path
+        return Utility.GetRuntimeAssetPath(path)
     end
 
     local function createWindowCategory(name, iconPath, size)

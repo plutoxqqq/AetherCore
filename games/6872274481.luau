@@ -35524,13 +35524,15 @@ local function downloadFile(path, func)
 		local suc, res = pcall(function()
 			return game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/'..select(1, path:gsub('AetherCore/', '')), true)
 		end)
-		if not suc or res == '404: Not Found' then
+		if not suc or type(res) ~= 'string' or res == '' or res == '404: Not Found' or res:find('^404') then
 			error(res)
 		end
 		if path:find('.lua') then
 			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
 		end
-		writefile(path, res)
+		if type(writefile) == 'function' then
+			pcall(writefile, path, res)
+		end
 	end
 	return (func or readfile)(path)
 end
