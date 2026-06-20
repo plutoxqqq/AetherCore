@@ -7492,9 +7492,12 @@ do
 					if ground and ground.Instance and ground.Instance.CanCollide and humanoid.FloorMaterial ~= Enum.Material.Air then
 						antiVoidModule.SafeCFrame = CFrame.lookAlong(ground.Position + Vector3.new(0, humanoid.HipHeight + 2, 0), root.CFrame.LookVector)
 					end
-					local dangerHeight = workspaceService.FallenPartsDestroyHeight + 35
-					if antiVoidModule.SafeCFrame and root.Position.Y <= dangerHeight then
-						if antiVoidMode.Value == 'Velocity' then
+					local deathHeight = workspaceService.FallenPartsDestroyHeight
+					local recoveryHeight = deathHeight + math.max(85, humanoid.HipHeight + 25)
+					if root.Position.Y <= recoveryHeight then
+						if not antiVoidModule.SafeCFrame then
+							root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 120, root.AssemblyLinearVelocity.Z)
+						elseif antiVoidMode.Value == 'Velocity' then
 							root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 120, root.AssemblyLinearVelocity.Z)
 						elseif antiVoidMode.Value == 'Smooth' then
 							local target = antiVoidModule.SafeCFrame.Position
@@ -7513,6 +7516,60 @@ do
 		end
 	})
 	antiVoidMode = antiVoidModule:CreateDropdown({Name = 'Mode', List = {'Instant', 'Smooth', 'Velocity'}, Default = 'Instant'})
+
+	getCategory('World'):CreateModule({
+		Name = 'Auto Obby',
+		Tooltip = 'Teleports through detected checkpoint, stage, finish, and win parts in order.',
+		Function = function(enabled)
+			if not enabled then return end
+			task.spawn(function()
+				local module = getModule('Auto Obby')
+				local _, _, root = getAliveParts()
+				if not module or not root then
+					if module and module.Enabled then module:Toggle() end
+					return
+				end
+
+				local candidates = {}
+				for _, descendant in workspaceService:GetDescendants() do
+					if descendant:IsA('BasePart') and descendant.CanCollide then
+						local lowerName = descendant.Name:lower()
+						if lowerName:find('checkpoint', 1, true) or lowerName:find('stage', 1, true) or lowerName:find('finish', 1, true) or lowerName:find('win', 1, true) or lowerName:find('obby', 1, true) then
+							table.insert(candidates, descendant)
+						end
+					end
+				end
+
+				table.sort(candidates, function(left, right)
+					local leftNumber = tonumber(left.Name:match('%d+')) or math.huge
+					local rightNumber = tonumber(right.Name:match('%d+')) or math.huge
+					if leftNumber == rightNumber then
+						return left.Position.Y < right.Position.Y
+					end
+					return leftNumber < rightNumber
+				end)
+
+				local visited = {}
+				for _, part in candidates do
+					module = getModule('Auto Obby')
+					if not module or not module.Enabled then break end
+					if part.Parent and not visited[part] then
+						visited[part] = true
+						local currentRoot = getRoot()
+						if not currentRoot then break end
+						currentRoot.CFrame = CFrame.lookAlong(part.Position + Vector3.new(0, 4, 0), currentRoot.CFrame.LookVector)
+						currentRoot.AssemblyLinearVelocity = Vector3.zero
+						task.wait(0.12)
+					end
+				end
+
+				module = getModule('Auto Obby')
+				if module and module.Enabled then
+					module:Toggle()
+				end
+			end)
+		end
+	})
 
 	local noClipModule = getCategory('Utility'):CreateModule({
 		Name = 'No Clip',
@@ -7577,67 +7634,230 @@ do
 		end
 	})
 
-	local gBoostRange
-	local gBoostSpeed
-	local gBoostModule = getCategory('Utility'):CreateModule({
-		Name = 'G Boost',
-		Tooltip = 'Press G while aiming at a solid block to boost toward its surface.',
-		Function = function(enabled)
-			local bodyVelocity
-			local boostConnection
-			local function stopBoost()
-				if boostConnection then
-					boostConnection:Disconnect()
-					boostConnection = nil
+	local boostState = {
+		Enabled = false,
+		Boosting = false,
+		Speed = 250,
+		StopDistance = 1.5,
+		OriginalCollisions = {},
+		RaycastDistance = 5000
+	}
+
+	local function disconnectBoost(connectionName)
+		local connection = boostState[connectionName]
+		if typeof(connection) == 'RBXScriptConnection' then
+			connection:Disconnect()
+		end
+		boostState[connectionName] = nil
+	end
+
+	local function getTargetBlock()
+		local camera = workspaceService.CurrentCamera
+		local root = getRoot()
+		if not camera or not root then return nil end
+
+		local mouseLocation = inputService:GetMouseLocation()
+		local ray = camera:ViewportPointToRay(mouseLocation.X, mouseLocation.Y)
+		local params = makeRaycastParams(getCharacter(), root)
+		local result = workspaceService:Raycast(ray.Origin, ray.Direction * boostState.RaycastDistance, params)
+		if result and result.Instance and result.Instance:IsA('BasePart') and result.Instance.CanCollide then
+			return result.Instance, result.Position, result.Normal
+		end
+		return nil
+	end
+
+	local function getLandingPoint(block, hit, normal)
+		if hit and normal then
+			local root = getRoot()
+			local rootHalfHeight = root and math.max(root.Size.Y * 0.5, 1) or 1
+			return hit + (normal.Unit * (rootHalfHeight + 0.35))
+		end
+
+		local mouse = localPlayer:GetMouse()
+		hit = mouse.Hit.Position
+		local position = block.Position
+		local size = block.Size
+		local dx, dy, dz = hit.X - position.X, hit.Y - position.Y, hit.Z - position.Z
+		local ax, ay, az = math.abs(dx / math.max(size.X, 0.001)), math.abs(dy / math.max(size.Y, 0.001)), math.abs(dz / math.max(size.Z, 0.001))
+		local hx, hy, hz = size.X / 2, size.Y / 2, size.Z / 2
+
+		if ay >= ax and ay >= az then
+			return Vector3.new(hit.X, position.Y + (dy >= 0 and hy + 0.35 or -hy - 0.35), hit.Z)
+		end
+		if ax >= ay and ax >= az then
+			return Vector3.new(position.X + (dx >= 0 and hx + 0.35 or -hx - 0.35), hit.Y, hit.Z)
+		end
+		return Vector3.new(hit.X, hit.Y, position.Z + (dz >= 0 and hz + 0.35 or -hz - 0.35))
+	end
+
+	local function setBoostNoClip(enabled)
+		local character = getCharacter()
+		if not character then return end
+		if enabled then
+			table.clear(boostState.OriginalCollisions)
+			for _, descendant in character:GetDescendants() do
+				if descendant:IsA('BasePart') then
+					boostState.OriginalCollisions[descendant] = descendant.CanCollide
+					descendant.CanCollide = false
 				end
-				if bodyVelocity then
-					bodyVelocity:Destroy()
-					bodyVelocity = nil
-				end
-				restoreCharacterCollision(getCharacter())
 			end
+			return
+		end
+
+		for part, canCollide in boostState.OriginalCollisions do
+			if part and part.Parent then
+				part.CanCollide = canCollide
+			end
+		end
+		table.clear(boostState.OriginalCollisions)
+	end
+
+	local function setBoostStatus(text, statusColor)
+		if boostState.StatusLabel then
+			boostState.StatusLabel.Text = text
+			boostState.StatusLabel.TextColor3 = statusColor
+		end
+	end
+
+	local function cleanupBoost()
+		disconnectBoost('BoostConnection')
+		if boostState.BodyVelocity then
+			boostState.BodyVelocity:Destroy()
+			boostState.BodyVelocity = nil
+		end
+		setBoostNoClip(false)
+		boostState.Boosting = false
+		if boostState.Enabled then
+			setBoostStatus('Ready', Color3.fromRGB(100, 255, 100))
+		end
+	end
+
+	local function createBoostStatusGui()
+		if boostState.ScreenGui then
+			boostState.ScreenGui:Destroy()
+			boostState.ScreenGui = nil
+		end
+		local playerGui = localPlayer and localPlayer:FindFirstChildOfClass('PlayerGui')
+		if not playerGui then return end
+
+		local screenGui = Instance.new('ScreenGui')
+		screenGui.Name = 'AetherGBoostStatus'
+		screenGui.ResetOnSpawn = false
+		screenGui.Parent = playerGui
+
+		local label = Instance.new('TextLabel')
+		label.Name = 'Status'
+		label.Size = UDim2.fromOffset(180, 32)
+		label.Position = UDim2.fromOffset(10, 10)
+		label.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+		label.BackgroundTransparency = 0.1
+		label.BorderSizePixel = 0
+		label.Font = Enum.Font.GothamMedium
+		label.TextSize = 13
+		label.Text = 'Ready'
+		label.TextColor3 = Color3.fromRGB(100, 255, 100)
+		label.Parent = screenGui
+
+		local corner = Instance.new('UICorner')
+		corner.CornerRadius = UDim.new(0, 8)
+		corner.Parent = label
+
+		boostState.ScreenGui = screenGui
+		boostState.StatusLabel = label
+	end
+
+	local function startBoost()
+		if not boostState.Enabled or boostState.Boosting then return end
+		local block, hit, normal = getTargetBlock()
+		if not block then
+			setBoostStatus('Aim at a solid block', Color3.fromRGB(255, 100, 100))
+			task.delay(0.5, function()
+				if boostState.Enabled and not boostState.Boosting then
+					setBoostStatus('Ready', Color3.fromRGB(100, 255, 100))
+				end
+			end)
+			return
+		end
+
+		local root = getRoot()
+		if not root then return end
+		local target = getLandingPoint(block, hit, normal)
+		local direction = target - root.Position
+		if direction.Magnitude <= boostState.StopDistance then return end
+
+		setBoostNoClip(true)
+		boostState.Boosting = true
+		setBoostStatus(string.format('Boosting: %.0f studs', direction.Magnitude), Color3.fromRGB(255, 200, 100))
+
+		local bodyVelocity = Instance.new('BodyVelocity')
+		bodyVelocity.MaxForce = Vector3.new(1000000, 1000000, 1000000)
+		bodyVelocity.Velocity = direction.Unit * boostState.Speed
+		bodyVelocity.Parent = root
+		boostState.BodyVelocity = bodyVelocity
+
+		boostState.BoostConnection = runService.RenderStepped:Connect(function()
+			local currentRoot = getRoot()
+			if not boostState.Boosting or not currentRoot or not boostState.BodyVelocity then
+				cleanupBoost()
+				return
+			end
+			local remainingVector = target - currentRoot.Position
+			local remainingDistance = remainingVector.Magnitude
+			if remainingDistance <= boostState.StopDistance then
+				currentRoot.AssemblyLinearVelocity = Vector3.zero
+				cleanupBoost()
+				return
+			end
+			boostState.BodyVelocity.Velocity = remainingVector.Unit * boostState.Speed
+			setBoostStatus(string.format('Boosting: %.0f studs', remainingDistance), Color3.fromRGB(255, 200, 100))
+		end)
+
+		task.delay(5, function()
+			if boostState.Boosting then
+				cleanupBoost()
+			end
+		end)
+	end
+
+	local function updateBoostFeedback()
+		if not boostState.Enabled or boostState.Boosting then return end
+		local block, hit, normal = getTargetBlock()
+		local root = getRoot()
+		if block and root then
+			local target = getLandingPoint(block, hit, normal)
+			setBoostStatus(string.format('Target: %.0f studs', (target - root.Position).Magnitude), Color3.fromRGB(100, 255, 100))
+		else
+			setBoostStatus('No solid block', Color3.fromRGB(255, 100, 100))
+		end
+		return params
+	end
+
+	getCategory('Utility'):CreateModule({
+		Name = 'G Boost',
+		Tooltip = 'Press G while aiming at a solid block to boost to the selected surface with temporary no-clip.',
+		Function = function(enabled)
+			boostState.Enabled = enabled
 			if enabled then
-				gBoostModule:Clean(stopBoost)
-				gBoostModule:Clean(inputService.InputBegan:Connect(function(input, processed)
-					if processed or inputService:GetFocusedTextBox() or input.KeyCode ~= Enum.KeyCode.G then return end
-					local character, _, root = getAliveParts()
-					local camera = workspaceService.CurrentCamera
-					if not character or not camera then return end
-					local ray = workspaceService:Raycast(camera.CFrame.Position, camera.CFrame.LookVector * gBoostRange.Value, makeRaycastParams(character, root))
-					if not ray or not ray.Instance or not ray.Instance.CanCollide then
-						notify('G Boost', 'Aim at a solid block first.', 2, 'warning')
-						return
+				createBoostStatusGui()
+				setBoostStatus('Ready', Color3.fromRGB(100, 255, 100))
+				boostState.InputConnection = inputService.InputBegan:Connect(function(input, gameProcessed)
+					if not gameProcessed and input.KeyCode == Enum.KeyCode.G then
+						startBoost()
 					end
-					stopBoost()
-					setCharacterCollision(character, false)
-					local target = ray.Position + (ray.Normal * 3)
-					local initialDifference = target - root.Position
-					if initialDifference.Magnitude <= 5 then return end
-					bodyVelocity = Instance.new('BodyVelocity')
-					bodyVelocity.MaxForce = Vector3.new(1000000, 1000000, 1000000)
-					bodyVelocity.Velocity = initialDifference.Unit * gBoostSpeed.Value
-					bodyVelocity.Parent = root
-					local started = os.clock()
-					boostConnection = runService.RenderStepped:Connect(function()
-						if not bodyVelocity or not root.Parent then
-							stopBoost()
-							return
-						end
-						local difference = target - root.Position
-						if difference.Magnitude <= 5 or os.clock() - started > 5 then
-							stopBoost()
-						else
-							bodyVelocity.Velocity = difference.Unit * gBoostSpeed.Value
-						end
-					end)
-				end))
+				end)
+				boostState.FeedbackConnection = runService.RenderStepped:Connect(updateBoostFeedback)
 			else
-				stopBoost()
+				disconnectBoost('InputConnection')
+				disconnectBoost('FeedbackConnection')
+				cleanupBoost()
+				if boostState.ScreenGui then
+					boostState.ScreenGui:Destroy()
+					boostState.ScreenGui = nil
+					boostState.StatusLabel = nil
+				end
 			end
 		end
 	})
-	gBoostRange = gBoostModule:CreateSlider({Name = 'Range', Min = 25, Max = 500, Default = 180, Decimal = 1, Suffix = 'studs'})
-	gBoostSpeed = gBoostModule:CreateSlider({Name = 'Boost Speed', Min = 25, Max = 300, Default = 140, Decimal = 1, Suffix = 'studs'})
 end
 
 return mainapi
