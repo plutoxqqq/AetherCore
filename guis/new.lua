@@ -6059,7 +6059,6 @@ mainapi:Clean(clickgui:GetPropertyChangedSignal('Visible'):Connect(function()
 end))
 
 mainapi:CreateGUI()
-mainapi.Categories.Main:CreateDivider()
 mainapi:CreateCategory({
 	Name = 'Combat',
 	Icon = getcustomasset('AetherCore/assets/new/combaticon.png'),
@@ -6103,7 +6102,11 @@ if game.GameId == 2619619496 then
 	})
 end
 
-mainapi.Categories.Main:CreateDivider('misc')
+mainapi:CreateCategory({
+	Name = 'Module Assist',
+	Icon = getcustomasset('AetherCore/assets/new/utilityicon.png'),
+	Size = UDim2.fromOffset(15, 14)
+})
 
 --[[
 	Friends

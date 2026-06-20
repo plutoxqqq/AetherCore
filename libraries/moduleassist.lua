@@ -71,6 +71,36 @@ local function cleanSentence(text)
     return text
 end
 
+local function getAssistantGuiParent()
+    local coreGui = game:GetService("CoreGui")
+    local players = game:GetService("Players")
+    local localPlayer = players.LocalPlayer
+    return coreGui or (localPlayer and localPlayer:FindFirstChildOfClass("PlayerGui")) or game:GetService("StarterGui")
+end
+
+local function makeDraggable(frame, handle)
+    local userInputService = game:GetService("UserInputService")
+    local dragging, dragStart, startPosition
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    userInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPosition.X.Scale, startPosition.X.Offset + delta.X, startPosition.Y.Scale, startPosition.Y.Offset + delta.Y)
+        end
+    end)
+end
+
 local function splitNameWords(name)
     local readable = readableName(name)
     local words = {}
@@ -437,6 +467,122 @@ function ModuleAssist.Install(context)
 
     shared.AetherCoreModuleAssist = assistant
 
+    local terminalGui, terminalLog, terminalInput
+    local function appendTerminalLine(prefix, text)
+        if not terminalLog then return end
+        local existing = terminalLog.Text
+        local line = prefix .. " " .. tostring(text or "")
+        terminalLog.Text = existing == "" and line or (existing .. "\n" .. line)
+        terminalLog.TextYAlignment = Enum.TextYAlignment.Bottom
+    end
+
+    local function createTerminal()
+        if terminalGui then
+            terminalGui.Enabled = true
+            return terminalGui
+        end
+
+        terminalGui = Instance.new("ScreenGui")
+        terminalGui.Name = "AetherCoreModuleAssistTerminal"
+        terminalGui.ResetOnSpawn = false
+        terminalGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+        terminalGui.Parent = getAssistantGuiParent()
+
+        local frame = Instance.new("Frame")
+        frame.Name = "Terminal"
+        frame.Size = UDim2.fromOffset(460, 300)
+        frame.Position = UDim2.new(0.5, -230, 0.5, -150)
+        frame.BackgroundColor3 = Color3.fromRGB(16, 18, 24)
+        frame.BorderSizePixel = 0
+        frame.Parent = terminalGui
+
+        local corner = Instance.new("UICorner")
+        corner.CornerRadius = UDim.new(0, 8)
+        corner.Parent = frame
+
+        local title = Instance.new("TextLabel")
+        title.Name = "Title"
+        title.Size = UDim2.new(1, -44, 0, 36)
+        title.BackgroundTransparency = 1
+        title.Text = "AI Module Helper Chat"
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.TextColor3 = Color3.fromRGB(230, 236, 255)
+        title.TextSize = 15
+        title.Font = Enum.Font.GothamSemibold
+        title.Parent = frame
+        title.Position = UDim2.fromOffset(14, 0)
+
+        local close = Instance.new("TextButton")
+        close.Name = "Close"
+        close.Size = UDim2.fromOffset(34, 34)
+        close.Position = UDim2.new(1, -38, 0, 1)
+        close.BackgroundTransparency = 1
+        close.Text = "×"
+        close.TextColor3 = Color3.fromRGB(230, 236, 255)
+        close.TextSize = 22
+        close.Font = Enum.Font.Gotham
+        close.Parent = frame
+        close.MouseButton1Click:Connect(function()
+            terminalGui.Enabled = false
+        end)
+
+        terminalLog = Instance.new("TextLabel")
+        terminalLog.Name = "ChatLog"
+        terminalLog.Size = UDim2.new(1, -24, 1, -92)
+        terminalLog.Position = UDim2.fromOffset(12, 42)
+        terminalLog.BackgroundColor3 = Color3.fromRGB(10, 12, 16)
+        terminalLog.BorderSizePixel = 0
+        terminalLog.Text = "AI Module Helper is ready. Ask about any loaded module."
+        terminalLog.TextColor3 = Color3.fromRGB(190, 255, 205)
+        terminalLog.TextSize = 13
+        terminalLog.TextWrapped = true
+        terminalLog.TextXAlignment = Enum.TextXAlignment.Left
+        terminalLog.TextYAlignment = Enum.TextYAlignment.Bottom
+        terminalLog.Font = Enum.Font.Code
+        terminalLog.Parent = frame
+
+        terminalInput = Instance.new("TextBox")
+        terminalInput.Name = "Question"
+        terminalInput.Size = UDim2.new(1, -98, 0, 34)
+        terminalInput.Position = UDim2.new(0, 12, 1, -42)
+        terminalInput.BackgroundColor3 = Color3.fromRGB(26, 29, 38)
+        terminalInput.BorderSizePixel = 0
+        terminalInput.ClearTextOnFocus = false
+        terminalInput.PlaceholderText = "Ask what a module does..."
+        terminalInput.Text = ""
+        terminalInput.TextColor3 = Color3.fromRGB(240, 244, 255)
+        terminalInput.TextSize = 13
+        terminalInput.Font = Enum.Font.Gotham
+        terminalInput.Parent = frame
+
+        local ask = Instance.new("TextButton")
+        ask.Name = "Ask"
+        ask.Size = UDim2.fromOffset(72, 34)
+        ask.Position = UDim2.new(1, -84, 1, -42)
+        ask.BackgroundColor3 = Color3.fromRGB(79, 121, 255)
+        ask.BorderSizePixel = 0
+        ask.Text = "Ask"
+        ask.TextColor3 = Color3.fromRGB(255, 255, 255)
+        ask.TextSize = 13
+        ask.Font = Enum.Font.GothamSemibold
+        ask.Parent = frame
+
+        local function submit()
+            local question = terminalInput.Text
+            if tostring(question or "") == "" then return end
+            assistant.PendingQuestion = question
+            appendTerminalLine("You:", question)
+            terminalInput.Text = ""
+            appendTerminalLine("AI:", assistant.Ask(question))
+        end
+        ask.MouseButton1Click:Connect(submit)
+        terminalInput.FocusLost:Connect(function(enterPressed)
+            if enterPressed then submit() end
+        end)
+        makeDraggable(frame, title)
+        return terminalGui
+    end
+
     local category = vape.Categories.ModuleAssist or vape.Categories["Module Assist"]
     if type(category) ~= "table" or type(category.CreateModule) ~= "function" then
         category = vape.Categories.Utility
@@ -447,8 +593,11 @@ function ModuleAssist.Install(context)
 
     local module = category:CreateModule({
         Name = "AI Module Helper",
-        Tooltip = "Ask accurate questions about loaded AetherCore modules, including typo-tolerant follow-ups.",
-        Function = function() end
+        Tooltip = "Opens a terminal-style chat for accurate, typo-tolerant questions about loaded AetherCore modules.",
+        Function = function(callback)
+            local gui = createTerminal()
+            gui.Enabled = callback ~= false
+        end
     })
 
     if type(module) == "table" then
@@ -464,10 +613,15 @@ function ModuleAssist.Install(context)
         end
         if type(module.CreateButton) == "function" then
             module:CreateButton({
-                Name = "Ask AI Module Helper",
+                Name = "Open AI Module Helper Chat",
                 Function = function()
+                    createTerminal()
                     local question = assistant.PendingQuestion or (type(input) == "table" and input.Value) or ""
                     local answer = assistant.Ask(question)
+                    if question ~= "" then
+                        appendTerminalLine("You:", question)
+                    end
+                    appendTerminalLine("AI:", answer)
                     if type(vape.CreateNotification) == "function" then
                         vape:CreateNotification("AI Module Helper", answer, 10)
                     else
