@@ -7829,6 +7829,7 @@ do
 		else
 			setBoostStatus('No solid block', Color3.fromRGB(255, 100, 100))
 		end
+		return params
 	end
 
 	getCategory('Utility'):CreateModule({
