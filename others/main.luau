@@ -7194,13 +7194,15 @@ do
 	local playersService = game:GetService('Players')
 	local inputService = game:GetService('UserInputService')
 	local runService = game:GetService('RunService')
+	local workspaceService = game:GetService('Workspace')
 	local localPlayer = playersService.LocalPlayer
 	local boostState = {
 		Enabled = false,
 		Boosting = false,
 		Speed = 250,
-		StopDistance = 2,
-		OriginalCollisions = {}
+		StopDistance = 1.5,
+		OriginalCollisions = {},
+		RaycastDistance = 5000
 	}
 
 	local function disconnect(connectionName)
@@ -7217,39 +7219,48 @@ do
 	end
 
 	local function getTargetBlock()
-		if not localPlayer then return nil end
-		local mouse = localPlayer:GetMouse()
-		local target = mouse and mouse.Target
-		if not target or not target:IsA('BasePart') then
-			return nil
-		end
+		local camera = workspaceService.CurrentCamera
+		local root = getCharacterRoot()
+		if not camera or not root then return nil end
 
-		local character = localPlayer.Character
-		if character and target:IsDescendantOf(character) then
-			return nil
-		end
+		local mouseLocation = inputService:GetMouseLocation()
+		local ray = camera:ViewportPointToRay(mouseLocation.X, mouseLocation.Y)
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = {localPlayer.Character}
+		params.IgnoreWater = true
 
-		return target.CanCollide and target or nil
+		local result = workspaceService:Raycast(ray.Origin, ray.Direction * boostState.RaycastDistance, params)
+		if result and result.Instance and result.Instance:IsA('BasePart') and result.Instance.CanCollide then
+			return result.Instance, result.Position, result.Normal
+		end
+		return nil
 	end
 
-	local function getLandingPoint(block)
+	local function getLandingPoint(block, hit, normal)
+		if hit and normal then
+			local root = getCharacterRoot()
+			local rootHalfHeight = root and math.max(root.Size.Y * 0.5, 1) or 1
+			return hit + (normal.Unit * (rootHalfHeight + 0.35))
+		end
+
 		local mouse = localPlayer:GetMouse()
-		local hit = mouse.Hit.Position
+		hit = mouse.Hit.Position
 		local position = block.Position
 		local size = block.Size
 		local dx, dy, dz = hit.X - position.X, hit.Y - position.Y, hit.Z - position.Z
-		local ax, ay, az = math.abs(dx), math.abs(dy), math.abs(dz)
+		local ax, ay, az = math.abs(dx / math.max(size.X, 0.001)), math.abs(dy / math.max(size.Y, 0.001)), math.abs(dz / math.max(size.Z, 0.001))
 		local hx, hy, hz = size.X / 2, size.Y / 2, size.Z / 2
 
-		if ay > ax and ay > az then
-			return Vector3.new(hit.X, position.Y + (dy > 0 and hy + 0.1 or -hy - 0.1), hit.Z)
+		if ay >= ax and ay >= az then
+			return Vector3.new(hit.X, position.Y + (dy >= 0 and hy + 0.35 or -hy - 0.35), hit.Z)
 		end
 
-		if ax > ay and ax > az then
-			return Vector3.new(position.X + (dx > 0 and hx + 0.1 or -hx - 0.1), hit.Y, hit.Z)
+		if ax >= ay and ax >= az then
+			return Vector3.new(position.X + (dx >= 0 and hx + 0.35 or -hx - 0.35), hit.Y, hit.Z)
 		end
 
-		return Vector3.new(hit.X, hit.Y, position.Z + (dz > 0 and hz + 0.1 or -hz - 0.1))
+		return Vector3.new(hit.X, hit.Y, position.Z + (dz >= 0 and hz + 0.35 or -hz - 0.35))
 	end
 
 	local function setNoclip(enabled)
@@ -7333,7 +7344,7 @@ do
 	local function startBoost()
 		if not boostState.Enabled or boostState.Boosting then return end
 
-		local block = getTargetBlock()
+		local block, hit, normal = getTargetBlock()
 		if not block then
 			setStatus('Aim at a solid block', Color3.fromRGB(255, 100, 100))
 			task.delay(0.5, function()
@@ -7347,7 +7358,7 @@ do
 		local root = getCharacterRoot()
 		if not root then return end
 
-		local target = getLandingPoint(block)
+		local target = getLandingPoint(block, hit, normal)
 		local direction = target - root.Position
 		if direction.Magnitude <= boostState.StopDistance then return end
 
@@ -7390,10 +7401,10 @@ do
 	local function updateFeedback()
 		if not boostState.Enabled or boostState.Boosting then return end
 
-		local block = getTargetBlock()
+		local block, hit, normal = getTargetBlock()
 		local root = getCharacterRoot()
 		if block and root then
-			local target = getLandingPoint(block)
+			local target = getLandingPoint(block, hit, normal)
 			setStatus(string.format('Target: %.0f studs', (target - root.Position).Magnitude), Color3.fromRGB(100, 255, 100))
 		else
 			setStatus('No solid block', Color3.fromRGB(255, 100, 100))
@@ -7423,6 +7434,258 @@ do
 					boostState.ScreenGui = nil
 					boostState.StatusLabel = nil
 				end
+			end
+		end
+	})
+end
+
+-- AetherCore custom movement and utility modules.
+do
+	local playersService = game:GetService('Players')
+	local inputService = game:GetService('UserInputService')
+	local runService = game:GetService('RunService')
+	local workspaceService = game:GetService('Workspace')
+	local localPlayer = playersService.LocalPlayer
+
+	local function getCharacter()
+		return localPlayer and localPlayer.Character
+	end
+
+	local function getHumanoid()
+		local character = getCharacter()
+		return character and character:FindFirstChildOfClass('Humanoid')
+	end
+
+	local function getRoot()
+		local character = getCharacter()
+		return character and character:FindFirstChild('HumanoidRootPart')
+	end
+
+	local function createLinearVelocity(root, name)
+		local attachment = Instance.new('Attachment')
+		attachment.Name = name..'Attachment'
+		attachment.Parent = root
+
+		local velocity = Instance.new('LinearVelocity')
+		velocity.Name = name
+		velocity.Attachment0 = attachment
+		velocity.MaxForce = math.huge
+		velocity.RelativeTo = Enum.ActuatorRelativeTo.World
+		velocity.Parent = root
+		return velocity, attachment
+	end
+
+	local speedSlider
+	local speedModule = mainapi.Categories.Blatant:CreateModule({
+		Name = 'Speed',
+		Tooltip = 'Sets your character to a stable movement speed with one lightweight Heartbeat update.',
+		Function = function(enabled)
+			local humanoid = getHumanoid()
+			if humanoid then
+				speedModule.OriginalWalkSpeed = speedModule.OriginalWalkSpeed or humanoid.WalkSpeed
+				humanoid.WalkSpeed = enabled and speedSlider.Value or speedModule.OriginalWalkSpeed
+			end
+			if enabled then
+				speedModule:Clean(runService.Heartbeat:Connect(function()
+					local currentHumanoid = getHumanoid()
+					if currentHumanoid and currentHumanoid.WalkSpeed ~= speedSlider.Value then
+						currentHumanoid.WalkSpeed = speedSlider.Value
+					end
+				end))
+			else
+				local currentHumanoid = getHumanoid()
+				if currentHumanoid and speedModule.OriginalWalkSpeed then
+					currentHumanoid.WalkSpeed = speedModule.OriginalWalkSpeed
+				end
+				speedModule.OriginalWalkSpeed = nil
+			end
+		end
+	})
+	speedSlider = speedModule:CreateSlider({Name = 'Speed', Min = 16, Max = 250, Default = 80, Decimal = 1, Suffix = 'studs'})
+
+	mainapi.Categories.Utility:CreateModule({
+		Name = 'Infinite Jump',
+		Tooltip = 'Lets you jump again while airborne.',
+		Function = function(enabled)
+			if enabled then
+				mainapi.Modules['Infinite Jump']:Clean(inputService.JumpRequest:Connect(function()
+					local humanoid = getHumanoid()
+					if humanoid then
+						humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+					end
+				end))
+			end
+		end
+	})
+
+	local flySpeed
+	local flyModule = mainapi.Categories.Blatant:CreateModule({
+		Name = 'Fly',
+		Tooltip = 'Camera-relative flight using a single LinearVelocity constraint.',
+		Function = function(enabled)
+			local velocity, attachment
+			if enabled then
+				local root = getRoot()
+				if not root then return end
+				velocity, attachment = createLinearVelocity(root, 'AetherFlyVelocity')
+				flyModule:Clean(function()
+					if velocity then velocity:Destroy() end
+					if attachment then attachment:Destroy() end
+				end)
+				flyModule:Clean(runService.RenderStepped:Connect(function()
+					local camera = workspaceService.CurrentCamera
+					local currentRoot = getRoot()
+					if not camera or not currentRoot or not velocity.Parent then return end
+					local move = Vector3.zero
+					if inputService:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
+					if inputService:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
+					if inputService:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
+					if inputService:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
+					if inputService:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.yAxis end
+					if inputService:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.yAxis end
+					velocity.VectorVelocity = move.Magnitude > 0 and move.Unit * flySpeed.Value or Vector3.zero
+				end))
+			end
+		end
+	})
+	flySpeed = flyModule:CreateSlider({Name = 'Fly Speed', Min = 20, Max = 250, Default = 80, Decimal = 1, Suffix = 'studs'})
+
+	local function teleportTo(position)
+		local root = getRoot()
+		if root then
+			root.CFrame = CFrame.new(position + Vector3.new(0, 3, 0), position + root.CFrame.LookVector)
+			root.AssemblyLinearVelocity = Vector3.zero
+		end
+	end
+
+	mainapi.Categories.World:CreateModule({
+		Name = 'Auto Obby',
+		Tooltip = 'Teleports to detected checkpoints, then attempts a finish part when one exists.',
+		Function = function(enabled)
+			if not enabled then return end
+			local candidates = {}
+			for _, descendant in workspaceService:GetDescendants() do
+				if descendant:IsA('BasePart') then
+					local name = descendant.Name:lower()
+					if name:find('checkpoint') or name:find('stage') or name:find('finish') or name:find('win') then
+						table.insert(candidates, descendant)
+					end
+				end
+			end
+			table.sort(candidates, function(a, b)
+				local aNumber = tonumber(a.Name:match('%d+')) or 0
+				local bNumber = tonumber(b.Name:match('%d+')) or 0
+				return aNumber < bNumber
+			end)
+			for _, part in candidates do
+				if not mainapi.Modules['Auto Obby'].Enabled then break end
+				teleportTo(part.Position)
+				task.wait(0.12)
+			end
+			if mainapi.Modules['Auto Obby'].Enabled then
+				mainapi.Modules['Auto Obby']:Toggle()
+			end
+		end
+	})
+
+	local antiDeathHeight
+	local antiDeathModule = mainapi.Categories.Utility:CreateModule({
+		Name = 'Anti Death',
+		Tooltip = 'Rapidly blinks the server position upward and back while keeping the camera on your normal character.',
+		Function = function(enabled)
+			if enabled then
+				antiDeathModule:Clean(runService.Heartbeat:Connect(function()
+					local humanoid = getHumanoid()
+					local root = getRoot()
+					if not humanoid or not root or humanoid.Health <= 0 then return end
+					local original = root.CFrame
+					root.CFrame = original + Vector3.new(0, antiDeathHeight.Value, 0)
+					runService.Heartbeat:Wait()
+					if root.Parent then
+						root.CFrame = original
+						root.AssemblyLinearVelocity = Vector3.zero
+					end
+				end))
+			end
+		end
+	})
+	antiDeathHeight = antiDeathModule:CreateSlider({Name = 'Blink Height', Min = 50, Max = 500, Default = 180, Decimal = 1, Suffix = 'studs'})
+
+	mainapi.Categories.Utility:CreateModule({
+		Name = 'Void Walker',
+		Tooltip = 'Returns you to a saved safe point if you fall under the void.',
+		Function = function(enabled)
+			local module = mainapi.Modules['Void Walker']
+			if enabled then
+				local root = getRoot()
+				module.SafeCFrame = root and root.CFrame or nil
+				module:Clean(runService.Heartbeat:Connect(function()
+					local currentRoot = getRoot()
+					local humanoid = getHumanoid()
+					if not currentRoot or not humanoid then return end
+					if humanoid.FloorMaterial ~= Enum.Material.Air then
+						module.SafeCFrame = currentRoot.CFrame
+					elseif currentRoot.Position.Y < workspaceService.FallenPartsDestroyHeight + 25 and module.SafeCFrame then
+						currentRoot.CFrame = module.SafeCFrame + Vector3.new(0, 5, 0)
+						currentRoot.AssemblyLinearVelocity = Vector3.zero
+					end
+				end))
+			end
+		end
+	})
+
+	mainapi.Categories.Utility:CreateModule({
+		Name = 'No Clip',
+		Tooltip = 'Disables character collisions so you can pass through parts.',
+		Function = function(enabled)
+			if enabled then
+				mainapi.Modules['No Clip']:Clean(runService.Stepped:Connect(function()
+					local character = getCharacter()
+					if not character then return end
+					for _, part in character:GetDescendants() do
+						if part:IsA('BasePart') then
+							part.CanCollide = false
+						end
+					end
+				end))
+			end
+		end
+	})
+
+	mainapi.Categories.Render:CreateModule({
+		Name = 'Fullbright',
+		Tooltip = 'Forces bright lighting for better visibility.',
+		Function = function(enabled)
+			local lighting = game:GetService('Lighting')
+			if enabled then
+				local module = mainapi.Modules.Fullbright
+				module.ClockTime = lighting.ClockTime
+				module.Brightness = lighting.Brightness
+				module.FogEnd = lighting.FogEnd
+				module:Clean(runService.RenderStepped:Connect(function()
+					lighting.ClockTime = 14
+					lighting.Brightness = 3
+					lighting.FogEnd = 100000
+				end))
+			else
+				local module = mainapi.Modules.Fullbright
+				if module.ClockTime then lighting.ClockTime = module.ClockTime end
+				if module.Brightness then lighting.Brightness = module.Brightness end
+				if module.FogEnd then lighting.FogEnd = module.FogEnd end
+			end
+		end
+	})
+
+	mainapi.Categories.Utility:CreateModule({
+		Name = 'Anti AFK',
+		Tooltip = 'Prevents idle kick by sending a tiny virtual user input when Roblox marks you idle.',
+		Function = function(enabled)
+			if enabled then
+				local virtualUser = game:GetService('VirtualUser')
+				mainapi.Modules['Anti AFK']:Clean(localPlayer.Idled:Connect(function()
+					virtualUser:CaptureController()
+					virtualUser:ClickButton2(Vector2.new())
+				end))
 			end
 		end
 	})
