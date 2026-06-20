@@ -31,7 +31,7 @@ local function ensureFolder(path)
     end
 end
 
-for _, folder in ipairs({rootFolder, rootFolder .. "/games", rootFolder .. "/profiles", rootFolder .. "/assets", rootFolder .. "/libraries", rootFolder .. "/guis"}) do
+for _, folder in ipairs({rootFolder, rootFolder .. "/games", rootFolder .. "/profiles", rootFolder .. "/assets", rootFolder .. "/assets/new", rootFolder .. "/libraries", rootFolder .. "/guis"}) do
     ensureFolder(folder)
 end
 

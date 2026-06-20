@@ -60,6 +60,24 @@ local uipallet = {
 	Tween = TweenInfo.new(0.16, Enum.EasingStyle.Linear)
 }
 
+
+local startup = getgenv and getgenv().AetherCoreStartup or {}
+local rootFolder = startup.RootFolder or 'AetherCore'
+local rootUrl = startup.RootUrl or 'https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/'
+local function normalizeAssetPath(path)
+	if type(path) ~= 'string' then return path end
+	path = path:gsub('\\', '/')
+	path = path:gsub('^AetherCore/', '')
+	path = path:gsub('^newvape/assets/', 'assets/')
+	path = path:gsub('^catrewrite/assets/', 'assets/')
+	path = path:gsub('^newvape/', 'assets/')
+	path = path:gsub('^catrewrite/', 'assets/')
+	return path
+end
+local function runtimeAssetPath(path)
+	return rootFolder..'/'..normalizeAssetPath(path)
+end
+
 local getcustomassets = {
 	['AetherCore/assets/new/add.png'] = 'rbxassetid://14368300605',
 	['AetherCore/assets/new/alert.png'] = 'rbxassetid://14368301329',
@@ -125,6 +143,17 @@ local getcustomassets = {
 	['AetherCore/assets/new/warning.png'] = 'rbxassetid://14368361552',
 	['AetherCore/assets/new/worldicon.png'] = 'rbxassetid://14368362492'
 }
+local assetAliases = {}
+for path, asset in pairs(getcustomassets) do
+	if path:sub(1, 11) == 'AetherCore/' then
+		local normalized = path:sub(12)
+		table.insert(assetAliases, {normalized, asset})
+		table.insert(assetAliases, {rootFolder..'/'..normalized, asset})
+	end
+end
+for _, alias in assetAliases do
+	getcustomassets[alias[1]] = alias[2]
+end
 
 local isfile = isfile or function(file)
 	local suc, res = pcall(function()
@@ -320,31 +349,64 @@ local function createMobileButton(buttonapi, position)
 	buttonapi.Bind = {Button = button}
 end
 
-local function downloadFile(path, func)
-	if not isfile(path) then
-		createDownloader(path)
-		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readfile('AetherCore/profiles/commit.txt')..'/'..select(1, path:gsub('AetherCore/', '')), true)
-		end)
-		if not suc or res == '404: Not Found' then
-			error(res)
+local function readCommit()
+	local commit = 'main'
+	if type(readfile) == 'function' then
+		local suc, res = pcall(readfile, rootFolder..'/profiles/commit.txt')
+		if suc and type(res) == 'string' and res:gsub('%s+', '') ~= '' then
+			commit = res:gsub('^%s+', ''):gsub('%s+$', '')
 		end
-		if path:find('.lua') then
-			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
-		end
-		writefile(path, res)
 	end
-	return (func or readfile)(path)
+	return commit
+end
+
+local function downloadFile(path, func)
+	local normalized = normalizeAssetPath(path)
+	local cachePath = runtimeAssetPath(path)
+	local candidates = {cachePath, normalized, path}
+	for _, candidate in candidates do
+		if isfile(candidate) then
+			return (func or readfile)(candidate)
+		end
+	end
+
+	createDownloader(normalized)
+	local commit = readCommit()
+	local baseUrl = rootUrl:gsub('/main/$', '/'..commit..'/')
+	for _, remotePath in {normalized, select(1, path:gsub('^AetherCore/', ''))} do
+		local suc, res = pcall(function()
+			return game:HttpGet(baseUrl..remotePath, true)
+		end)
+		if suc and type(res) == 'string' and res ~= '' and res ~= '404: Not Found' and not res:find('^404') then
+			if cachePath:find('%.lua') then
+				res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
+			end
+			if type(writefile) == 'function' then
+				local wrote = pcall(writefile, cachePath, res)
+				if wrote then
+					return (func or readfile)(cachePath)
+				end
+			end
+		end
+	end
+
+	local fallback = getcustomassets[cachePath] or getcustomassets[normalized] or getcustomassets[path]
+	if fallback and fallback ~= '' then
+		return fallback
+	end
+	error('Unable to download '..tostring(normalized))
 end
 
 getcustomasset = assetfunction and function(path)
 	local suc, res = pcall(downloadFile, path, assetfunction)
-	if suc then
+	if suc and type(res) == 'string' and res ~= '' then
 		return res
 	end
-	return getcustomassets[path] or ''
+	local normalized = normalizeAssetPath(path)
+	return getcustomassets[runtimeAssetPath(path)] or getcustomassets[normalized] or getcustomassets[path] or ''
 end or function(path)
-	return getcustomassets[path] or ''
+	local normalized = normalizeAssetPath(path)
+	return getcustomassets[runtimeAssetPath(path)] or getcustomassets[normalized] or getcustomassets[path] or ''
 end
 
 local function getTableSize(tab)
@@ -2583,8 +2645,8 @@ function mainapi:CreateGUI()
 	settingsversion.Size = UDim2.new(1, 0, 0, 16)
 	settingsversion.Position = UDim2.new(0, 0, 1, -16)
 	settingsversion.BackgroundTransparency = 1
-	settingsversion.Text = 'Vape '..mainapi.Version..' '..(
-		isfile('AetherCore/profiles/commit.txt') and readfile('AetherCore/profiles/commit.txt'):sub(1, 6) or ''
+	settingsversion.Text = 'AetherCore '..mainapi.Version..' '..(
+		isfile('AetherCore/profiles/commit.txt') and readCommit():sub(1, 6) or ''
 	)..' '
 	settingsversion.TextColor3 = color.Dark(uipallet.Text, 0.43)
 	settingsversion.TextXAlignment = Enum.TextXAlignment.Right
@@ -5586,7 +5648,7 @@ function mainapi:Load(skipgui, profile)
 		guidata = loadJson('AetherCore/profiles/'..game.GameId..'.gui.txt')
 		if not guidata then
 			guidata = {Categories = {}}
-			self:CreateNotification('Vape', 'Failed to load GUI settings, Try rejoining ur game', 10, 'alert')
+			self:CreateNotification('AetherCore', 'Failed to load GUI settings. Try rejoining your game.', 10, 'alert')
 			delfile('AetherCore/profiles/'..game.GameId..'.gui.txt')
 			savecheck = false
 		end
@@ -5634,7 +5696,7 @@ function mainapi:Load(skipgui, profile)
 		local savedata = loadJson('AetherCore/profiles/'..self.Profile..self.Place..'.txt')
 		if not savedata then
 			savedata = {Categories = {}, Modules = {}, Legit = {}}
-			self:CreateNotification('Vape', 'Failed to load '..self.Profile..' profile.', 10, 'alert')
+			self:CreateNotification('AetherCore', 'Failed to load '..self.Profile..' profile.', 10, 'alert')
 			savecheck = false
 		end
 
@@ -6155,17 +6217,17 @@ general:CreateButton({
 		if shared.VapeDeveloper then
 			loadstring(readfile('AetherCore/loader.lua'), 'loader')()
 		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readfile('AetherCore/profiles/commit.txt')..'/loader.lua', true))()
+			loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readCommit()..'/loader.lua', true))()
 		end
 	end,
-	Tooltip = 'This will set your profile to the default settings of Vape'
+	Tooltip = 'This will set your profile to the default AetherCore settings'
 })
 general:CreateButton({
-	Name = 'Self destruct',
+	Name = 'Self Destruct',
 	Function = function()
 		mainapi:Uninject()
 	end,
-	Tooltip = 'Removes vape from the current game'
+	Tooltip = 'Removes AetherCore from the current game'
 })
 general:CreateButton({
 	Name = 'Reinject',
@@ -6174,10 +6236,10 @@ general:CreateButton({
 		if shared.VapeDeveloper then
 			loadstring(readfile('AetherCore/loader.lua'), 'loader')()
 		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readfile('AetherCore/profiles/commit.txt')..'/loader.lua', true))()
+			loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readCommit()..'/loader.lua', true))()
 		end
 	end,
-	Tooltip = 'Reloads vape for debugging purposes'
+	Tooltip = 'Reloads AetherCore for debugging purposes'
 })
 
 --[[
@@ -6291,7 +6353,7 @@ guipane:CreateDropdown({
 			if shared.VapeDeveloper then
 				loadstring(readfile('AetherCore/loader.lua'), 'loader')()
 			else
-				loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readfile('AetherCore/profiles/commit.txt')..'/loader.lua', true))()
+				loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readCommit()..'/loader.lua', true))()
 			end
 		end
 	end,

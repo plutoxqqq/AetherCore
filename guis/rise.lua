@@ -240,19 +240,28 @@ local function createHighlight(size, pos)
 	end
 end
 
+local function readCommit()
+	local suc, res = pcall(readfile, 'AetherCore/profiles/commit.txt')
+	return suc and type(res) == 'string' and res:gsub('%s+', '') ~= '' and res:gsub('^%s+', ''):gsub('%s+$', '') or 'main'
+end
+
 local function downloadFile(path, func)
 	if not isfile(path) then
 		createDownloader(path)
 		local suc, res = pcall(function()
-			return game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readfile('AetherCore/profiles/commit.txt')..'/'..select(1, path:gsub('AetherCore/', '')), true)
+			return game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readCommit()..'/'..select(1, path:gsub('AetherCore/', '')), true)
 		end)
-		if not suc or res == '404: Not Found' then
+		if not suc or type(res) ~= 'string' or res == '' or res == '404: Not Found' or res:find('^404') then
+			local fallback = getcustomassets[path]
+			if fallback and fallback ~= '' then return fallback end
 			error(res)
 		end
 		if path:find('.lua') then
 			res = '--This watermark is used to delete the file if its cached, remove it to make the file persist after vape updates.\n'..res
 		end
-		writefile(path, res)
+		if type(writefile) == 'function' then
+			pcall(writefile, path, res)
+		end
 	end
 	return (func or readfile)(path)
 end
@@ -2302,7 +2311,7 @@ function mainapi:Load(skipgui, profile)
 		guidata = loadJson('AetherCore/profiles/'..game.GameId..'.gui.txt')
 		if not guidata then
 			guidata = {Categories = {}}
-			self:CreateNotification('Vape', 'Failed to load GUI settings.', 10, 'alert')
+			self:CreateNotification('AetherCore', 'Failed to load GUI settings.', 10, 'alert')
 			savecheck = false
 		end
 
@@ -2336,7 +2345,7 @@ function mainapi:Load(skipgui, profile)
 				Modules = {},
 				Legit = {}
 			}
-			self:CreateNotification('Vape', 'Failed to load '..self.Profile..' profile.', 10, 'alert')
+			self:CreateNotification('AetherCore', 'Failed to load '..self.Profile..' profile.', 10, 'alert')
 			savecheck = false
 		end
 
@@ -2845,7 +2854,7 @@ mainapi.Categories.Main:CreateDropdown({
 			if shared.VapeDeveloper then
 				loadstring(readfile('AetherCore/loader.lua'), 'loader')()
 			else
-				loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readfile('AetherCore/profiles/commit.txt')..'/loader.lua', true))()
+				loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readCommit()..'/loader.lua', true))()
 			end
 		end
 	end
@@ -2873,7 +2882,7 @@ mainapi.Categories.Main:CreateButton({
 		if shared.VapeDeveloper then
 			loadstring(readfile('AetherCore/loader.lua'), 'loader')()
 		else
-			loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readfile('AetherCore/profiles/commit.txt')..'/loader.lua', true))()
+			loadstring(game:HttpGet('https://raw.githubusercontent.com/plutoxqqq/AetherCore/'..readCommit()..'/loader.lua', true))()
 		end
 	end
 })
