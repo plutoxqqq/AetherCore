@@ -1,0 +1,34 @@
+-- AetherCore custom modules for others/main.luau
+--
+-- Put custom modules in this file. It is loaded automatically by others/main.luau
+-- after the built-in Keybind Boost module is created.
+--
+-- The loader passes the GUI API as both arguments:
+--   vape     -> main GUI/module API
+--   context  -> { vape = vape, source = 'others/custom_modules.luau' }
+--
+-- Example:
+-- return function(vape, context)
+-- 	local example = vape.Categories.Utility:CreateModule({
+-- 		Name = 'Example Module',
+-- 		Tooltip = 'Example custom module. Replace this with your own module code.',
+-- 		Function = function(enabled)
+-- 			print('Example Module enabled:', enabled)
+-- 		end
+-- 	})
+-- 	example:CreateToggle({Name = 'Example Setting'})
+-- end
+--
+-- Notes:
+-- - Keep this file returning a function.
+-- - Paste your module creation code inside the returned function.
+-- - Use the formal API name `vape`, for example:
+--     local AntiFall = vape.Categories.Blatant:CreateModule({...})
+-- - Define or require any helper variables your module uses before using them.
+--   The Anti Fall snippet you provided depends on variables such as store,
+--   getLowGround, entitylib, lplr, runService, and others, so those helpers must
+--   exist in this file or be loaded by your module before Anti Fall can run.
+
+return function(vape, context)
+	-- Add custom modules here.
+end
