@@ -7511,4 +7511,62 @@ do
 	end})
 end
 
+
+local function loadCustomModules()
+	local paths = {
+		'AetherCore/others/custom_modules.luau',
+		'others/custom_modules.luau',
+		'AetherCore/custom_modules.luau',
+		'custom_modules.luau'
+	}
+	local source
+	local sourcePath
+
+	if type(readfile) == 'function' then
+		for _, path in paths do
+			local ok, result = pcall(readfile, path)
+			if ok and type(result) == 'string' and result:gsub('%s+', '') ~= '' then
+				source = result
+				sourcePath = path
+				break
+			end
+		end
+	end
+
+	if not source and type(game.HttpGet) == 'function' then
+		local url = 'https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/others/custom_modules.luau'
+		local ok, result = pcall(function()
+			return game:HttpGet(url, true)
+		end)
+		if ok and type(result) == 'string' and result:gsub('%s+', '') ~= '' and result ~= '404: Not Found' then
+			source = result
+			sourcePath = url
+		end
+	end
+
+	if not source then return end
+	local chunk, compileError = loadstring(source, sourcePath or 'AetherCore/others/custom_modules.luau')
+	if not chunk then
+		warn('[AetherCore] Failed to compile custom modules: '..tostring(compileError))
+		return
+	end
+
+	local ok, loaded = pcall(chunk)
+	if not ok then
+		warn('[AetherCore] Failed to run custom modules file: '..tostring(loaded))
+		return
+	end
+	if type(loaded) == 'function' then
+		local runOk, runError = pcall(loaded, mainapi, {
+			vape = mainapi,
+			source = sourcePath or 'AetherCore/others/custom_modules.luau'
+		})
+		if not runOk then
+			warn('[AetherCore] Failed to load custom modules: '..tostring(runError))
+		end
+	end
+end
+
+loadCustomModules()
+
 return mainapi

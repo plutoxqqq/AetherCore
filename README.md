@@ -12,6 +12,16 @@ loadstring(game:HttpGet("https://raw.githubusercontent.com/plutoxqqq/AetherCore/
 
 The repository also includes a `loadstring` text file for users who want a copy-paste one-liner.
 
+## Standalone `others/main.luau` loadstring
+
+If you specifically want to run the standalone `others/main.luau` entrypoint, use:
+
+```luau
+loadstring(game:HttpGet("https://raw.githubusercontent.com/plutoxqqq/AetherCore/main/others/main.luau", true))()
+```
+
+Custom standalone modules can be placed in `others/custom_modules.luau`. That file is loaded automatically by `others/main.luau` after the built-in Keybind Boost module is registered.
+
 ## Startup flow
 
 1. **`loadstring`**
