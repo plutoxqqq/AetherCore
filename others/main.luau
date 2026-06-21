@@ -7512,6 +7512,262 @@ do
 end
 
 
+-- CatV6-sourced movement and utility modules.
+-- Source modules requested from:
+-- https://github.com/Maxlasertech/CatV6/blob/main/games/universal.lua
+-- https://github.com/Maxlasertech/CatV6/blob/main/games/6872274481.lua
+-- The module bodies below preserve the directly-copied CatV6 behavior patterns
+-- while using this standalone entrypoint's local category/module API.
+do
+	local playersService = cloneref(game:GetService('Players'))
+	local inputService = cloneref(game:GetService('UserInputService'))
+	local runService = cloneref(game:GetService('RunService'))
+	local workspaceService = cloneref(game:GetService('Workspace'))
+	local localPlayer = playersService.LocalPlayer
+	local function getCategory(primary, fallback)
+		return mainapi.Categories[primary] or mainapi.Categories[fallback or 'Utility'] or mainapi.Categories.Main
+	end
+	local function getCharacter()
+		return localPlayer and localPlayer.Character
+	end
+	local function getHumanoid(character)
+		character = character or getCharacter()
+		return character and character:FindFirstChildOfClass('Humanoid')
+	end
+	local function getRoot(character)
+		character = character or getCharacter()
+		return character and character:FindFirstChild('HumanoidRootPart')
+	end
+	local function cleanConnection(module, connection)
+		if connection then module:Clean(connection) end
+		return connection
+	end
+	local function getRaycastParams(character)
+		local params = RaycastParams.new()
+		params.FilterType = Enum.RaycastFilterType.Exclude
+		params.FilterDescendantsInstances = {character, workspaceService.CurrentCamera}
+		params.IgnoreWater = true
+		return params
+	end
+
+	local AntiFall, AntiFallPart, AntiFallMode, AntiFallMaterial, AntiFallColor
+	AntiFall = getCategory('Blatant'):CreateModule({
+		Name = 'Anti Fall',
+		Function = function(callback)
+			if callback then
+				local debounce = tick()
+				AntiFallPart = Instance.new('Part')
+				AntiFallPart.Size = Vector3.new(10000, 1, 10000)
+				AntiFallPart.Transparency = 1 - AntiFallColor.Opacity
+				AntiFallPart.Material = Enum.Material[AntiFallMaterial.Value]
+				AntiFallPart.Color = Color3.fromHSV(AntiFallColor.Hue, AntiFallColor.Sat, AntiFallColor.Value)
+				AntiFallPart.CanCollide = AntiFallMode.Value == 'Collide'
+				AntiFallPart.Anchored = true
+				AntiFallPart.CanQuery = false
+				AntiFallPart.Parent = workspaceService
+				AntiFall:Clean(AntiFallPart)
+				AntiFall:Clean(AntiFallPart.Touched:Connect(function(touchedPart)
+					if touchedPart.Parent == getCharacter() and debounce < tick() then
+						local root = getRoot()
+						if root then
+							debounce = tick() + 0.1
+							root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 100, root.AssemblyLinearVelocity.Z)
+						end
+					end
+				end))
+				AntiFall:Clean(runService.PreSimulation:Connect(function()
+					local root = getRoot()
+					if root and AntiFallPart then
+						AntiFallPart.Position = Vector3.new(root.Position.X, root.Position.Y - 10, root.Position.Z)
+					end
+				end))
+			else
+				AntiFallPart = nil
+			end
+		end,
+		Tooltip = 'Direct CatV6 AntiFall-style platform rescue.'
+	})
+	AntiFallMode = AntiFall:CreateDropdown({Name = 'Mode', List = {'Collide', 'Velocity'}, Default = 'Velocity', Function = function(value)
+		if AntiFallPart then AntiFallPart.CanCollide = value == 'Collide' end
+	end})
+	AntiFallMaterial = AntiFall:CreateDropdown({Name = 'Material', List = {'ForceField', 'Neon', 'SmoothPlastic'}, Default = 'ForceField', Function = function(value)
+		if AntiFallPart then AntiFallPart.Material = Enum.Material[value] end
+	end})
+	AntiFallColor = AntiFall:CreateColorSlider({Name = 'Color', DefaultOpacity = 0.4, Function = function(h, s, v, o)
+		if AntiFallPart then
+			AntiFallPart.Color = Color3.fromHSV(h, s, v)
+			AntiFallPart.Transparency = 1 - o
+		end
+	end})
+
+	local Speed, SpeedValue, SpeedJump
+	Speed = getCategory('Blatant'):CreateModule({
+		Name = 'Speed',
+		Function = function(callback)
+			if callback then
+				Speed:Clean(runService.PreSimulation:Connect(function()
+					local humanoid = getHumanoid()
+					local root = getRoot()
+					if humanoid and root then
+						humanoid.WalkSpeed = SpeedValue.Value
+						if SpeedJump.Enabled and humanoid.FloorMaterial ~= Enum.Material.Air and humanoid.MoveDirection.Magnitude > 0 then
+							root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 3, root.AssemblyLinearVelocity.Z)
+						end
+					end
+				end))
+			else
+				local humanoid = getHumanoid()
+				if humanoid then humanoid.WalkSpeed = 16 end
+			end
+		end,
+		Tooltip = 'Direct CatV6 Speed-style movement override.'
+	})
+	SpeedValue = Speed:CreateSlider({Name = 'Speed', Min = 1, Max = 80, Default = 23, Suffix = 'studs'})
+	SpeedJump = Speed:CreateToggle({Name = 'Auto Jump', Default = false})
+
+	local Fly, FlySpeed, FlyVerticalSpeed, FlyVertical
+	Fly = getCategory('Blatant'):CreateModule({
+		Name = 'Fly',
+		Function = function(callback)
+			if callback then
+				Fly:Clean(runService.PreSimulation:Connect(function()
+					local humanoid = getHumanoid()
+					local root = getRoot()
+					local camera = workspaceService.CurrentCamera
+					if humanoid and root and camera then
+						local moveDirection = humanoid.MoveDirection
+						local velocity = moveDirection * FlySpeed.Value
+						if FlyVertical.Enabled then
+							velocity += Vector3.new(0, (inputService:IsKeyDown(Enum.KeyCode.Space) and FlyVerticalSpeed.Value or 0) - (inputService:IsKeyDown(Enum.KeyCode.LeftShift) and FlyVerticalSpeed.Value or 0), 0)
+						else
+							velocity += Vector3.new(0, 2, 0)
+						end
+						root.AssemblyLinearVelocity = velocity
+					end
+				end))
+			end
+		end,
+		Tooltip = 'Direct CatV6 Fly-style velocity control.'
+	})
+	FlySpeed = Fly:CreateSlider({Name = 'Speed', Min = 1, Max = 150, Default = 50, Suffix = 'studs'})
+	FlyVertical = Fly:CreateToggle({Name = 'Vertical', Default = true})
+	FlyVerticalSpeed = Fly:CreateSlider({Name = 'Vertical Speed', Min = 1, Max = 150, Default = 50, Suffix = 'studs'})
+
+	local AntiRagdoll = getCategory('Utility'):CreateModule({
+		Name = 'Anti Ragdoll',
+		Function = function(callback)
+			if callback then
+				local function apply(character)
+					local humanoid = getHumanoid(character)
+					if humanoid then
+						humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+						humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+						humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
+					end
+				end
+				apply(getCharacter())
+				AntiRagdoll:Clean(localPlayer.CharacterAdded:Connect(apply))
+				AntiRagdoll:Clean(runService.PreSimulation:Connect(function()
+					local humanoid = getHumanoid()
+					if humanoid and (humanoid:GetState() == Enum.HumanoidStateType.Ragdoll or humanoid:GetState() == Enum.HumanoidStateType.FallingDown) then
+						humanoid:ChangeState(Enum.HumanoidStateType.Running)
+					end
+				end))
+			else
+				local humanoid = getHumanoid()
+				if humanoid then
+					humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
+					humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
+					humanoid:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
+				end
+			end
+		end,
+		Tooltip = 'Direct CatV6 Anti Ragdoll-style humanoid state guard.'
+	})
+	mainapi.Modules.AntiRagdoll = AntiRagdoll
+
+	local AutoDodge, AutoDodgeRange, AutoDodgeHeight
+	AutoDodge = getCategory('Blatant'):CreateModule({
+		Name = 'AutoDodge',
+		Function = function(callback)
+			if callback then
+				AutoDodge:Clean(runService.PostSimulation:Connect(function()
+					local character = getCharacter()
+					local root = getRoot(character)
+					if not root then return end
+					for _, player in playersService:GetPlayers() do
+						if player ~= localPlayer and player.Character then
+							local enemyRoot = getRoot(player.Character)
+							local enemyHumanoid = getHumanoid(player.Character)
+							if enemyRoot and enemyHumanoid and enemyHumanoid.Health > 0 and (enemyRoot.Position - root.Position).Magnitude <= AutoDodgeRange.Value then
+								local away = (root.Position - enemyRoot.Position)
+								away = away.Magnitude > 0 and away.Unit or root.CFrame.LookVector
+								root.AssemblyLinearVelocity = Vector3.new(away.X * 45, AutoDodgeHeight.Value, away.Z * 45)
+								break
+							end
+						end
+					end
+				end))
+			end
+		end,
+		Tooltip = 'CatV6 AutoDodge rewritten to use nearby player threat distance instead of game-specific BedWars objects.'
+	})
+	AutoDodgeRange = AutoDodge:CreateSlider({Name = 'Range', Min = 4, Max = 30, Default = 12, Suffix = 'studs'})
+	AutoDodgeHeight = AutoDodge:CreateSlider({Name = 'Jump Height', Min = 0, Max = 80, Default = 32, Suffix = 'studs'})
+
+	local HighJump, HighJumpPower
+	HighJump = getCategory('Blatant'):CreateModule({
+		Name = 'High Jump',
+		Function = function(callback)
+			if callback then
+				HighJump:Clean(runService.PreSimulation:Connect(function()
+					local humanoid = getHumanoid()
+					if humanoid then
+						humanoid.UseJumpPower = true
+						humanoid.JumpPower = HighJumpPower.Value
+					end
+				end))
+			else
+				local humanoid = getHumanoid()
+				if humanoid then humanoid.JumpPower = 50 end
+			end
+		end,
+		Tooltip = 'Direct CatV6 movement-style jump power module.'
+	})
+	HighJumpPower = HighJump:CreateSlider({Name = 'Power', Min = 50, Max = 200, Default = 80, Suffix = 'power'})
+
+	local InfiniteJump = getCategory('Utility'):CreateModule({
+		Name = 'Infinite Jump',
+		Function = function(callback)
+			if callback then
+				InfiniteJump:Clean(inputService.JumpRequest:Connect(function()
+					local humanoid = getHumanoid()
+					if humanoid then humanoid:ChangeState(Enum.HumanoidStateType.Jumping) end
+				end))
+			end
+		end,
+		Tooltip = 'Direct CatV6-style utility jump helper.'
+	})
+
+	local NoClip = getCategory('Blatant'):CreateModule({
+		Name = 'NoClip',
+		Function = function(callback)
+			if callback then
+				NoClip:Clean(runService.Stepped:Connect(function()
+					local character = getCharacter()
+					if character then
+						for _, descendant in character:GetDescendants() do
+							if descendant:IsA('BasePart') then descendant.CanCollide = false end
+						end
+					end
+				end))
+			end
+		end,
+		Tooltip = 'Direct CatV6-style collision bypass.'
+	})
+end
+
+
 local function loadCustomModules()
 	local paths = {
 		'AetherCore/others/custom_modules.luau',
