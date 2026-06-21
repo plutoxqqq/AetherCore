@@ -7219,60 +7219,18 @@ do
 	local inputService = cloneref(game:GetService('UserInputService'))
 	local runService = cloneref(game:GetService('RunService'))
 	local workspaceService = cloneref(game:GetService('Workspace'))
-	local lightingService = cloneref(game:GetService('Lighting'))
-	local virtualUser = cloneref(game:GetService('VirtualUser'))
 	local localPlayer = playersService.LocalPlayer
-	local networkOwnerCheck = isnetworkowner or function()
-		return true
-	end
-
 	local function getCategory(primary, fallback)
 		return mainapi.Categories[primary] or mainapi.Categories[fallback or 'Utility'] or mainapi.Categories.Main
-	end
-
-	local function getModule(name)
-		return mainapi.Modules[name]
-	end
-
-	local function notify(title, message, duration, kind)
-		if type(mainapi.CreateNotification) == 'function' then
-			mainapi:CreateNotification(title, message, duration or 3, kind)
-		end
 	end
 
 	local function getCharacter()
 		return localPlayer and localPlayer.Character
 	end
 
-	local function getHumanoid(character)
-		character = character or getCharacter()
-		return character and character:FindFirstChildOfClass('Humanoid')
-	end
-
 	local function getRoot(character)
 		character = character or getCharacter()
 		return character and character:FindFirstChild('HumanoidRootPart')
-	end
-
-	local function getAliveParts()
-		local character = getCharacter()
-		local humanoid = getHumanoid(character)
-		local root = getRoot(character)
-		if humanoid and root and humanoid.Health > 0 then
-			return character, humanoid, root
-		end
-		return nil, nil, nil
-	end
-
-	local function horizontal(vector)
-		return Vector3.new(vector.X, 0, vector.Z)
-	end
-
-	local function getMoveDirection(humanoid)
-		if not humanoid or humanoid.MoveDirection.Magnitude <= 0 then
-			return Vector3.zero
-		end
-		return humanoid.MoveDirection.Unit
 	end
 
 	local function makeRaycastParams(character, root)
@@ -7289,358 +7247,20 @@ do
 		return params
 	end
 
-	local function restoreCharacterCollision(character)
-		if not character then return end
-		for _, descendant in character:GetDescendants() do
-			if descendant:IsA('BasePart') then
-				descendant.CanCollide = descendant:GetAttribute('AetherCoreOriginalCanCollide') ~= false
-				descendant:SetAttribute('AetherCoreOriginalCanCollide', nil)
-			end
-		end
-	end
 
-	local function setCharacterCollision(character, canCollide)
-		if not character then return end
-		for _, descendant in character:GetDescendants() do
-			if descendant:IsA('BasePart') then
-				if descendant:GetAttribute('AetherCoreOriginalCanCollide') == nil then
-					descendant:SetAttribute('AetherCoreOriginalCanCollide', descendant.CanCollide)
-				end
-				descendant.CanCollide = canCollide
-			end
-		end
-	end
-
-	local speedModule
-	local speedMethod
-	local speedAmount
-	local speedWallCheck
-	local speedAutoJump
-	speedModule = getCategory('Blatant'):CreateModule({
-		Name = 'Speed',
-		Tooltip = 'Improves local movement speed using safe WalkSpeed or CFrame movement.',
-		Function = function(enabled)
-			if enabled then
-				local humanoid = getHumanoid()
-				if humanoid and speedModule.OriginalWalkSpeed == nil then
-					speedModule.OriginalWalkSpeed = humanoid.WalkSpeed
-				end
-
-				speedModule:Clean(runService.PreSimulation:Connect(function(deltaTime)
-					local character, currentHumanoid, root = getAliveParts()
-					if not character or (getModule('Fly') and getModule('Fly').Enabled) then return end
-					if speedMethod.Value == 'WalkSpeed' then
-						currentHumanoid.WalkSpeed = speedAmount.Value
-					else
-						if speedModule.OriginalWalkSpeed then
-							currentHumanoid.WalkSpeed = speedModule.OriginalWalkSpeed
-						end
-						local direction = getMoveDirection(currentHumanoid)
-						if direction.Magnitude > 0 then
-							local displacement = direction * speedAmount.Value * deltaTime
-							if speedWallCheck.Enabled then
-								local ray = workspaceService:Raycast(root.Position, displacement, makeRaycastParams(character, root))
-								if ray then
-									displacement = (ray.Position + (ray.Normal * 1.5)) - root.Position
-								end
-							end
-							root.CFrame += displacement
-						end
-					end
-					if speedAutoJump.Enabled and currentHumanoid.MoveDirection.Magnitude > 0 and currentHumanoid.FloorMaterial ~= Enum.Material.Air then
-						currentHumanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-					end
-				end))
-
-				speedModule:Clean(localPlayer.CharacterAdded:Connect(function(character)
-					local newHumanoid = character:WaitForChild('Humanoid', 5)
-					if newHumanoid and speedModule.Enabled and speedMethod.Value == 'WalkSpeed' then
-						newHumanoid.WalkSpeed = speedAmount.Value
-					end
-				end))
-			else
-				local humanoid = getHumanoid()
-				if humanoid and speedModule.OriginalWalkSpeed then
-					humanoid.WalkSpeed = speedModule.OriginalWalkSpeed
-				end
-				speedModule.OriginalWalkSpeed = nil
-			end
-		end,
-		ExtraText = function()
-			return speedMethod and speedMethod.Value or nil
-		end
-	})
-	speedMethod = speedModule:CreateDropdown({Name = 'Method', List = {'CFrame', 'WalkSpeed'}, Default = 'CFrame'})
-	speedAmount = speedModule:CreateSlider({Name = 'Speed', Min = 16, Max = 250, Default = 70, Decimal = 1, Suffix = 'studs'})
-	speedWallCheck = speedModule:CreateToggle({Name = 'Wall Check', Default = true})
-	speedAutoJump = speedModule:CreateToggle({Name = 'Auto Jump'})
-
-	local flyModule
-	local flySpeed
-	local flyVerticalSpeed
-	local flyWallCheck
-	local flyClearVelocity
-	flyModule = getCategory('Blatant'):CreateModule({
-		Name = 'Fly',
-		Tooltip = 'Allows controlled local flight with horizontal and vertical movement.',
-		Function = function(enabled)
-			local ascend = 0
-			local descend = 0
-			if enabled then
-				flyModule:Clean(runService.PreSimulation:Connect(function(deltaTime)
-					local character, humanoid, root = getAliveParts()
-					if not character or not networkOwnerCheck(root) then return end
-					local movement = getMoveDirection(humanoid) * flySpeed.Value * deltaTime
-					if flyWallCheck.Enabled and movement.Magnitude > 0 then
-						local ray = workspaceService:Raycast(root.Position, movement, makeRaycastParams(character, root))
-						if ray then
-							movement = (ray.Position + (ray.Normal * 1.5)) - root.Position
-						end
-					end
-					root.CFrame += movement
-					root.AssemblyLinearVelocity = horizontal(root.AssemblyLinearVelocity) + Vector3.new(0, (ascend + descend) * flyVerticalSpeed.Value, 0)
-					humanoid.PlatformStand = false
-				end))
-				flyModule:Clean(inputService.InputBegan:Connect(function(input)
-					if inputService:GetFocusedTextBox() then return end
-					if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then
-						ascend = 1
-					elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.ButtonL2 then
-						descend = -1
-					end
-				end))
-				flyModule:Clean(inputService.InputEnded:Connect(function(input)
-					if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.ButtonA then
-						ascend = 0
-					elseif input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.ButtonL2 then
-						descend = 0
-					end
-				end))
-			else
-				local humanoid = getHumanoid()
-				local root = getRoot()
-				if humanoid then humanoid.PlatformStand = false end
-				if root and flyClearVelocity.Enabled then root.AssemblyLinearVelocity = Vector3.zero end
-			end
-		end,
-		ExtraText = function()
-			return 'Controlled'
-		end
-	})
-	flySpeed = flyModule:CreateSlider({Name = 'Speed', Min = 10, Max = 250, Default = 80, Decimal = 1, Suffix = 'studs'})
-	flyVerticalSpeed = flyModule:CreateSlider({Name = 'Vertical Speed', Min = 10, Max = 180, Default = 70, Decimal = 1, Suffix = 'studs'})
-	flyWallCheck = flyModule:CreateToggle({Name = 'Wall Check', Default = true})
-	flyClearVelocity = flyModule:CreateToggle({Name = 'Clear Velocity on Disable', Default = true})
-
-	local antiRagdollModule = getCategory('Utility'):CreateModule({
-		Name = 'Anti Ragdoll',
-		Tooltip = 'Prevents local ragdoll and physics states while enabled.',
-		Function = function(enabled)
-			local blockedStates = {Enum.HumanoidStateType.Ragdoll, Enum.HumanoidStateType.FallingDown, Enum.HumanoidStateType.Physics, Enum.HumanoidStateType.PlatformStanding}
-			local function setStates(humanoid, stateEnabled)
-				if not humanoid then return end
-				for _, humanoidState in blockedStates do
-					humanoid:SetStateEnabled(humanoidState, stateEnabled)
-				end
-				if not stateEnabled and table.find(blockedStates, humanoid:GetState()) then
-					humanoid:ChangeState(Enum.HumanoidStateType.Running)
-				end
-			end
-			if enabled then
-				setStates(getHumanoid(), false)
-				antiRagdollModule:Clean(runService.Heartbeat:Connect(function()
-					setStates(getHumanoid(), false)
-				end))
-				antiRagdollModule:Clean(localPlayer.CharacterAdded:Connect(function(character)
-					setStates(character:WaitForChild('Humanoid', 5), false)
-				end))
-			else
-				setStates(getHumanoid(), true)
-			end
-		end
-	})
-
-	getCategory('Utility'):CreateModule({
-		Name = 'Infinite Jump',
-		Tooltip = 'Allows jumping again while airborne.',
-		Function = function(enabled)
-			local module = getModule('Infinite Jump')
-			if enabled and module then
-				module:Clean(inputService.JumpRequest:Connect(function()
-					local humanoid = getHumanoid()
-					if humanoid and humanoid.Health > 0 then
-						humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-					end
-				end))
-			end
-		end
-	})
-
-	local antiVoidModule
-	local antiVoidMode
-	antiVoidModule = getCategory('Utility'):CreateModule({
-		Name = 'Anti Void',
-		Tooltip = 'Returns you to your last safe ground position before falling into the void.',
-		Function = function(enabled)
-			if enabled then
-				antiVoidModule.SafeCFrame = antiVoidModule.SafeCFrame or nil
-				antiVoidModule:Clean(runService.PreSimulation:Connect(function(deltaTime)
-					local character, humanoid, root = getAliveParts()
-					if not character then return end
-					local params = makeRaycastParams(character, root)
-					local ground = workspaceService:Raycast(root.Position, Vector3.new(0, -14, 0), params)
-					if ground and ground.Instance and ground.Instance.CanCollide and humanoid.FloorMaterial ~= Enum.Material.Air then
-						antiVoidModule.SafeCFrame = CFrame.lookAlong(ground.Position + Vector3.new(0, humanoid.HipHeight + 2, 0), root.CFrame.LookVector)
-					end
-					local deathHeight = workspaceService.FallenPartsDestroyHeight
-					local recoveryHeight = deathHeight + math.max(85, humanoid.HipHeight + 25)
-					if root.Position.Y <= recoveryHeight then
-						if not antiVoidModule.SafeCFrame then
-							root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 120, root.AssemblyLinearVelocity.Z)
-						elseif antiVoidMode.Value == 'Velocity' then
-							root.AssemblyLinearVelocity = Vector3.new(root.AssemblyLinearVelocity.X, 120, root.AssemblyLinearVelocity.Z)
-						elseif antiVoidMode.Value == 'Smooth' then
-							local target = antiVoidModule.SafeCFrame.Position
-							root.CFrame += (target - root.Position) * math.clamp(deltaTime * 8, 0, 1)
-							root.AssemblyLinearVelocity = Vector3.zero
-						else
-							root.CFrame = antiVoidModule.SafeCFrame
-							root.AssemblyLinearVelocity = Vector3.zero
-						end
-					end
-				end))
-			end
-		end,
-		ExtraText = function()
-			return antiVoidMode and antiVoidMode.Value or nil
-		end
-	})
-	antiVoidMode = antiVoidModule:CreateDropdown({Name = 'Mode', List = {'Instant', 'Smooth', 'Velocity'}, Default = 'Instant'})
-
-	getCategory('World'):CreateModule({
-		Name = 'Auto Obby',
-		Tooltip = 'Teleports through detected checkpoint, stage, finish, and win parts in order.',
-		Function = function(enabled)
-			if not enabled then return end
-			task.spawn(function()
-				local module = getModule('Auto Obby')
-				local _, _, root = getAliveParts()
-				if not module or not root then
-					if module and module.Enabled then module:Toggle() end
-					return
-				end
-
-				local candidates = {}
-				for _, descendant in workspaceService:GetDescendants() do
-					if descendant:IsA('BasePart') and descendant.CanCollide then
-						local lowerName = descendant.Name:lower()
-						if lowerName:find('checkpoint', 1, true) or lowerName:find('stage', 1, true) or lowerName:find('finish', 1, true) or lowerName:find('win', 1, true) or lowerName:find('obby', 1, true) then
-							table.insert(candidates, descendant)
-						end
-					end
-				end
-
-				table.sort(candidates, function(left, right)
-					local leftNumber = tonumber(left.Name:match('%d+')) or math.huge
-					local rightNumber = tonumber(right.Name:match('%d+')) or math.huge
-					if leftNumber == rightNumber then
-						return left.Position.Y < right.Position.Y
-					end
-					return leftNumber < rightNumber
-				end)
-
-				local visited = {}
-				for _, part in candidates do
-					module = getModule('Auto Obby')
-					if not module or not module.Enabled then break end
-					if part.Parent and not visited[part] then
-						visited[part] = true
-						local currentRoot = getRoot()
-						if not currentRoot then break end
-						currentRoot.CFrame = CFrame.lookAlong(part.Position + Vector3.new(0, 4, 0), currentRoot.CFrame.LookVector)
-						currentRoot.AssemblyLinearVelocity = Vector3.zero
-						task.wait(0.12)
-					end
-				end
-
-				module = getModule('Auto Obby')
-				if module and module.Enabled then
-					module:Toggle()
-				end
-			end)
-		end
-	})
-
-	local noClipModule = getCategory('Utility'):CreateModule({
-		Name = 'No Clip',
-		Tooltip = 'Disables local character collisions while enabled.',
-		Function = function(enabled)
-			if enabled then
-				noClipModule:Clean(runService.Stepped:Connect(function()
-					setCharacterCollision(getCharacter(), false)
-				end))
-				noClipModule:Clean(localPlayer.CharacterAdded:Connect(function(character)
-					if noClipModule.Enabled then
-						setCharacterCollision(character, false)
-					end
-				end))
-			else
-				restoreCharacterCollision(getCharacter())
-			end
-		end
-	})
-
-	getCategory('Render'):CreateModule({
-		Name = 'Fullbright',
-		Tooltip = 'Keeps the local lighting bright and easy to see.',
-		Function = function(enabled)
-			local module = getModule('Fullbright')
-			if enabled then
-				module.OriginalLighting = module.OriginalLighting or {
-					Brightness = lightingService.Brightness,
-					ClockTime = lightingService.ClockTime,
-					FogEnd = lightingService.FogEnd,
-					GlobalShadows = lightingService.GlobalShadows
-				}
-				local function applyLighting()
-					lightingService.Brightness = 3
-					lightingService.ClockTime = 14
-					lightingService.FogEnd = 100000
-					lightingService.GlobalShadows = false
-				end
-				applyLighting()
-				module:Clean(runService.RenderStepped:Connect(applyLighting))
-			elseif module and module.OriginalLighting then
-				lightingService.Brightness = module.OriginalLighting.Brightness
-				lightingService.ClockTime = module.OriginalLighting.ClockTime
-				lightingService.FogEnd = module.OriginalLighting.FogEnd
-				lightingService.GlobalShadows = module.OriginalLighting.GlobalShadows
-				module.OriginalLighting = nil
-			end
-		end
-	})
-
-	getCategory('Utility'):CreateModule({
-		Name = 'Anti AFK',
-		Tooltip = 'Prevents idle kicks by sending a small virtual input when Roblox marks you idle.',
-		Function = function(enabled)
-			local module = getModule('Anti AFK')
-			if enabled and module then
-				module:Clean(localPlayer.Idled:Connect(function()
-					virtualUser:CaptureController()
-					virtualUser:ClickButton2(Vector2.zero)
-				end))
-			end
-		end
-	})
+	local boostModule
+	local boostSpeed
+	local boostStopDistance
+	local boostRaycastDistance
+	local boostMaxDuration
+	local boostActivationKey
+	local boostStatusDisplay
 
 	local boostState = {
 		Enabled = false,
 		Boosting = false,
-		Speed = 250,
-		StopDistance = 1.5,
 		OriginalCollisions = {},
-		RaycastDistance = 5000
+		ActivationKey = 'G'
 	}
 
 	local function disconnectBoost(connectionName)
@@ -7659,7 +7279,7 @@ do
 		local mouseLocation = inputService:GetMouseLocation()
 		local ray = camera:ViewportPointToRay(mouseLocation.X, mouseLocation.Y)
 		local params = makeRaycastParams(getCharacter(), root)
-		local result = workspaceService:Raycast(ray.Origin, ray.Direction * boostState.RaycastDistance, params)
+		local result = workspaceService:Raycast(ray.Origin, ray.Direction * boostRaycastDistance.Value, params)
 		if result and result.Instance and result.Instance:IsA('BasePart') and result.Instance.CanCollide then
 			return result.Instance, result.Position, result.Normal
 		end
@@ -7741,7 +7361,7 @@ do
 		if not playerGui then return end
 
 		local screenGui = Instance.new('ScreenGui')
-		screenGui.Name = 'AetherGBoostStatus'
+		screenGui.Name = 'AetherKeybindBoostStatus'
 		screenGui.ResetOnSpawn = false
 		screenGui.Parent = playerGui
 
@@ -7783,7 +7403,7 @@ do
 		if not root then return end
 		local target = getLandingPoint(block, hit, normal)
 		local direction = target - root.Position
-		if direction.Magnitude <= boostState.StopDistance then return end
+		if direction.Magnitude <= boostStopDistance.Value then return end
 
 		setBoostNoClip(true)
 		boostState.Boosting = true
@@ -7791,7 +7411,7 @@ do
 
 		local bodyVelocity = Instance.new('BodyVelocity')
 		bodyVelocity.MaxForce = Vector3.new(1000000, 1000000, 1000000)
-		bodyVelocity.Velocity = direction.Unit * boostState.Speed
+		bodyVelocity.Velocity = direction.Unit * boostSpeed.Value
 		bodyVelocity.Parent = root
 		boostState.BodyVelocity = bodyVelocity
 
@@ -7803,16 +7423,16 @@ do
 			end
 			local remainingVector = target - currentRoot.Position
 			local remainingDistance = remainingVector.Magnitude
-			if remainingDistance <= boostState.StopDistance then
+			if remainingDistance <= boostStopDistance.Value then
 				currentRoot.AssemblyLinearVelocity = Vector3.zero
 				cleanupBoost()
 				return
 			end
-			boostState.BodyVelocity.Velocity = remainingVector.Unit * boostState.Speed
+			boostState.BodyVelocity.Velocity = remainingVector.Unit * boostSpeed.Value
 			setBoostStatus(string.format('Boosting: %.0f studs', remainingDistance), Color3.fromRGB(255, 200, 100))
 		end)
 
-		task.delay(5, function()
+		task.delay(boostMaxDuration.Value, function()
 			if boostState.Boosting then
 				cleanupBoost()
 			end
@@ -7829,23 +7449,28 @@ do
 		else
 			setBoostStatus('No solid block', Color3.fromRGB(255, 100, 100))
 		end
-		return params
 	end
 
-	getCategory('Utility'):CreateModule({
-		Name = 'G Boost',
-		Tooltip = 'Press G while aiming at a solid block to boost to the selected surface with temporary no-clip.',
+	boostModule = getCategory('Utility'):CreateModule({
+		Name = 'Keybind Boost',
+		Tooltip = 'Press the selected key while aiming at a solid block to boost to the selected surface with temporary no-clip.',
 		Function = function(enabled)
 			boostState.Enabled = enabled
 			if enabled then
-				createBoostStatusGui()
-				setBoostStatus('Ready', Color3.fromRGB(100, 255, 100))
+				if boostStatusDisplay.Enabled then
+					createBoostStatusGui()
+					setBoostStatus('Ready', Color3.fromRGB(100, 255, 100))
+				end
+				boostState.ActivationKey = boostActivationKey.Value
 				boostState.InputConnection = inputService.InputBegan:Connect(function(input, gameProcessed)
-					if not gameProcessed and input.KeyCode == Enum.KeyCode.G then
+					if gameProcessed or inputService:GetFocusedTextBox() then return end
+					if input.KeyCode.Name == boostState.ActivationKey then
 						startBoost()
 					end
 				end)
-				boostState.FeedbackConnection = runService.RenderStepped:Connect(updateBoostFeedback)
+				if boostStatusDisplay.Enabled then
+					boostState.FeedbackConnection = runService.RenderStepped:Connect(updateBoostFeedback)
+				end
 			else
 				disconnectBoost('InputConnection')
 				disconnectBoost('FeedbackConnection')
@@ -7856,8 +7481,34 @@ do
 					boostState.StatusLabel = nil
 				end
 			end
+		end,
+		ExtraText = function()
+			return boostActivationKey and boostActivationKey.Value or nil
 		end
 	})
+	boostActivationKey = boostModule:CreateDropdown({Name = 'Activation Key', List = {'G', 'F', 'R', 'T', 'Y', 'X', 'C', 'V', 'B', 'Q', 'E'}, Default = 'G', Function = function(value)
+		boostState.ActivationKey = value
+	end})
+	boostSpeed = boostModule:CreateSlider({Name = 'Boost Speed', Min = 50, Max = 500, Default = 250, Decimal = 1, Suffix = 'studs'})
+	boostStopDistance = boostModule:CreateSlider({Name = 'Stop Distance', Min = 0.5, Max = 8, Default = 1.5, Decimal = 1, Suffix = 'studs'})
+	boostRaycastDistance = boostModule:CreateSlider({Name = 'Target Range', Min = 100, Max = 5000, Default = 5000, Decimal = 0, Suffix = 'studs'})
+	boostMaxDuration = boostModule:CreateSlider({Name = 'Maximum Duration', Min = 1, Max = 10, Default = 5, Decimal = 1, Suffix = 's'})
+	boostStatusDisplay = boostModule:CreateToggle({Name = 'Status Display', Default = true, Function = function(enabled)
+		if enabled and boostState.Enabled then
+			createBoostStatusGui()
+			setBoostStatus('Ready', Color3.fromRGB(100, 255, 100))
+			if not boostState.FeedbackConnection then
+				boostState.FeedbackConnection = runService.RenderStepped:Connect(updateBoostFeedback)
+			end
+		else
+			disconnectBoost('FeedbackConnection')
+			if boostState.ScreenGui then
+				boostState.ScreenGui:Destroy()
+				boostState.ScreenGui = nil
+				boostState.StatusLabel = nil
+			end
+		end
+	end})
 end
 
 return mainapi
